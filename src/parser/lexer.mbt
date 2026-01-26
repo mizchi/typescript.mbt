@@ -41,16 +41,23 @@ pub enum TokenKind {
   Plus // +
   Minus // -
   Star // *
+  StarStar // **
   Slash // /
   Percent // %
+  Caret // ^
+  Amp // &
+  Pipe // |
   EqEq // ==
   EqEqEq // ===
   BangEq // !=
   BangEqEq // !==
   Instanceof // instanceof
   Lt // <
+  LtLt // <<
   Le // <=
   Gt // >
+  GtGt // >>
+  GtGtGt // >>>
   Ge // >=
   AmpAmp // &&
   PipePipe // ||
@@ -62,7 +69,15 @@ pub enum TokenKind {
   PlusEq // +=
   MinusEq // -=
   StarEq // *=
+  StarStarEq // **=
   SlashEq // /=
+  PercentEq // %=
+  AmpEq // &=
+  PipeEq // |=
+  CaretEq // ^=
+  LtLtEq // <<=
+  GtGtEq // >>=
+  GtGtGtEq // >>>=
   Arrow // =>
   Ellipsis // ...
 
@@ -147,6 +162,19 @@ fn Lexer::advance(self : Lexer) -> Char? {
 fn Lexer::skip_whitespace(self : Lexer) -> Unit {
   while true {
     match self.peek() {
+      Some('#') if self.peek_next() == Some('!') => {
+        let _ = self.advance()
+        let _ = self.advance()
+        while true {
+          match self.peek() {
+            Some('\n') | None => break
+            _ => {
+              let _ = self.advance()
+
+            }
+          }
+        }
+      }
       Some(' ') | Some('\t') | Some('\n') | Some('\r') => {
         let _ = self.advance()
 
@@ -605,6 +633,101 @@ fn Lexer::scan_string(self : Lexer, quote : Char) -> TokenKind {
 }
 
 ///|
+/// テンプレートリテラルをパース (`...`)
+fn Lexer::scan_template(self : Lexer) -> TokenKind {
+  let buf = StringBuilder::new()
+  while true {
+    match self.peek() {
+      None => break
+      Some(c) =>
+        if c == '`' {
+          let _ = self.advance()
+          break
+        } else if c == '$' && self.peek_next() == Some('{') {
+          let _ = self.advance()
+          let _ = self.advance()
+          self.skip_template_expr()
+        } else if c == '\\' {
+          let _ = self.advance()
+          match self.peek() {
+            Some('n') => {
+              let _ = self.advance()
+              buf.write_char('\n')
+            }
+            Some('t') => {
+              let _ = self.advance()
+              buf.write_char('\t')
+            }
+            Some('r') => {
+              let _ = self.advance()
+              buf.write_char('\r')
+            }
+            Some('\\') => {
+              let _ = self.advance()
+              buf.write_char('\\')
+            }
+            Some('`') => {
+              let _ = self.advance()
+              buf.write_char('`')
+            }
+            Some(other) => {
+              let _ = self.advance()
+              buf.write_char(other)
+            }
+            None => break
+          }
+        } else {
+          let _ = self.advance()
+          buf.write_char(c)
+        }
+    }
+  }
+  Str(buf.to_string())
+}
+
+///|
+/// テンプレート内の ${ ... } をスキップ
+fn Lexer::skip_template_expr(self : Lexer) -> Unit {
+  let mut depth = 1
+  while depth > 0 {
+    match self.peek() {
+      None => break
+      Some(c) => {
+        let _ = self.advance()
+        match c {
+          '{' => depth += 1
+          '}' => depth -= 1
+          '\'' | '"' => self.skip_string_body(c)
+          '`' => {
+            let _ = self.scan_template()
+          }
+          _ => ()
+        }
+      }
+    }
+  }
+}
+
+///|
+/// 文字列ボディをスキップ（開始クォートは既に消費済み）
+fn Lexer::skip_string_body(self : Lexer, quote : Char) -> Unit {
+  while true {
+    match self.peek() {
+      None => break
+      Some(c) => {
+        let _ = self.advance()
+        if c == quote {
+          break
+        }
+        if c == '\\' {
+          let _ = self.advance()
+        }
+      }
+    }
+  }
+}
+
+///|
 /// 正規表現リテラルをパース (/pattern/flags)
 fn Lexer::scan_regex(self : Lexer) -> TokenKind {
   let buf = StringBuilder::new()
@@ -772,6 +895,16 @@ pub fn Lexer::next_token(self : Lexer) -> Token {
           }
         '*' =>
           match self.peek() {
+            Some('*') => {
+              let _ = self.advance()
+              match self.peek() {
+                Some('=') => {
+                  let _ = self.advance()
+                  StarStarEq
+                }
+                _ => StarStar
+              }
+            }
             Some('=') => {
               let _ = self.advance()
               StarEq
@@ -791,7 +924,14 @@ pub fn Lexer::next_token(self : Lexer) -> Token {
                 Slash
               }
           }
-        '%' => Percent
+        '%' =>
+          match self.peek() {
+            Some('=') => {
+              let _ = self.advance()
+              PercentEq
+            }
+            _ => Percent
+          }
         '?' => Question
         '=' =>
           match self.peek() {
@@ -835,6 +975,16 @@ pub fn Lexer::next_token(self : Lexer) -> Token {
               let _ = self.advance()
               Le
             }
+            Some('<') => {
+              let _ = self.advance()
+              match self.peek() {
+                Some('=') => {
+                  let _ = self.advance()
+                  LtLtEq
+                }
+                _ => LtLt
+              }
+            }
             _ => Lt
           }
         '>' =>
@@ -842,6 +992,26 @@ pub fn Lexer::next_token(self : Lexer) -> Token {
             Some('=') => {
               let _ = self.advance()
               Ge
+            }
+            Some('>') => {
+              let _ = self.advance()
+              match self.peek() {
+                Some('>') => {
+                  let _ = self.advance()
+                  match self.peek() {
+                    Some('=') => {
+                      let _ = self.advance()
+                      GtGtGtEq
+                    }
+                    _ => GtGtGt
+                  }
+                }
+                Some('=') => {
+                  let _ = self.advance()
+                  GtGtEq
+                }
+                _ => GtGt
+              }
             }
             _ => Gt
           }
@@ -851,7 +1021,11 @@ pub fn Lexer::next_token(self : Lexer) -> Token {
               let _ = self.advance()
               AmpAmp
             }
-            _ => Bang // エラー扱い
+            Some('=') => {
+              let _ = self.advance()
+              AmpEq
+            }
+            _ => Amp
           }
         '|' =>
           match self.peek() {
@@ -859,7 +1033,19 @@ pub fn Lexer::next_token(self : Lexer) -> Token {
               let _ = self.advance()
               PipePipe
             }
-            _ => Bang // エラー扱い
+            Some('=') => {
+              let _ = self.advance()
+              PipeEq
+            }
+            _ => Pipe
+          }
+        '^' =>
+          match self.peek() {
+            Some('=') => {
+              let _ = self.advance()
+              CaretEq
+            }
+            _ => Caret
           }
         // 区切り
         '(' => LParen
@@ -892,6 +1078,10 @@ pub fn Lexer::next_token(self : Lexer) -> Token {
           // 文字列リテラル
           let quote = c
           self.scan_string(quote)
+        }
+        '`' => {
+          // テンプレートリテラル
+          self.scan_template()
         }
         _ => Eof // 未知の文字
       }

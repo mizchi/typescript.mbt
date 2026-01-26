@@ -2,7 +2,7 @@
 
 ///|
 /// 型
-pub enum TsType {
+pub(all) enum TsType {
   // プリミティブ
   Number // f64 にマップ
   Int // i32 にマップ (最適化用)
@@ -21,7 +21,7 @@ pub enum TsType {
 
 ///|
 /// 型付き式
-pub enum TsExpr {
+pub(all) enum TsExpr {
   // リテラル
   NumberLit(Double)
   IntLit(Int)
@@ -65,6 +65,9 @@ pub enum TsExpr {
   // 代入式 (式として)
   AssignExpr(String, TsExpr)
 
+  // カンマ演算子
+  Seq(TsExpr, TsExpr)
+
   // アロー関数
   ArrowFunc(Array[TsParam], TsArrowBody)
 
@@ -74,20 +77,28 @@ pub enum TsExpr {
 
 ///|
 /// アロー関数の本体
-pub enum TsArrowBody {
+pub(all) enum TsArrowBody {
   ArrowExpr(TsExpr) // () => expr
   ArrowBlock(TsBlock) // () => { ... }
 } derive(Show)
 
 ///|
 /// 二項演算子
-pub enum TsBinOp {
+pub(all) enum TsBinOp {
   // 算術
   Add // +
   Sub // -
   Mul // *
   Div // /
   Mod // %
+  Pow // **
+  // ビット演算/シフト
+  BitAnd // &
+  BitOr // |
+  BitXor // ^
+  Shl // <<
+  Shr // >>
+  UShr // >>>
   // 比較 (厳密)
   BinEq // ===
   BinNe // !==
@@ -100,6 +111,7 @@ pub enum TsBinOp {
   BinGt // >
   BinGe // >=
   Instanceof // instanceof
+  In // in
   // 論理
   And // &&
   Or // ||
@@ -107,7 +119,7 @@ pub enum TsBinOp {
 
 ///|
 /// 単項演算子
-pub enum TsUnaryOp {
+pub(all) enum TsUnaryOp {
   Neg // -
   Not // !
   Plus // + (単項プラス)
@@ -121,16 +133,24 @@ pub enum TsUnaryOp {
 
 ///|
 /// 複合代入演算子
-pub enum TsCompoundOp {
+pub(all) enum TsCompoundOp {
   AddAssign // +=
   SubAssign // -=
   MulAssign // *=
   DivAssign // /=
+  ModAssign // %=
+  BitAndAssign // &=
+  BitOrAssign // |=
+  BitXorAssign // ^=
+  ShlAssign // <<=
+  ShrAssign // >>=
+  UShrAssign // >>>=
+  PowAssign // **=
 } derive(Eq, Show)
 
 ///|
 /// 文
-pub enum TsStmt {
+pub(all) enum TsStmt {
   // 変数宣言
   Let(String, TsType, TsExpr)
   Const(String, TsType, TsExpr)
@@ -168,13 +188,13 @@ pub enum TsStmt {
 
 ///|
 /// ブロック (文の配列)
-pub struct TsBlock {
+pub(all) struct TsBlock {
   stmts : Array[TsStmt]
 } derive(Show)
 
 ///|
 /// 関数パラメータ
-pub struct TsParam {
+pub(all) struct TsParam {
   name : String
   type_ : TsType
   default : TsExpr? // デフォルト値 (省略可能)
@@ -182,7 +202,7 @@ pub struct TsParam {
 
 ///|
 /// 関数定義
-pub struct TsFunc {
+pub(all) struct TsFunc {
   name : String
   params : Array[TsParam]
   return_type : TsType
@@ -191,14 +211,14 @@ pub struct TsFunc {
 
 ///|
 /// インターフェース (構造体型)
-pub struct TsInterface {
+pub(all) struct TsInterface {
   name : String
   fields : Array[(String, TsType)] // (fieldName, type)
 } derive(Show)
 
 ///|
 /// 外部関数インポート宣言
-pub struct TsImport {
+pub(all) struct TsImport {
   name : String // 関数名
   module_ : String // インポート元モジュール (デフォルト: "env")
   params : Array[(String, TsType)] // パラメータ (name, type)
@@ -207,7 +227,7 @@ pub struct TsImport {
 
 ///|
 /// モジュール (トップレベル)
-pub struct TsModule {
+pub(all) struct TsModule {
   funcs : Array[TsFunc]
   interfaces : Array[TsInterface]
   imports : Array[TsImport] // 外部インポート
@@ -219,21 +239,21 @@ pub struct TsModule {
 
 ///|
 /// 型付き式 (型情報付き)
-pub struct TypedExpr {
+pub(all) struct TypedExpr {
   expr : TsExpr
   type_ : TsType
 } derive(Show)
 
 ///|
 /// 型付き文
-pub struct TypedStmt {
+pub(all) struct TypedStmt {
   stmt : TsStmt
   // 追加のメタ情報があれば
 } derive(Show)
 
 ///|
 /// 型付き関数
-pub struct TypedFunc {
+pub(all) struct TypedFunc {
   func : TsFunc
   // ローカル変数の型マップ
   locals : Array[(String, TsType)]
@@ -241,6 +261,6 @@ pub struct TypedFunc {
 
 ///|
 /// 型付きモジュール
-pub struct TypedModule {
+pub(all) struct TypedModule {
   funcs : Array[TypedFunc]
 } derive(Show)

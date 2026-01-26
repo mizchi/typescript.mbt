@@ -1,0 +1,10 @@
+{
+  "import": [
+    "moonbitlang/core/math",
+    "moonbitlang/core/strconv",
+    {
+      "path": "moonbitlang/typescript/parser",
+      "alias": "parser"
+    }
+  ]
+}

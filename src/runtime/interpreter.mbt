@@ -139,43 +139,84 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
 /// 式を評価
 pub fn JSInterpreter::eval_expr(
   self : JSInterpreter,
-  expr : TsExpr,
+  expr : @parser.TsExpr,
   env : JSEnv,
 ) -> JSValue {
   self.tick()
   match expr {
-    IntLit(n) => Number(n.to_double())
-    NumberLit(n) => Number(n)
-    BoolLit(b) => Bool(b)
-    StringLit(s) => String(s)
-    NullLit => Null
-    Var(name) => env.get(name)
-    BinOp(op, left, right) => {
+    @parser.TsExpr::IntLit(n) => Number(n.to_double())
+    @parser.TsExpr::NumberLit(n) => Number(n)
+    @parser.TsExpr::BoolLit(b) => Bool(b)
+    @parser.TsExpr::StringLit(s) => String(s)
+    @parser.TsExpr::NullLit => Null
+    @parser.TsExpr::Var(name) => env.get(name)
+    @parser.TsExpr::Seq(left, right) => {
+      let _ = self.eval_expr(left, env)
+      self.eval_expr(right, env)
+    }
+    @parser.TsExpr::BinOp(op, left, right) => {
       let lval = self.eval_expr(left, env)
       let rval = self.eval_expr(right, env)
       match op {
-        Add => js_add(lval, rval)
-        Sub => js_sub(lval, rval)
-        Mul => js_mul(lval, rval)
-        Div => js_div(lval, rval)
-        Mod => js_mod(lval, rval)
-        BinLt => js_lt(lval, rval)
-        BinLe => js_le(lval, rval)
-        BinGt => js_gt(lval, rval)
-        BinGe => js_ge(lval, rval)
-        BinEq => js_strict_eq(lval, rval) // === (strict equality)
-        BinNe => js_strict_ne(lval, rval) // !== (strict inequality)
-        AbstractEq => js_eq(lval, rval) // == (abstract equality)
-        AbstractNe => js_ne(lval, rval) // != (abstract inequality)
-        Instanceof => Bool(false)
-        And =>
+        @parser.TsBinOp::Add => js_add(lval, rval)
+        @parser.TsBinOp::Sub => js_sub(lval, rval)
+        @parser.TsBinOp::Mul => js_mul(lval, rval)
+        @parser.TsBinOp::Div => js_div(lval, rval)
+        @parser.TsBinOp::Mod => js_mod(lval, rval)
+        @parser.TsBinOp::Pow => Number(@math.pow(lval.to_number(), rval.to_number()))
+        @parser.TsBinOp::BitAnd => {
+          let li = lval.to_number().to_int()
+          let ri = rval.to_number().to_int()
+          Number((li & ri).to_double())
+        }
+        @parser.TsBinOp::BitOr => {
+          let li = lval.to_number().to_int()
+          let ri = rval.to_number().to_int()
+          Number((li | ri).to_double())
+        }
+        @parser.TsBinOp::BitXor => {
+          let li = lval.to_number().to_int()
+          let ri = rval.to_number().to_int()
+          Number((li ^ ri).to_double())
+        }
+        @parser.TsBinOp::Shl => {
+          let li = lval.to_number().to_int()
+          let ri = rval.to_number().to_int()
+          let shift = ri & 31
+          Number((li << shift).to_double())
+        }
+        @parser.TsBinOp::Shr => {
+          let li = lval.to_number().to_int()
+          let ri = rval.to_number().to_int()
+          let shift = ri & 31
+          Number((li >> shift).to_double())
+        }
+        @parser.TsBinOp::UShr => {
+          let li = lval.to_number()
+          let ri = rval.to_number().to_int()
+          let shift = ri & 31
+          let u = if li < 0.0 { li + 4294967296.0 } else { li }
+          let denom = @math.pow(2.0, shift.to_double())
+          Number(@math.floor(u / denom))
+        }
+        @parser.TsBinOp::BinLt => js_lt(lval, rval)
+        @parser.TsBinOp::BinLe => js_le(lval, rval)
+        @parser.TsBinOp::BinGt => js_gt(lval, rval)
+        @parser.TsBinOp::BinGe => js_ge(lval, rval)
+        @parser.TsBinOp::BinEq => js_strict_eq(lval, rval) // === (strict equality)
+        @parser.TsBinOp::BinNe => js_strict_ne(lval, rval) // !== (strict inequality)
+        @parser.TsBinOp::AbstractEq => js_eq(lval, rval) // == (abstract equality)
+        @parser.TsBinOp::AbstractNe => js_ne(lval, rval) // != (abstract inequality)
+        @parser.TsBinOp::Instanceof => Bool(false)
+        @parser.TsBinOp::In => Bool(js_has_prop(rval, lval.to_js_string()))
+        @parser.TsBinOp::And =>
           // 短絡評価: lvalがfalsyならlval、そうでなければrval
           if lval.to_boolean() {
             rval
           } else {
             lval
           }
-        Or =>
+        @parser.TsBinOp::Or =>
           // 短絡評価: lvalがtruthyならlval、そうでなければrval
           if lval.to_boolean() {
             lval
@@ -184,12 +225,12 @@ pub fn JSInterpreter::eval_expr(
           }
       }
     }
-    UnaryOp(op, operand) =>
+    @parser.TsExpr::UnaryOp(op, operand) =>
       match op {
-        PreInc =>
+        @parser.TsUnaryOp::PreInc =>
           // ++x: インクリメントして新しい値を返す
           match operand {
-            Var(name) => {
+            @parser.TsExpr::Var(name) => {
               let old_val = env.get(name)
               let new_val = js_add(old_val, Number(1.0))
               let _ = env.set(name, new_val)
@@ -200,10 +241,10 @@ pub fn JSInterpreter::eval_expr(
               js_add(val, Number(1.0))
             }
           }
-        PreDec =>
+        @parser.TsUnaryOp::PreDec =>
           // --x: デクリメントして新しい値を返す
           match operand {
-            Var(name) => {
+            @parser.TsExpr::Var(name) => {
               let old_val = env.get(name)
               let new_val = js_sub(old_val, Number(1.0))
               let _ = env.set(name, new_val)
@@ -214,10 +255,10 @@ pub fn JSInterpreter::eval_expr(
               js_sub(val, Number(1.0))
             }
           }
-        PostInc =>
+        @parser.TsUnaryOp::PostInc =>
           // x++: 古い値を返してからインクリメント
           match operand {
-            Var(name) => {
+            @parser.TsExpr::Var(name) => {
               let old_val = env.get(name)
               let new_val = js_add(old_val, Number(1.0))
               let _ = env.set(name, new_val)
@@ -228,10 +269,10 @@ pub fn JSInterpreter::eval_expr(
               val // 副作用なし
             }
           }
-        PostDec =>
+        @parser.TsUnaryOp::PostDec =>
           // x--: 古い値を返してからデクリメント
           match operand {
-            Var(name) => {
+            @parser.TsExpr::Var(name) => {
               let old_val = env.get(name)
               let new_val = js_sub(old_val, Number(1.0))
               let _ = env.set(name, new_val)
@@ -242,16 +283,16 @@ pub fn JSInterpreter::eval_expr(
               val // 副作用なし
             }
           }
-        Neg => js_neg(self.eval_expr(operand, env))
-        Not => js_not(self.eval_expr(operand, env))
-        Plus => js_pos(self.eval_expr(operand, env))
-        Typeof => js_typeof(self.eval_expr(operand, env))
-        Void => {
+        @parser.TsUnaryOp::Neg => js_neg(self.eval_expr(operand, env))
+        @parser.TsUnaryOp::Not => js_not(self.eval_expr(operand, env))
+        @parser.TsUnaryOp::Plus => js_pos(self.eval_expr(operand, env))
+        @parser.TsUnaryOp::Typeof => js_typeof(self.eval_expr(operand, env))
+        @parser.TsUnaryOp::Void => {
           let _ = self.eval_expr(operand, env)
           Undefined
         }
       }
-    Call(name, args) => {
+    @parser.TsExpr::Call(name, args) => {
       // 関数を環境から取得
       let func = env.get(name)
       let arg_values : Array[JSValue] = []
@@ -260,7 +301,7 @@ pub fn JSInterpreter::eval_expr(
       }
       self.call_function(func, arg_values)
     }
-    MethodCall(obj_expr, method_name, args) => {
+    @parser.TsExpr::MethodCall(obj_expr, method_name, args) => {
       let obj = self.eval_expr(obj_expr, env)
       let arg_values : Array[JSValue] = []
       for arg in args {
@@ -268,14 +309,14 @@ pub fn JSInterpreter::eval_expr(
       }
       self.call_method(obj, method_name, arg_values)
     }
-    ArrayLit(elements) => {
+    @parser.TsExpr::ArrayLit(elements) => {
       let items : Array[JSValue] = []
       for elem in elements {
         items.push(self.eval_expr(elem, env))
       }
       Array(items)
     }
-    ObjectLit(fields) => {
+    @parser.TsExpr::ObjectLit(fields) => {
       let props : Array[JSProp] = []
       for field in fields {
         let (key, val_expr) = field
@@ -283,17 +324,17 @@ pub fn JSInterpreter::eval_expr(
       }
       Object({ props, prototype: None })
     }
-    IndexAccess(obj_expr, idx_expr) => {
+    @parser.TsExpr::IndexAccess(obj_expr, idx_expr) => {
       let obj = self.eval_expr(obj_expr, env)
       let idx = self.eval_expr(idx_expr, env)
       let key = idx.to_js_string()
       js_get_prop(obj, key)
     }
-    PropAccess(obj_expr, prop) => {
+    @parser.TsExpr::PropAccess(obj_expr, prop) => {
       let obj = self.eval_expr(obj_expr, env)
       js_get_prop(obj, prop)
     }
-    AssignExpr(name, val_expr) => {
+    @parser.TsExpr::AssignExpr(name, val_expr) => {
       let val = self.eval_expr(val_expr, env)
       if not(env.set(name, val)) {
         // 変数が見つからない場合はグローバルに定義
@@ -301,7 +342,7 @@ pub fn JSInterpreter::eval_expr(
       }
       val
     }
-    Cond(cond, then_expr, else_expr) => {
+    @parser.TsExpr::Cond(cond, then_expr, else_expr) => {
       let cond_val = self.eval_expr(cond, env)
       if cond_val.to_boolean() {
         self.eval_expr(then_expr, env)
@@ -309,14 +350,14 @@ pub fn JSInterpreter::eval_expr(
         self.eval_expr(else_expr, env)
       }
     }
-    New(class_name, args) => {
+    @parser.TsExpr::New(class_name, args) => {
       let arg_values : Array[JSValue] = []
       for arg in args {
         arg_values.push(self.eval_expr(arg, env))
       }
       self.new_instance(class_name, arg_values)
     }
-    ArrowFunc(params, body) => {
+    @parser.TsExpr::ArrowFunc(params, body) => {
       let param_names : Array[String] = []
       for param in params {
         param_names.push(param.name)
@@ -324,20 +365,25 @@ pub fn JSInterpreter::eval_expr(
       JSValue::Function({
         params: param_names,
         body: match body {
-          ArrowExpr(expr) =>
+          @parser.TsArrowBody::ArrowExpr(expr) =>
             Ast({
               name: "<arrow>",
               params,
-              return_type: Any,
-              body: { stmts: [Return(Some(expr))] },
+              return_type: @parser.TsType::Any,
+              body: { stmts: [@parser.TsStmt::Return(Some(expr))] },
             })
-          ArrowBlock(block) =>
-            Ast({ name: "<arrow>", params, return_type: Any, body: block })
+          @parser.TsArrowBody::ArrowBlock(block) =>
+            Ast({
+              name: "<arrow>",
+              params,
+              return_type: @parser.TsType::Any,
+              body: block,
+            })
         },
         env,
       })
     }
-    FuncExpr(func) => {
+    @parser.TsExpr::FuncExpr(func) => {
       let param_names : Array[String] = []
       for param in func.params {
         param_names.push(param.name)
@@ -351,7 +397,7 @@ pub fn JSInterpreter::eval_expr(
 /// 文を実行（戻り値はReturnの場合のみSome）
 pub fn JSInterpreter::exec_stmt(
   self : JSInterpreter,
-  stmt : TsStmt,
+  stmt : @parser.TsStmt,
   env : JSEnv,
 ) -> JSValue? {
   self.tick()
@@ -360,7 +406,7 @@ pub fn JSInterpreter::exec_stmt(
     None => ()
   }
   match stmt {
-    Let(name, _, init) | Const(name, _, init) => {
+    @parser.TsStmt::Let(name, _, init) | @parser.TsStmt::Const(name, _, init) => {
       let val = self.eval_expr(init, env)
       match self.take_error() {
         Some(err) => return Some(err)
@@ -369,7 +415,7 @@ pub fn JSInterpreter::exec_stmt(
       env.define(name, val)
       None
     }
-    Expr(expr) => {
+    @parser.TsStmt::Expr(expr) => {
       let _ = self.eval_expr(expr, env)
       match self.take_error() {
         Some(err) => Some(err)
@@ -377,8 +423,8 @@ pub fn JSInterpreter::exec_stmt(
       }
     }
     Empty => None
-    Block(block) => self.exec_block(block, env)
-    Assign(name, val_expr) => {
+    @parser.TsStmt::Block(block) => self.exec_block(block, env)
+    @parser.TsStmt::Assign(name, val_expr) => {
       let val = self.eval_expr(val_expr, env)
       match self.take_error() {
         Some(err) => return Some(err)
@@ -387,15 +433,15 @@ pub fn JSInterpreter::exec_stmt(
       let _ = env.set(name, val)
       None
     }
-    Return(Some(expr)) => {
+    @parser.TsStmt::Return(Some(expr)) => {
       let val = self.eval_expr(expr, env)
       match self.take_error() {
         Some(err) => Some(err)
         None => Some(val)
       }
     }
-    Return(None) => Some(Undefined)
-    If(cond, then_block, else_block) => {
+    @parser.TsStmt::Return(None) => Some(Undefined)
+    @parser.TsStmt::If(cond, then_block, else_block) => {
       let cond_val = self.eval_expr(cond, env)
       match self.take_error() {
         Some(err) => return Some(err)
@@ -410,7 +456,7 @@ pub fn JSInterpreter::exec_stmt(
         }
       }
     }
-    While(cond, body) => {
+    @parser.TsStmt::While(cond, body) => {
       while self.eval_expr(cond, env).to_boolean() {
         match self.take_error() {
           Some(err) => return Some(err)
@@ -425,7 +471,7 @@ pub fn JSInterpreter::exec_stmt(
       }
       None
     }
-    For(init, cond, update, body) => {
+    @parser.TsStmt::For(init, cond, update, body) => {
       // 初期化
       match init {
         Some(init_stmt) => {
@@ -481,7 +527,7 @@ pub fn JSInterpreter::exec_stmt(
     }
     Break => Some(BreakSignal)
     Continue => Some(ContinueSignal)
-    CompoundAssign(name, op, val_expr) => {
+    @parser.TsStmt::CompoundAssign(name, op, val_expr) => {
       let current = env.get(name)
       let val = self.eval_expr(val_expr, env)
       match self.take_error() {
@@ -489,15 +535,52 @@ pub fn JSInterpreter::exec_stmt(
         None => ()
       }
       let new_val = match op {
-        AddAssign => js_add(current, val)
-        SubAssign => js_sub(current, val)
-        MulAssign => js_mul(current, val)
-        DivAssign => js_div(current, val)
+        @parser.TsCompoundOp::AddAssign => js_add(current, val)
+        @parser.TsCompoundOp::SubAssign => js_sub(current, val)
+        @parser.TsCompoundOp::MulAssign => js_mul(current, val)
+        @parser.TsCompoundOp::DivAssign => js_div(current, val)
+        @parser.TsCompoundOp::ModAssign => js_mod(current, val)
+        @parser.TsCompoundOp::BitAndAssign => {
+          let li = current.to_number().to_int()
+          let ri = val.to_number().to_int()
+          Number((li & ri).to_double())
+        }
+        @parser.TsCompoundOp::BitOrAssign => {
+          let li = current.to_number().to_int()
+          let ri = val.to_number().to_int()
+          Number((li | ri).to_double())
+        }
+        @parser.TsCompoundOp::BitXorAssign => {
+          let li = current.to_number().to_int()
+          let ri = val.to_number().to_int()
+          Number((li ^ ri).to_double())
+        }
+        @parser.TsCompoundOp::ShlAssign => {
+          let li = current.to_number().to_int()
+          let ri = val.to_number().to_int()
+          let shift = ri & 31
+          Number((li << shift).to_double())
+        }
+        @parser.TsCompoundOp::ShrAssign => {
+          let li = current.to_number().to_int()
+          let ri = val.to_number().to_int()
+          let shift = ri & 31
+          Number((li >> shift).to_double())
+        }
+        @parser.TsCompoundOp::UShrAssign => {
+          let li = current.to_number()
+          let ri = val.to_number().to_int()
+          let shift = ri & 31
+          let u = if li < 0.0 { li + 4294967296.0 } else { li }
+          let denom = @math.pow(2.0, shift.to_double())
+          Number(@math.floor(u / denom))
+        }
+        @parser.TsCompoundOp::PowAssign => Number(@math.pow(current.to_number(), val.to_number()))
       }
       let _ = env.set(name, new_val)
       None
     }
-    IndexAssign(arr_expr, idx_expr, val_expr) => {
+    @parser.TsStmt::IndexAssign(arr_expr, idx_expr, val_expr) => {
       let arr = self.eval_expr(arr_expr, env)
       let idx = self.eval_expr(idx_expr, env)
       let val = self.eval_expr(val_expr, env)
@@ -521,7 +604,7 @@ pub fn JSInterpreter::exec_stmt(
       }
       None
     }
-    PropAssign(obj_expr, prop, val_expr) => {
+    @parser.TsStmt::PropAssign(obj_expr, prop, val_expr) => {
       let obj = self.eval_expr(obj_expr, env)
       let val = self.eval_expr(val_expr, env)
       match self.take_error() {
@@ -531,7 +614,7 @@ pub fn JSInterpreter::exec_stmt(
       let _ = js_set_prop(obj, prop, val)
       None
     }
-    ForOf(var_name, _, iterable, body) => {
+    @parser.TsStmt::ForOf(var_name, _, iterable, body) => {
       let iter_val = self.eval_expr(iterable, env)
       match self.take_error() {
         Some(err) => return Some(err)
@@ -584,7 +667,7 @@ pub fn JSInterpreter::exec_stmt(
 /// ブロックを実行
 pub fn JSInterpreter::exec_block(
   self : JSInterpreter,
-  block : TsBlock,
+  block : @parser.TsBlock,
   env : JSEnv,
 ) -> JSValue? {
   for stmt in block.stmts {
@@ -1321,7 +1404,7 @@ fn JSInterpreter::new_instance(
 /// モジュールを実行
 pub fn JSInterpreter::run_module(
   self : JSInterpreter,
-  module_ : TsModule,
+  module_ : @parser.TsModule,
 ) -> JSValue {
   // 関数を登録
   for func in module_.funcs {
@@ -1350,8 +1433,8 @@ pub fn JSInterpreter::run_module(
 pub fn JSInterpreter::run(
   self : JSInterpreter,
   source : String,
-) -> JSValue raise ParseError {
-  let parser = Parser::from_source(source)
+) -> JSValue raise @parser.ParseError {
+  let parser = @parser.Parser::from_source(source)
   let module_ = parser.parse_module()
   self.run_module(module_)
 }

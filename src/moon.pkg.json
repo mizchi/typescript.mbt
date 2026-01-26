@@ -1,22 +1,11 @@
 {
   "is_main": true,
   "import": [
-    {
-      "path": "moonbitlang/wasm5/src/core",
-      "alias": "core"
-    },
-    {
-      "path": "moonbitlang/wasm5/src/encode",
-      "alias": "encode"
-    },
     "moonbitlang/async",
     "moonbitlang/async/fs",
-    "moonbitlang/core/strconv",
-    "moonbitlang/core/env"
-  ],
-  "wbtest-import": [
+    "moonbitlang/core/env",
     {
-      "path": "moonbitlang/wasm5/src/runtime",
+      "path": "moonbitlang/typescript/runtime",
       "alias": "runtime"
     }
   ]

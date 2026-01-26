@@ -38,7 +38,7 @@ test "compile_to_wasm: factorial" {
   assert_eq(wasm[1], b'\x61')
 
   // 生成されたバイナリが実行可能か確認 (wasm5 runtime で)
-  let parser = Parser::from_source(src)
+  let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module(ts_module)
   let runtime = @runtime.Runtime::load(wasm_module)
@@ -74,7 +74,7 @@ test "codegen: constant function" {
     #|function answer(): number {
     #|  return 42;
     #|}
-  let parser = Parser::from_source(src)
+  let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module(ts_module)
   let runtime = @runtime.Runtime::load(wasm_module)
@@ -89,7 +89,7 @@ test "codegen: add function" {
     #|function add(a: number, b: number): number {
     #|  return a + b;
     #|}
-  let parser = Parser::from_source(src)
+  let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module(ts_module)
   let runtime = @runtime.Runtime::load(wasm_module)
@@ -107,7 +107,7 @@ test "codegen: arithmetic" {
     #|function calc(a: number, b: number): number {
     #|  return (a + b) * (a - b);
     #|}
-  let parser = Parser::from_source(src)
+  let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module(ts_module)
   let runtime = @runtime.Runtime::load(wasm_module)
@@ -128,7 +128,7 @@ test "codegen: local variable" {
     #|  let y: number = 20;
     #|  return x + y;
     #|}
-  let parser = Parser::from_source(src)
+  let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module(ts_module)
   let runtime = @runtime.Runtime::load(wasm_module)
@@ -147,7 +147,7 @@ test "codegen: if-else" {
     #|    return b;
     #|  }
     #|}
-  let parser = Parser::from_source(src)
+  let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module(ts_module)
   let runtime = @runtime.Runtime::load(wasm_module)
@@ -173,7 +173,7 @@ test "codegen: recursive factorial" {
     #|  }
     #|  return n * factorial(n - 1);
     #|}
-  let parser = Parser::from_source(src)
+  let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module(ts_module)
   let runtime = @runtime.Runtime::load(wasm_module)
@@ -194,7 +194,7 @@ test "codegen: while loop" {
     #|  }
     #|  return total;
     #|}
-  let parser = Parser::from_source(src)
+  let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module(ts_module)
   let runtime = @runtime.Runtime::load(wasm_module)
@@ -214,7 +214,7 @@ test "codegen: multiple functions" {
     #|function quadruple(x: number): number {
     #|  return double(double(x));
     #|}
-  let parser = Parser::from_source(src)
+  let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module(ts_module)
   let runtime = @runtime.Runtime::load(wasm_module)
@@ -235,7 +235,7 @@ test "codegen: int type operations" {
     #|  }
     #|  return total;
     #|}
-  let parser = Parser::from_source(src)
+  let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module(ts_module)
   let runtime = @runtime.Runtime::load(wasm_module)
@@ -255,7 +255,7 @@ test "codegen: int factorial" {
     #|  }
     #|  return n * factorial_int(n - 1);
     #|}
-  let parser = Parser::from_source(src)
+  let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module(ts_module)
   let runtime = @runtime.Runtime::load(wasm_module)
@@ -271,7 +271,7 @@ test "codegen: array literal and access" {
     #|  let arr: number[] = [1.0, 2.0, 3.0];
     #|  return arr[0] + arr[1] + arr[2];
     #|}
-  let parser = Parser::from_source(src)
+  let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module(ts_module)
 
@@ -291,7 +291,7 @@ test "codegen: array with new" {
     #|  let arr: int[] = new Array<int>(5);
     #|  return arr.length;
     #|}
-  let parser = Parser::from_source(src)
+  let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module(ts_module)
   let runtime = @runtime.Runtime::load(wasm_module)
@@ -310,7 +310,7 @@ test "codegen: array assignment" {
     #|  arr[2] = 30;
     #|  return arr[0] + arr[1] + arr[2];
     #|}
-  let parser = Parser::from_source(src)
+  let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module(ts_module)
   let runtime = @runtime.Runtime::load(wasm_module)
@@ -332,7 +332,7 @@ test "codegen: struct creation and field access" {
     #|  p.y = 20.0;
     #|  return p.x + p.y;
     #|}
-  let parser = Parser::from_source(src)
+  let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module(ts_module)
   let runtime = @runtime.Runtime::load(wasm_module)
@@ -352,7 +352,7 @@ test "codegen: struct with int fields" {
     #|  c.count = 42;
     #|  return c.count;
     #|}
-  let parser = Parser::from_source(src)
+  let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module(ts_module)
   let runtime = @runtime.Runtime::load(wasm_module)
@@ -367,7 +367,7 @@ test "codegen: ternary operator" {
     #|function abs(x: number): number {
     #|  return x >= 0.0 ? x : -x;
     #|}
-  let parser = Parser::from_source(src)
+  let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module(ts_module)
   let runtime = @runtime.Runtime::load(wasm_module)
@@ -387,7 +387,7 @@ test "codegen: increment decrement" {
     #|  let b: int = ++x;
     #|  return a + b;
     #|}
-  let parser = Parser::from_source(src)
+  let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module(ts_module)
   let runtime = @runtime.Runtime::load(wasm_module)
@@ -409,7 +409,7 @@ test "codegen: compound assignment" {
     #|  x -= 10;
     #|  return x;
     #|}
-  let parser = Parser::from_source(src)
+  let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module(ts_module)
   let runtime = @runtime.Runtime::load(wasm_module)
@@ -430,7 +430,7 @@ test "codegen: for loop with increment" {
     #|  }
     #|  return total;
     #|}
-  let parser = Parser::from_source(src)
+  let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module(ts_module)
   let runtime = @runtime.Runtime::load(wasm_module)
@@ -450,7 +450,7 @@ test "codegen: for...of loop" {
     #|  }
     #|  return total;
     #|}
-  let parser = Parser::from_source(src)
+  let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module(ts_module)
   let runtime = @runtime.Runtime::load(wasm_module)
@@ -473,7 +473,7 @@ test "codegen: for...of with int array" {
     #|  }
     #|  return total;
     #|}
-  let parser = Parser::from_source(src)
+  let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module(ts_module)
   let runtime = @runtime.Runtime::load(wasm_module)
@@ -494,7 +494,7 @@ test "codegen: comparison operators" {
     #|  }
     #|  return 2;
     #|}
-  let parser = Parser::from_source(src)
+  let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module(ts_module)
   let runtime = @runtime.Runtime::load(wasm_module)
@@ -524,7 +524,7 @@ test "codegen: module with imports generates correct wasm" {
     #|function test(): int {
     #|  return 42;
     #|}
-  let parser = Parser::from_source(src)
+  let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
 
   // インポートが正しくパースされている
@@ -555,7 +555,7 @@ test "codegen: javascript style code with type inference" {
     #|  let y = 2;
     #|  return x + y;
     #|}
-  let parser = Parser::from_source(src)
+  let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module(ts_module)
 
@@ -619,7 +619,7 @@ test "codegen: type metadata in custom section" {
     #|function add(a: int, b: int): int {
     #|  return a + b;
     #|}
-  let parser = Parser::from_source(src)
+  let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module(ts_module)
 

@@ -53,7 +53,7 @@ async fn run_ts_file(file_path : String) -> Unit {
       return
     }
   }
-  let interp = JSInterpreter::new()
+  let interp = @runtime.JSInterpreter::new()
   let result = interp.run(content) catch {
     e => {
       println("Error: \{e}")
@@ -486,7 +486,7 @@ async fn run_test262(test_path : String) -> Unit {
       None => ()
     }
 
-    let interp = JSInterpreter::new()
+    let interp = @runtime.JSInterpreter::new()
     let wrapped = wrap_test_source(include_src + content)
     let result = interp.run(wrapped) catch {
       e => {
@@ -498,9 +498,9 @@ async fn run_test262(test_path : String) -> Unit {
 
     match result {
       Object(_) => {
-        let err = js_get_prop(result, "error")
+        let err = @runtime.js_get_prop(result, "error")
         match err {
-          JSValue::String(msg) => {
+          @runtime.JSValue::String(msg) => {
             failed += 1
             println("FAIL: \{path} - \{msg}")
           }

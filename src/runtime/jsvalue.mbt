@@ -93,7 +93,7 @@ pub struct JSClosure {
 ///|
 /// 関数本体（ASTまたはコンパイル済みコード）
 pub enum JSFuncBody {
-  Ast(TsFunc) // 解釈実行用
+  Ast(@parser.TsFunc) // 解釈実行用
   Native(String) // ネイティブ関数名
   Compiled(Int) // コンパイル済み関数インデックス
 } derive(Show)
@@ -474,6 +474,39 @@ pub fn js_get_prop(obj : JSValue, key : String) -> JSValue {
         }
       }
     _ => Undefined
+  }
+}
+
+///|
+/// プロパティの存在確認
+pub fn js_has_prop(obj : JSValue, key : String) -> Bool {
+  match obj {
+    Object(map) => {
+      for prop in map.props {
+        if prop.key == key {
+          return true
+        }
+      }
+      match map.prototype {
+        Some(proto) => js_has_prop(proto, key)
+        None => false
+      }
+    }
+    Array(arr) =>
+      if key == "length" {
+        true
+      } else {
+        let idx = @strconv.parse_int(key) catch { _ => -1 }
+        idx >= 0 && idx < arr.length()
+      }
+    String(s) =>
+      if key == "length" {
+        true
+      } else {
+        let idx = @strconv.parse_int(key) catch { _ => -1 }
+        idx >= 0 && idx < s.length()
+      }
+    _ => false
   }
 }
 
