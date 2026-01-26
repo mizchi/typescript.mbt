@@ -99,6 +99,7 @@ pub enum TsBinOp {
   BinLe // <=
   BinGt // >
   BinGe // >=
+  Instanceof // instanceof
   // 論理
   And // &&
   Or // ||
@@ -111,6 +112,7 @@ pub enum TsUnaryOp {
   Not // !
   Plus // + (単項プラス)
   Typeof // typeof
+  Void // void
   PreInc // ++x
   PreDec // --x
   PostInc // x++
@@ -147,6 +149,7 @@ pub enum TsStmt {
 
   // 式文
   Expr(TsExpr)
+  Empty
 
   // return
   Return(TsExpr?)
@@ -156,6 +159,7 @@ pub enum TsStmt {
   While(TsExpr, TsBlock)
   For(TsStmt?, TsExpr?, TsStmt?, TsBlock) // init, cond, update, body
   ForOf(String, TsType, TsExpr, TsBlock) // varName, varType, iterable, body
+  Block(TsBlock)
 
   // break/continue
   Break

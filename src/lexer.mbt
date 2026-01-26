@@ -8,21 +8,27 @@ pub enum TokenKind {
   Int(Int)
   Bool(Bool)
   Str(String) // 文字列リテラル
+  Regex(String, String) // /pattern/flags
   Ident(String)
 
   // キーワード
   Function
+  Class
+  Extends
+  Var
   Let
   Const
   Return
   If
   Else
   While
+  Do
   For
   Break
   Continue
   True
   False
+  Typeof
 
   // 型キーワード
   NumberType // number
@@ -41,6 +47,7 @@ pub enum TokenKind {
   EqEqEq // ===
   BangEq // !=
   BangEqEq // !==
+  Instanceof // instanceof
   Lt // <
   Le // <=
   Gt // >
@@ -57,6 +64,7 @@ pub enum TokenKind {
   StarEq // *=
   SlashEq // /=
   Arrow // =>
+  Ellipsis // ...
 
   // 区切り
   LParen // (
@@ -75,6 +83,7 @@ pub enum TokenKind {
   Interface // interface
   Type // type (type alias)
   Of // of (for...of)
+  In // in (for...in)
   Declare // declare (外部インポート宣言)
   Null // null
 
@@ -94,12 +103,13 @@ pub struct Token {
 pub struct Lexer {
   src : String
   mut pos : Int
+  mut allow_regex : Bool
 } derive(Show)
 
 ///|
 /// レキサー作成
 pub fn Lexer::new(src : String) -> Lexer {
-  { src, pos: 0 }
+  { src, pos: 0, allow_regex: true }
 }
 
 ///|
@@ -158,6 +168,32 @@ fn Lexer::skip_whitespace(self : Lexer) -> Unit {
               }
             }
           }
+          Some('*') => {
+            // ブロックコメント
+            let _ = self.advance()
+            let _ = self.advance()
+            while true {
+              match self.peek() {
+                None => break
+                Some('*') =>
+                  match self.peek_next() {
+                    Some('/') => {
+                      let _ = self.advance()
+                      let _ = self.advance()
+                      break
+                    }
+                    _ => {
+                      let _ = self.advance()
+
+                    }
+                  }
+                _ => {
+                  let _ = self.advance()
+
+                }
+              }
+            }
+          }
           _ => break
         }
       _ => break
@@ -169,28 +205,278 @@ fn Lexer::skip_whitespace(self : Lexer) -> Unit {
 /// 数値リテラルをパース
 fn Lexer::scan_number(self : Lexer) -> TokenKind {
   let start = self.pos
+  // Radix-prefixed integers: 0x / 0o / 0b
+  if self.peek() == Some('0') {
+    match self.peek_next() {
+      Some('x') | Some('X') => {
+        let _ = self.advance()
+        let _ = self.advance()
+        let mut value = 0
+        let mut has_digit = false
+        while true {
+          match self.peek() {
+            Some('_') => {
+              let _ = self.advance()
+            }
+            Some(c) =>
+              match c {
+                '0' => {
+                  let _ = self.advance()
+                  value = value * 16 + 0
+                  has_digit = true
+                }
+                '1' => {
+                  let _ = self.advance()
+                  value = value * 16 + 1
+                  has_digit = true
+                }
+                '2' => {
+                  let _ = self.advance()
+                  value = value * 16 + 2
+                  has_digit = true
+                }
+                '3' => {
+                  let _ = self.advance()
+                  value = value * 16 + 3
+                  has_digit = true
+                }
+                '4' => {
+                  let _ = self.advance()
+                  value = value * 16 + 4
+                  has_digit = true
+                }
+                '5' => {
+                  let _ = self.advance()
+                  value = value * 16 + 5
+                  has_digit = true
+                }
+                '6' => {
+                  let _ = self.advance()
+                  value = value * 16 + 6
+                  has_digit = true
+                }
+                '7' => {
+                  let _ = self.advance()
+                  value = value * 16 + 7
+                  has_digit = true
+                }
+                '8' => {
+                  let _ = self.advance()
+                  value = value * 16 + 8
+                  has_digit = true
+                }
+                '9' => {
+                  let _ = self.advance()
+                  value = value * 16 + 9
+                  has_digit = true
+                }
+                'a' | 'A' => {
+                  let _ = self.advance()
+                  value = value * 16 + 10
+                  has_digit = true
+                }
+                'b' | 'B' => {
+                  let _ = self.advance()
+                  value = value * 16 + 11
+                  has_digit = true
+                }
+                'c' | 'C' => {
+                  let _ = self.advance()
+                  value = value * 16 + 12
+                  has_digit = true
+                }
+                'd' | 'D' => {
+                  let _ = self.advance()
+                  value = value * 16 + 13
+                  has_digit = true
+                }
+                'e' | 'E' => {
+                  let _ = self.advance()
+                  value = value * 16 + 14
+                  has_digit = true
+                }
+                'f' | 'F' => {
+                  let _ = self.advance()
+                  value = value * 16 + 15
+                  has_digit = true
+                }
+                _ => break
+              }
+            None => break
+          }
+        }
+        if not(has_digit) {
+          value = 0
+        }
+        let mut is_bigint = false
+        if self.peek() == Some('n') {
+          is_bigint = true
+          let _ = self.advance()
+        }
+        if is_bigint {
+          return Number(value.to_double())
+        } else {
+          return Int(value)
+        }
+      }
+      Some('b') | Some('B') => {
+        let _ = self.advance()
+        let _ = self.advance()
+        let mut value = 0
+        let mut has_digit = false
+        while true {
+          match self.peek() {
+            Some('_') => {
+              let _ = self.advance()
+            }
+            Some('0') => {
+              let _ = self.advance()
+              value = value * 2
+              has_digit = true
+            }
+            Some('1') => {
+              let _ = self.advance()
+              value = value * 2 + 1
+              has_digit = true
+            }
+            _ => break
+          }
+        }
+        if not(has_digit) {
+          value = 0
+        }
+        let mut is_bigint = false
+        if self.peek() == Some('n') {
+          is_bigint = true
+          let _ = self.advance()
+        }
+        if is_bigint {
+          return Number(value.to_double())
+        } else {
+          return Int(value)
+        }
+      }
+      Some('o') | Some('O') => {
+        let _ = self.advance()
+        let _ = self.advance()
+        let mut value = 0
+        let mut has_digit = false
+        while true {
+          match self.peek() {
+            Some('_') => {
+              let _ = self.advance()
+            }
+            Some('0') => {
+              let _ = self.advance()
+              value = value * 8 + 0
+              has_digit = true
+            }
+            Some('1') => {
+              let _ = self.advance()
+              value = value * 8 + 1
+              has_digit = true
+            }
+            Some('2') => {
+              let _ = self.advance()
+              value = value * 8 + 2
+              has_digit = true
+            }
+            Some('3') => {
+              let _ = self.advance()
+              value = value * 8 + 3
+              has_digit = true
+            }
+            Some('4') => {
+              let _ = self.advance()
+              value = value * 8 + 4
+              has_digit = true
+            }
+            Some('5') => {
+              let _ = self.advance()
+              value = value * 8 + 5
+              has_digit = true
+            }
+            Some('6') => {
+              let _ = self.advance()
+              value = value * 8 + 6
+              has_digit = true
+            }
+            Some('7') => {
+              let _ = self.advance()
+              value = value * 8 + 7
+              has_digit = true
+            }
+            _ => break
+          }
+        }
+        if not(has_digit) {
+          value = 0
+        }
+        let mut is_bigint = false
+        if self.peek() == Some('n') {
+          is_bigint = true
+          let _ = self.advance()
+        }
+        if is_bigint {
+          return Number(value.to_double())
+        } else {
+          return Int(value)
+        }
+      }
+      _ => ()
+    }
+  }
   let mut has_dot = false
+  let mut has_exp = false
+  let mut is_bigint = false
   while true {
     match self.peek() {
       Some(c) =>
         if c >= '0' && c <= '9' {
           let _ = self.advance()
 
-        } else if c == '.' && not(has_dot) {
+        } else if c == '_' {
+          let _ = self.advance()
+        } else if c == '.' && not(has_dot) && not(has_exp) {
           has_dot = true
           let _ = self.advance()
 
+        } else if (c == 'e' || c == 'E') && not(has_exp) {
+          has_exp = true
+          let _ = self.advance()
+          match self.peek() {
+            Some('+') | Some('-') => {
+              let _ = self.advance()
+
+            }
+            _ => ()
+          }
         } else {
           break
         }
       None => break
     }
   }
+  if self.peek() == Some('n') {
+    is_bigint = true
+    let _ = self.advance()
+  }
   let s = try { self.src[start:self.pos].to_string() } catch { _ => "" }
-  if has_dot {
+  let cleaned = StringBuilder::new()
+  for ch in s {
+    if ch == '_' {
+      continue
+    }
+    if is_bigint && ch == 'n' {
+      continue
+    }
+    cleaned.write_char(ch)
+  }
+  let cleaned_s = cleaned.to_string()
+  if has_dot || has_exp || is_bigint {
     // Double としてパース
     try {
-      let d = @strconv.parse_double(s)
+      let d = @strconv.parse_double(cleaned_s)
       Number(d)
     } catch {
       _ => Number(0.0)
@@ -198,7 +484,7 @@ fn Lexer::scan_number(self : Lexer) -> TokenKind {
   } else {
     // Int としてパース
     try {
-      let i = @strconv.parse_int(s)
+      let i = @strconv.parse_int(cleaned_s)
       Int(i)
     } catch {
       _ => Int(0)
@@ -216,7 +502,8 @@ fn Lexer::scan_ident(self : Lexer) -> TokenKind {
         if (c >= 'a' && c <= 'z') ||
           (c >= 'A' && c <= 'Z') ||
           (c >= '0' && c <= '9') ||
-          c == '_' {
+          c == '_' ||
+          c == '$' {
           let _ = self.advance()
 
         } else {
@@ -230,17 +517,22 @@ fn Lexer::scan_ident(self : Lexer) -> TokenKind {
   // キーワードチェック
   match s {
     "function" => Function
+    "class" => Class
+    "extends" => Extends
+    "var" => Var
     "let" => Let
     "const" => Const
     "return" => Return
     "if" => If
     "else" => Else
     "while" => While
+    "do" => Do
     "for" => For
     "break" => Break
     "continue" => Continue
     "true" => Bool(true)
     "false" => Bool(false)
+    "typeof" => Typeof
     "null" => Null
     "number" => NumberType
     "boolean" => BooleanType
@@ -251,7 +543,9 @@ fn Lexer::scan_ident(self : Lexer) -> TokenKind {
     "interface" => Interface
     "type" => Type
     "of" => Of
+    "in" => In
     "declare" => Declare
+    "instanceof" => Instanceof
     _ => Ident(s)
   }
 }
@@ -308,6 +602,75 @@ fn Lexer::scan_string(self : Lexer, quote : Char) -> TokenKind {
     }
   }
   Str(buf.to_string())
+}
+
+///|
+/// 正規表現リテラルをパース (/pattern/flags)
+fn Lexer::scan_regex(self : Lexer) -> TokenKind {
+  let buf = StringBuilder::new()
+  let mut in_class = false
+  let mut escaped = false
+  while true {
+    match self.peek() {
+      None => break
+      Some(c) => {
+        let _ = self.advance()
+        if escaped {
+          buf.write_char(c)
+          escaped = false
+          continue
+        }
+        if c == '\\' {
+          buf.write_char(c)
+          escaped = true
+          continue
+        }
+        if c == '[' {
+          in_class = true
+        } else if c == ']' {
+          in_class = false
+        }
+        if c == '/' && not(in_class) {
+          break
+        }
+        buf.write_char(c)
+      }
+    }
+  }
+  let flags = StringBuilder::new()
+  while true {
+    match self.peek() {
+      Some(c) =>
+        if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') {
+          let _ = self.advance()
+          flags.write_char(c)
+        } else {
+          break
+        }
+      None => break
+    }
+  }
+  Regex(buf.to_string(), flags.to_string())
+}
+
+///|
+/// 式を終端できるトークンか
+fn token_can_end_expr(kind : TokenKind) -> Bool {
+  match kind {
+    Number(_)
+    | Int(_)
+    | Bool(_)
+    | Str(_)
+    | Regex(_, _)
+    | Ident(_)
+    | Null
+    | RParen
+    | RBracket
+    | RBrace
+    | PlusPlus
+    | MinusMinus => true
+    _ => false
+  }
 }
 
 ///|
@@ -377,7 +740,8 @@ pub fn Lexer::next_token(self : Lexer) -> Token {
         | 'X'
         | 'Y'
         | 'Z'
-        | '_' => {
+        | '_'
+        | '$' => {
           self.pos -= 1
           self.scan_ident()
         }
@@ -420,7 +784,12 @@ pub fn Lexer::next_token(self : Lexer) -> Token {
               let _ = self.advance()
               SlashEq
             }
-            _ => Slash
+            _ =>
+              if self.allow_regex {
+                self.scan_regex()
+              } else {
+                Slash
+              }
           }
         '%' => Percent
         '?' => Question
@@ -502,7 +871,23 @@ pub fn Lexer::next_token(self : Lexer) -> Token {
         ',' => Comma
         ':' => Colon
         ';' => Semicolon
-        '.' => Dot
+        '.' =>
+          match self.peek() {
+            Some('0'..='9') => {
+              self.pos -= 1
+              self.scan_number()
+            }
+            Some('.') =>
+              match self.peek_next() {
+                Some('.') => {
+                  let _ = self.advance()
+                  let _ = self.advance()
+                  Ellipsis
+                }
+                _ => Dot
+              }
+            _ => Dot
+          }
         '"' | '\'' => {
           // 文字列リテラル
           let quote = c
@@ -510,6 +895,7 @@ pub fn Lexer::next_token(self : Lexer) -> Token {
         }
         _ => Eof // 未知の文字
       }
+      self.allow_regex = not(token_can_end_expr(kind))
       { kind, pos }
     }
   }

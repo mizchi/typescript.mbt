@@ -8,7 +8,7 @@ pub suberror CodeGenError {
 
 ///|
 /// 文字列プール (スナップショット用)
-struct StringPool {
+priv struct StringPool {
   // 文字列 → オフセット
   strings : Map[String, Int]
   // 文字列データ (順番に格納)
@@ -197,6 +197,7 @@ fn infer_literal_type(expr : TsExpr) -> TsType {
         | BinLe
         | BinGt
         | BinGe
+        | Instanceof
         | And
         | Or => Boolean
         Add | Sub | Mul | Div | Mod => infer_literal_type(lhs) // 左辺の型を継承
@@ -206,6 +207,7 @@ fn infer_literal_type(expr : TsExpr) -> TsType {
         Neg | Plus => infer_literal_type(e)
         Not => Boolean
         Typeof => String_
+        Void => Any
         PreInc | PreDec | PostInc | PostDec => infer_literal_type(e)
       }
     Call(_, _) => Any // 関数の戻り値型は文脈が必要
@@ -231,14 +233,14 @@ fn resolve_any(declared : TsType, init : TsExpr) -> TsType {
 
 ///|
 /// ローカル変数情報
-struct LocalVar {
+priv struct LocalVar {
   index : UInt
   type_ : TsType
 }
 
 ///|
 /// コード生成コンテキスト
-struct CodeGenCtx {
+priv struct CodeGenCtx {
   // ローカル変数マップ (名前 → インデックス)
   locals : Map[String, LocalVar]
   // ローカル変数の型リスト (インデックス順)
@@ -311,77 +313,6 @@ fn CodeGenCtx::emit(self : CodeGenCtx, instr : @core.Instr) -> Unit {
 }
 
 // ============================================
-// ビルトイン関数使用チェック
-// ============================================
-
-///|
-/// 式内で print が使われているかチェック
-fn uses_print_expr(expr : TsExpr) -> Bool {
-  match expr {
-    Call("print", _) => true
-    BinOp(_, lhs, rhs) => uses_print_expr(lhs) || uses_print_expr(rhs)
-    UnaryOp(_, e) => uses_print_expr(e)
-    Call(_, args) => args.iter().any(uses_print_expr)
-    Cond(c, t, e) =>
-      uses_print_expr(c) || uses_print_expr(t) || uses_print_expr(e)
-    ArrayLit(elems) => elems.iter().any(uses_print_expr)
-    IndexAccess(arr, idx) => uses_print_expr(arr) || uses_print_expr(idx)
-    PropAccess(obj, _) => uses_print_expr(obj)
-    New(_, args) => args.iter().any(uses_print_expr)
-    MethodCall(recv, _, args) =>
-      uses_print_expr(recv) || args.iter().any(uses_print_expr)
-    _ => false
-  }
-}
-
-///|
-/// 文内で print が使われているかチェック
-fn uses_print_stmt(stmt : TsStmt) -> Bool {
-  match stmt {
-    Let(_, _, expr) => uses_print_expr(expr)
-    Const(_, _, expr) => uses_print_expr(expr)
-    Assign(_, expr) => uses_print_expr(expr)
-    CompoundAssign(_, _, expr) => uses_print_expr(expr)
-    IndexAssign(arr, idx, val) =>
-      uses_print_expr(arr) || uses_print_expr(idx) || uses_print_expr(val)
-    PropAssign(obj, _, val) => uses_print_expr(obj) || uses_print_expr(val)
-    Expr(expr) => uses_print_expr(expr)
-    Return(Some(expr)) => uses_print_expr(expr)
-    Return(None) => false
-    If(cond, then_block, else_block) =>
-      uses_print_expr(cond) ||
-      uses_print_block(then_block) ||
-      else_block.map_or(false, uses_print_block)
-    While(cond, body) => uses_print_expr(cond) || uses_print_block(body)
-    For(init, cond, update, body) =>
-      init.map_or(false, uses_print_stmt) ||
-      cond.map_or(false, uses_print_expr) ||
-      update.map_or(false, uses_print_stmt) ||
-      uses_print_block(body)
-    ForOf(_, _, iter, body) => uses_print_expr(iter) || uses_print_block(body)
-    Break | Continue => false
-  }
-}
-
-///|
-/// ブロック内で print が使われているかチェック
-fn uses_print_block(block : TsBlock) -> Bool {
-  block.stmts.iter().any(uses_print_stmt)
-}
-
-///|
-/// 関数内で print が使われているかチェック
-fn uses_print_func(func : TsFunc) -> Bool {
-  uses_print_block(func.body)
-}
-
-///|
-/// モジュール内で print が使われているかチェック
-fn uses_print_module(module_ : TsModule) -> Bool {
-  module_.funcs.iter().any(uses_print_func)
-}
-
-// ============================================
 // 型変換
 // ============================================
 
@@ -432,7 +363,8 @@ fn infer_type(ctx : CodeGenCtx, expr : TsExpr) -> TsType {
         | BinEq
         | BinNe
         | AbstractEq
-        | AbstractNe => Boolean
+        | AbstractNe
+        | Instanceof => Boolean
         // 論理演算子は Boolean を返す
         And | Or => Boolean
         // Add: 文字列連結のチェック
@@ -453,6 +385,7 @@ fn infer_type(ctx : CodeGenCtx, expr : TsExpr) -> TsType {
         Neg | Plus => infer_type(ctx, operand)
         Not => Boolean
         Typeof => String_
+        Void => Any
         PreInc | PreDec | PostInc | PostDec => infer_type(ctx, operand)
       }
     Call(_, _) => Number // 関数の戻り値型は後で取得
@@ -470,11 +403,11 @@ fn infer_type(ctx : CodeGenCtx, expr : TsExpr) -> TsType {
       }
     PropAccess(_, prop) => if prop == "length" { Int } else { Number }
     New(_, _) => Array(Number) // new Array<T>() → Array(T)
-    MethodCall(receiver, method, _) => {
+    MethodCall(receiver, method_name, _) => {
       let recv_type = infer_type(ctx, receiver)
       match recv_type {
         String_ =>
-          match method {
+          match method_name {
             "charAt" => String_ // charAt returns string (single char)
             "charCodeAt" => Int // charCodeAt returns int
             "substring" => String_ // substring returns string
@@ -482,7 +415,7 @@ fn infer_type(ctx : CodeGenCtx, expr : TsExpr) -> TsType {
             _ => Number
           }
         Array(_) =>
-          match method {
+          match method_name {
             "push" => Int // push returns new length
             "pop" => Number // pop returns element
             _ => Number
@@ -582,7 +515,7 @@ fn compile_expr(
     }
     Var(name) =>
       match ctx.get_local(name) {
-        Some(local) => ctx.emit(LocalGet(local.index))
+        Some(local_var) => ctx.emit(LocalGet(local_var.index))
         None => raise CodeGenError("Undefined variable: \{name}")
       }
     BinOp(op, left, right) => compile_binop(ctx, op, left, right, expected_type)
@@ -629,8 +562,8 @@ fn compile_expr(
     PropAccess(obj, prop) => compile_prop_access(ctx, obj, prop, expected_type)
     New(type_name, args) =>
       compile_new_expr(ctx, type_name, args, expected_type)
-    MethodCall(receiver, method, args) =>
-      compile_method_call(ctx, receiver, method, args, expected_type)
+    MethodCall(receiver, method_name, args) =>
+      compile_method_call(ctx, receiver, method_name, args, expected_type)
     // 以下は静的Wasmコンパイラでは未サポート（インタプリタのみ）
     NullLit => ctx.emit(I32Const(0U)) // null = 0
     ObjectLit(_) =>
@@ -843,14 +776,14 @@ fn compile_new_expr(
 fn compile_method_call(
   ctx : CodeGenCtx,
   receiver : TsExpr,
-  method : String,
+  method_name : String,
   args : Array[TsExpr],
   _expected_type : TsType,
 ) -> Unit raise CodeGenError {
   let recv_type = infer_type(ctx, receiver)
   match recv_type {
-    String_ => compile_string_method(ctx, receiver, method, args)
-    Array(_) => compile_array_method(ctx, receiver, method, args, recv_type)
+    String_ => compile_string_method(ctx, receiver, method_name, args)
+    Array(_) => compile_array_method(ctx, receiver, method_name, args, recv_type)
     _ => raise CodeGenError("Cannot call method on type: \{recv_type}")
   }
 }
@@ -860,10 +793,10 @@ fn compile_method_call(
 fn compile_string_method(
   ctx : CodeGenCtx,
   receiver : TsExpr,
-  method : String,
+  method_name : String,
   args : Array[TsExpr],
 ) -> Unit raise CodeGenError {
-  match method {
+  match method_name {
     "charCodeAt" => {
       // str.charCodeAt(index) → str[4 + index] (1バイト読み込み)
       if args.length() < 1 {
@@ -1007,7 +940,7 @@ fn compile_string_method(
       }
       compile_string_concat(ctx, receiver, args[0])
     }
-    _ => raise CodeGenError("Unknown string method: \{method}")
+    _ => raise CodeGenError("Unknown string method: \{method_name}")
   }
 }
 
@@ -1134,7 +1067,7 @@ fn compile_string_concat(
 fn compile_array_method(
   ctx : CodeGenCtx,
   receiver : TsExpr,
-  method : String,
+  method_name : String,
   args : Array[TsExpr],
   arr_type : TsType,
 ) -> Unit raise CodeGenError {
@@ -1142,7 +1075,7 @@ fn compile_array_method(
     Array(t) => t
     _ => Number
   }
-  match method {
+  match method_name {
     "push" => {
       // arr.push(value) → 要素を追加して新しい長さを返す
       if args.length() < 1 {
@@ -1187,7 +1120,7 @@ fn compile_array_method(
       ctx.emit(I32Const(1U))
       ctx.emit(I32Add)
     }
-    _ => raise CodeGenError("Unknown array method: \{method}")
+    _ => raise CodeGenError("Unknown array method: \{method_name}")
   }
 }
 
@@ -1294,6 +1227,10 @@ fn compile_binop(
       } else {
         Number
       }
+    Instanceof =>
+      raise CodeGenError(
+        "instanceof is not supported in Wasm compiler (use interpreter)",
+      )
     And | Or => Boolean
   }
   compile_expr(ctx, left, operand_type)
@@ -1312,6 +1249,10 @@ fn compile_binop(
       BinGe => ctx.emit(F64Ge)
       BinEq | AbstractEq => ctx.emit(F64Eq)
       BinNe | AbstractNe => ctx.emit(F64Ne)
+      Instanceof =>
+        raise CodeGenError(
+          "instanceof is not supported in Wasm compiler (use interpreter)",
+        )
       And | Or => raise CodeGenError("Logical op on f64")
     }
   } else {
@@ -1328,6 +1269,10 @@ fn compile_binop(
       BinGe => ctx.emit(I32GeS)
       BinEq | AbstractEq => ctx.emit(I32Eq)
       BinNe | AbstractNe => ctx.emit(I32Ne)
+      Instanceof =>
+        raise CodeGenError(
+          "instanceof is not supported in Wasm compiler (use interpreter)",
+        )
       And => ctx.emit(I32And)
       Or => ctx.emit(I32Or)
     }
@@ -1452,6 +1397,11 @@ fn compile_unaryop(
       raise CodeGenError(
         "typeof is not supported in Wasm compiler (use interpreter)",
       )
+    Void =>
+      // void も未サポート
+      raise CodeGenError(
+        "void is not supported in Wasm compiler (use interpreter)",
+      )
   }
 }
 
@@ -1555,6 +1505,12 @@ fn compile_stmt(
     Expr(expr) => {
       compile_expr(ctx, expr, return_type)
       ctx.emit(Drop)
+    }
+    Empty => ()
+    Block(block) => {
+      for stmt in block.stmts {
+        compile_stmt(ctx, stmt, return_type)
+      }
     }
     Return(Some(expr)) => {
       compile_expr(ctx, expr, return_type)

@@ -1,0 +1,47 @@
+# Curated glob allowlist (includes + excludes)
+# Lines starting with ! are exclusions.
+# This set is parser-focused and avoids heavy runtime areas.
+
+# AnnexB built-ins
+test262/test/annexB/built-ins/**
+
+# Core built-ins (limited)
+test262/test/built-ins/Array/**
+test262/test/built-ins/String/**
+test262/test/built-ins/Function/**
+test262/test/built-ins/JSON/**
+test262/test/built-ins/Math/**
+
+# Language features (parser-heavy but bounded)
+test262/test/language/arguments-object/**
+test262/test/language/expressions/assignment/**
+test262/test/language/expressions/compound-assignment/**
+test262/test/language/expressions/arrow-function/**
+test262/test/language/expressions/function/**
+test262/test/language/expressions/array/**
+test262/test/language/expressions/call/**
+test262/test/language/expressions/new/**
+test262/test/language/statements/variable/**
+test262/test/language/statements/let/**
+test262/test/language/statements/const/**
+test262/test/language/statements/if/**
+test262/test/language/statements/for/**
+test262/test/language/statements/for-in/**
+test262/test/language/statements/for-of/**
+test262/test/language/statements/while/**
+test262/test/language/statements/do-while/**
+test262/test/language/statements/switch/**
+test262/test/language/statements/try/**
+test262/test/language/statements/function/**
+test262/test/language/identifiers/**
+test262/test/language/comments/**
+test262/test/language/line-terminators/**
+
+# Staging iterator tests
+test262/test/staging/sm/Iterator/**
+
+# Exclusions (heavy runtime / unsupported)
+!**/Temporal/**
+!**/intl402/**
+!**/module/**
+!**/async/**

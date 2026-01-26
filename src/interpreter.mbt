@@ -5,14 +5,134 @@
 /// インタプリタ
 pub struct JSInterpreter {
   global_env : JSEnv
+  mut last_error : JSValue?
+  mut steps : Int
+  step_limit : Int
 }
 
 ///|
 /// インタプリタを作成
 pub fn JSInterpreter::new() -> JSInterpreter {
   let env = js_new_env(None)
-  // グローバルオブジェクト (console, Math, etc.) は後で追加
-  { global_env: env }
+  let interp = { global_env: env, last_error: None, steps: 0, step_limit: 1_000_000 }
+  interp.install_builtins()
+  interp
+}
+
+///|
+/// ネイティブ関数を作成
+fn make_native(env : JSEnv, name : String) -> JSValue {
+  JSValue::Function({ params: [], body: Native(name), env })
+}
+
+///|
+/// エラーオブジェクトを作成して保持
+fn JSInterpreter::set_error(self : JSInterpreter, message : String) -> JSValue {
+  let obj = js_new_object()
+  let _ = js_set_prop(obj, "error", JSValue::String(message))
+  self.last_error = Some(obj)
+  obj
+}
+
+///|
+/// 実行ステップをカウントして暴走を抑制
+fn JSInterpreter::tick(self : JSInterpreter) -> Unit {
+  match self.last_error {
+    Some(_) => ()
+    None => {
+      self.steps += 1
+      if self.steps > self.step_limit {
+        let _ = self.set_error("Step limit exceeded")
+      }
+    }
+  }
+}
+
+///|
+/// エラーを取得してクリア
+fn JSInterpreter::take_error(self : JSInterpreter) -> JSValue? {
+  match self.last_error {
+    Some(err) => {
+      self.last_error = None
+      Some(err)
+    }
+    None => None
+  }
+}
+
+///|
+/// グローバル組み込みをセットアップ
+fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
+  let global_obj = js_new_object()
+
+  // console
+  let console = js_new_object()
+  let _ = js_set_prop(console, "log", make_native(self.global_env, "console.log"))
+  self.global_env.define("console", console)
+  let _ = js_set_prop(global_obj, "console", console)
+
+  // Math
+  let math = js_new_object()
+  let _ = js_set_prop(math, "floor", make_native(self.global_env, "Math.floor"))
+  let _ = js_set_prop(math, "ceil", make_native(self.global_env, "Math.ceil"))
+  let _ = js_set_prop(math, "abs", make_native(self.global_env, "Math.abs"))
+  let _ = js_set_prop(math, "sqrt", make_native(self.global_env, "Math.sqrt"))
+  let _ = js_set_prop(math, "min", make_native(self.global_env, "Math.min"))
+  let _ = js_set_prop(math, "max", make_native(self.global_env, "Math.max"))
+  let _ = js_set_prop(math, "round", make_native(self.global_env, "Math.round"))
+  let _ = js_set_prop(math, "random", make_native(self.global_env, "Math.random"))
+  self.global_env.define("Math", math)
+  let _ = js_set_prop(global_obj, "Math", math)
+
+  // assert (callable object)
+  let assert_obj = js_new_object()
+  let _ = js_set_prop(assert_obj, "$call", make_native(self.global_env, "assert"))
+  let _ = js_set_prop(
+    assert_obj,
+    "sameValue",
+    make_native(self.global_env, "assert.sameValue"),
+  )
+  let _ = js_set_prop(
+    assert_obj,
+    "notSameValue",
+    make_native(self.global_env, "assert.notSameValue"),
+  )
+  let _ = js_set_prop(
+    assert_obj,
+    "compareArray",
+    make_native(self.global_env, "assert.compareArray"),
+  )
+  self.global_env.define("assert", assert_obj)
+  let _ = js_set_prop(global_obj, "assert", assert_obj)
+
+  // print
+  let print_fn = make_native(self.global_env, "print")
+  self.global_env.define("print", print_fn)
+  let _ = js_set_prop(global_obj, "print", print_fn)
+
+  // $DONOTEVALUATE
+  let donotevaluate_fn = make_native(self.global_env, "$DONOTEVALUATE")
+  self.global_env.define("$DONOTEVALUATE", donotevaluate_fn)
+  let _ = js_set_prop(global_obj, "$DONOTEVALUATE", donotevaluate_fn)
+
+  // $ERROR / $DONE
+  let error_fn = make_native(self.global_env, "$ERROR")
+  self.global_env.define("$ERROR", error_fn)
+  let _ = js_set_prop(global_obj, "$ERROR", error_fn)
+  let done_fn = make_native(self.global_env, "$DONE")
+  self.global_env.define("$DONE", done_fn)
+  let _ = js_set_prop(global_obj, "$DONE", done_fn)
+
+  // $262
+  let t262 = js_new_object()
+  let _ = js_set_prop(t262, "global", global_obj)
+  let _ = js_set_prop(t262, "evalScript", make_native(self.global_env, "$262.evalScript"))
+  self.global_env.define("$262", t262)
+  let _ = js_set_prop(global_obj, "$262", t262)
+
+  // globalThis / global
+  self.global_env.define("globalThis", global_obj)
+  self.global_env.define("global", global_obj)
 }
 
 ///|
@@ -22,6 +142,7 @@ pub fn JSInterpreter::eval_expr(
   expr : TsExpr,
   env : JSEnv,
 ) -> JSValue {
+  self.tick()
   match expr {
     IntLit(n) => Number(n.to_double())
     NumberLit(n) => Number(n)
@@ -46,6 +167,7 @@ pub fn JSInterpreter::eval_expr(
         BinNe => js_strict_ne(lval, rval) // !== (strict inequality)
         AbstractEq => js_eq(lval, rval) // == (abstract equality)
         AbstractNe => js_ne(lval, rval) // != (abstract inequality)
+        Instanceof => Bool(false)
         And =>
           // 短絡評価: lvalがfalsyならlval、そうでなければrval
           if lval.to_boolean() {
@@ -124,6 +246,10 @@ pub fn JSInterpreter::eval_expr(
         Not => js_not(self.eval_expr(operand, env))
         Plus => js_pos(self.eval_expr(operand, env))
         Typeof => js_typeof(self.eval_expr(operand, env))
+        Void => {
+          let _ = self.eval_expr(operand, env)
+          Undefined
+        }
       }
     Call(name, args) => {
       // 関数を環境から取得
@@ -134,13 +260,13 @@ pub fn JSInterpreter::eval_expr(
       }
       self.call_function(func, arg_values)
     }
-    MethodCall(obj_expr, method, args) => {
+    MethodCall(obj_expr, method_name, args) => {
       let obj = self.eval_expr(obj_expr, env)
       let arg_values : Array[JSValue] = []
       for arg in args {
         arg_values.push(self.eval_expr(arg, env))
       }
-      self.call_method(obj, method, arg_values)
+      self.call_method(obj, method_name, arg_values)
     }
     ArrayLit(elements) => {
       let items : Array[JSValue] = []
@@ -228,25 +354,53 @@ pub fn JSInterpreter::exec_stmt(
   stmt : TsStmt,
   env : JSEnv,
 ) -> JSValue? {
+  self.tick()
+  match self.take_error() {
+    Some(err) => return Some(err)
+    None => ()
+  }
   match stmt {
     Let(name, _, init) | Const(name, _, init) => {
       let val = self.eval_expr(init, env)
+      match self.take_error() {
+        Some(err) => return Some(err)
+        None => ()
+      }
       env.define(name, val)
       None
     }
     Expr(expr) => {
       let _ = self.eval_expr(expr, env)
-      None
+      match self.take_error() {
+        Some(err) => Some(err)
+        None => None
+      }
     }
+    Empty => None
+    Block(block) => self.exec_block(block, env)
     Assign(name, val_expr) => {
       let val = self.eval_expr(val_expr, env)
+      match self.take_error() {
+        Some(err) => return Some(err)
+        None => ()
+      }
       let _ = env.set(name, val)
       None
     }
-    Return(Some(expr)) => Some(self.eval_expr(expr, env))
+    Return(Some(expr)) => {
+      let val = self.eval_expr(expr, env)
+      match self.take_error() {
+        Some(err) => Some(err)
+        None => Some(val)
+      }
+    }
     Return(None) => Some(Undefined)
     If(cond, then_block, else_block) => {
       let cond_val = self.eval_expr(cond, env)
+      match self.take_error() {
+        Some(err) => return Some(err)
+        None => ()
+      }
       if cond_val.to_boolean() {
         self.exec_block(then_block, env)
       } else {
@@ -258,6 +412,10 @@ pub fn JSInterpreter::exec_stmt(
     }
     While(cond, body) => {
       while self.eval_expr(cond, env).to_boolean() {
+        match self.take_error() {
+          Some(err) => return Some(err)
+          None => ()
+        }
         match self.exec_block(body, env) {
           Some(BreakSignal) => break
           Some(ContinueSignal) => continue
@@ -271,7 +429,10 @@ pub fn JSInterpreter::exec_stmt(
       // 初期化
       match init {
         Some(init_stmt) => {
-          let _ = self.exec_stmt(init_stmt, env)
+          match self.exec_stmt(init_stmt, env) {
+            Some(val) => return Some(val)
+            None => ()
+          }
 
         }
         None => ()
@@ -281,13 +442,20 @@ pub fn JSInterpreter::exec_stmt(
               Some(c) => self.eval_expr(c, env).to_boolean()
               None => true
             }) {
+        match self.take_error() {
+          Some(err) => return Some(err)
+          None => ()
+        }
         match self.exec_block(body, env) {
           Some(BreakSignal) => break
           Some(ContinueSignal) => {
             // 更新を実行してから次のイテレーションへ
             match update {
               Some(u) => {
-                let _ = self.exec_stmt(u, env)
+                match self.exec_stmt(u, env) {
+                  Some(val) => return Some(val)
+                  None => ()
+                }
 
               }
               None => ()
@@ -300,7 +468,10 @@ pub fn JSInterpreter::exec_stmt(
         // 更新
         match update {
           Some(u) => {
-            let _ = self.exec_stmt(u, env)
+            match self.exec_stmt(u, env) {
+              Some(val) => return Some(val)
+              None => ()
+            }
 
           }
           None => ()
@@ -313,6 +484,10 @@ pub fn JSInterpreter::exec_stmt(
     CompoundAssign(name, op, val_expr) => {
       let current = env.get(name)
       let val = self.eval_expr(val_expr, env)
+      match self.take_error() {
+        Some(err) => return Some(err)
+        None => ()
+      }
       let new_val = match op {
         AddAssign => js_add(current, val)
         SubAssign => js_sub(current, val)
@@ -326,6 +501,10 @@ pub fn JSInterpreter::exec_stmt(
       let arr = self.eval_expr(arr_expr, env)
       let idx = self.eval_expr(idx_expr, env)
       let val = self.eval_expr(val_expr, env)
+      match self.take_error() {
+        Some(err) => return Some(err)
+        None => ()
+      }
       match arr {
         Array(items) => {
           let i = idx.to_number().to_int()
@@ -345,11 +524,19 @@ pub fn JSInterpreter::exec_stmt(
     PropAssign(obj_expr, prop, val_expr) => {
       let obj = self.eval_expr(obj_expr, env)
       let val = self.eval_expr(val_expr, env)
+      match self.take_error() {
+        Some(err) => return Some(err)
+        None => ()
+      }
       let _ = js_set_prop(obj, prop, val)
       None
     }
     ForOf(var_name, _, iterable, body) => {
       let iter_val = self.eval_expr(iterable, env)
+      match self.take_error() {
+        Some(err) => return Some(err)
+        None => ()
+      }
       match iter_val {
         Array(items) => {
           let mut idx = 0
@@ -438,6 +625,13 @@ pub fn JSInterpreter::call_function(
         Compiled(_) => Undefined // TODO
       }
     }
+    Object(map) => {
+      let callee = js_get_prop(Object(map), "$call")
+      match callee {
+        Function(_) => self.call_function(callee, args)
+        _ => Undefined
+      }
+    }
     _ => Undefined
   }
 }
@@ -447,15 +641,15 @@ pub fn JSInterpreter::call_function(
 pub fn JSInterpreter::call_method(
   self : JSInterpreter,
   obj : JSValue,
-  method : String,
+  method_name : String,
   args : Array[JSValue],
 ) -> JSValue {
   match obj {
-    String(s) => self.string_method(s, method, args)
-    Array(arr) => self.array_method(arr, method, args)
+    String(s) => self.string_method(s, method_name, args)
+    Array(arr) => self.array_method(arr, method_name, args)
     Object(map) => {
       // オブジェクトのメソッドを検索
-      let func = js_get_prop(Object(map), method)
+      let func = js_get_prop(Object(map), method_name)
       self.call_function(func, args)
     }
     _ => Undefined
@@ -465,12 +659,12 @@ pub fn JSInterpreter::call_method(
 ///|
 /// 文字列メソッド
 fn JSInterpreter::string_method(
-  self : JSInterpreter,
+  _self : JSInterpreter,
   s : String,
-  method : String,
+  method_name : String,
   args : Array[JSValue],
 ) -> JSValue {
-  match method {
+  match method_name {
     "length" => Number(s.length().to_double())
     "charAt" => {
       let idx = if args.length() > 0 { args[0].to_number().to_int() } else { 0 }
@@ -555,10 +749,10 @@ fn JSInterpreter::string_method(
 fn JSInterpreter::array_method(
   self : JSInterpreter,
   arr : Array[JSValue],
-  method : String,
+  method_name : String,
   args : Array[JSValue],
 ) -> JSValue {
-  match method {
+  match method_name {
     "length" => JSValue::Number(arr.length().to_double())
     "push" => {
       for arg in args {
@@ -611,7 +805,7 @@ fn JSInterpreter::array_method(
     "includes" => {
       if args.length() > 0 {
         let target = args[0]
-        for i, item in arr {
+        for _, item in arr {
           match js_strict_eq(item, target) {
             Bool(true) => return JSValue::Bool(true)
             _ => ()
@@ -975,10 +1169,7 @@ fn JSInterpreter::call_native(
           } else {
             "Assertion failed"
           }
-          // Return an error object
-          let obj = js_new_object()
-          let _ = js_set_prop(obj, "error", JSValue::String(msg))
-          obj
+          self.set_error(msg)
         }
       } else {
         Undefined
@@ -994,11 +1185,7 @@ fn JSInterpreter::call_native(
         )
         match result {
           Success => Undefined
-          Failure(msg) => {
-            let obj = js_new_object()
-            let _ = js_set_prop(obj, "error", JSValue::String(msg))
-            obj
-          }
+          Failure(msg) => self.set_error(msg)
         }
       } else {
         Undefined
@@ -1014,21 +1201,67 @@ fn JSInterpreter::call_native(
         )
         match result {
           Success => Undefined
-          Failure(msg) => {
-            let obj = js_new_object()
-            let _ = js_set_prop(obj, "error", JSValue::String(msg))
-            obj
-          }
+          Failure(msg) => self.set_error(msg)
+        }
+      } else {
+        Undefined
+      }
+    "assert.compareArray" =>
+      if args.length() >= 2 {
+        let actual = args[0]
+        let expected = args[1]
+        let result = compare_array(
+          actual,
+          expected,
+          if args.length() > 2 { Some(args[2].to_js_string()) } else { None },
+        )
+        match result {
+          Success => Undefined
+          Failure(msg) => self.set_error(msg)
         }
       } else {
         Undefined
       }
     "$DONOTEVALUATE" => {
       // This function should never be called in a passing test
-      let obj = js_new_object()
-      let _ = js_set_prop(obj, "error", JSValue::String("$DONOTEVALUATE was called"))
-      obj
+      self.set_error("$DONOTEVALUATE was called")
     }
+    "$ERROR" => {
+      let msg = if args.length() > 0 {
+        args[0].to_js_string()
+      } else {
+        "$ERROR"
+      }
+      self.set_error(msg)
+    }
+    "$DONE" =>
+      if args.length() > 0 {
+        let err = args[0]
+        if !err.is_undefined() {
+          self.set_error("Async test failed: " + err.to_js_string())
+        } else {
+          Undefined
+        }
+      } else {
+        Undefined
+      }
+    "$262.evalScript" =>
+      if args.length() > 0 {
+        let code = args[0].to_js_string()
+        self.run(code) catch {
+          _ => {
+            let wrapped = "function main() {\n" + code + "\n}"
+            self.run(wrapped) catch {
+              e2 => {
+                let _ = self.set_error("$262.evalScript parse error: \{e2}")
+                Undefined
+              }
+            }
+          }
+        }
+      } else {
+        Undefined
+      }
     _ => Undefined
   }
 }
@@ -1041,6 +1274,17 @@ fn JSInterpreter::new_instance(
   args : Array[JSValue],
 ) -> JSValue {
   match class_name {
+    "Test262Error" => {
+      let msg = if args.length() > 0 {
+        args[0].to_js_string()
+      } else {
+        ""
+      }
+      let obj = js_new_object()
+      let _ = js_set_prop(obj, "name", JSValue::String("Test262Error"))
+      let _ = js_set_prop(obj, "message", JSValue::String(msg))
+      obj
+    }
     "Array" =>
       if args.length() == 1 {
         match args[0] {
@@ -1060,8 +1304,8 @@ fn JSInterpreter::new_instance(
     "Object" => js_new_object()
     _ => {
       // カスタムクラスのコンストラクタを検索
-      let constructor = self.global_env.get(class_name)
-      match constructor {
+      let ctor = self.global_env.get(class_name)
+      match ctor {
         Function(_) => {
           let instance = js_new_object()
           // TODO: thisをバインドしてコンストラクタを呼ぶ
@@ -1077,10 +1321,10 @@ fn JSInterpreter::new_instance(
 /// モジュールを実行
 pub fn JSInterpreter::run_module(
   self : JSInterpreter,
-  module : TsModule,
+  module_ : TsModule,
 ) -> JSValue {
   // 関数を登録
-  for func in module.funcs {
+  for func in module_.funcs {
     let param_names : Array[String] = []
     for param in func.params {
       param_names.push(param.name)
@@ -1108,6 +1352,6 @@ pub fn JSInterpreter::run(
   source : String,
 ) -> JSValue raise ParseError {
   let parser = Parser::from_source(source)
-  let module = parser.parse_module()
-  self.run_module(module)
+  let module_ = parser.parse_module()
+  self.run_module(module_)
 }
