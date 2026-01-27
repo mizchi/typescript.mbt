@@ -62,7 +62,7 @@ pub struct JSProp {
 pub struct JSPropMap {
   id : Int
   props : Array[JSProp]
-  prototype : JSValue? // プロトタイプチェーン
+  mut prototype : JSValue? // プロトタイプチェーン
 } derive(Show)
 
 ///|
@@ -72,9 +72,22 @@ pub struct JSArray {
   items : Array[JSValue]
   props : Array[JSProp]
   mut length : Int
+  mut prototype : JSValue?
 } derive(Show)
 
 const MAX_DENSE_ARRAY_LENGTH : Int = 1000000
+
+priv struct ArrayProtoHolder {
+  mut proto : JSValue?
+}
+
+let array_proto_holder : ArrayProtoHolder = { proto: None }
+
+///|
+/// 配列のデフォルト prototype を設定
+pub fn js_set_default_array_proto(proto : JSValue) -> Unit {
+  array_proto_holder.proto = Some(proto)
+}
 
 ///|
 /// クロージャ環境
@@ -108,8 +121,9 @@ pub struct JSClosure {
   env : JSEnv
   is_arrow : Bool
   is_strict : Bool
+  is_generator : Bool
   props : Array[JSProp]
-  object_proto : JSValue?
+  mut object_proto : JSValue?
 } derive(Show)
 
 ///|
@@ -511,6 +525,12 @@ pub fn js_object_with_props(props : Array[JSProp], proto : JSValue?) -> JSValue 
 pub fn js_get_prop(obj : JSValue, key : String) -> JSValue {
   match obj {
     Function(closure) => {
+      if key == "__proto__" {
+        match closure.object_proto {
+          Some(proto) => return proto
+          None => return Undefined
+        }
+      }
       for prop in closure.props {
         if prop.key == key {
           return prop.value
@@ -522,6 +542,12 @@ pub fn js_get_prop(obj : JSValue, key : String) -> JSValue {
       }
     }
     Object(map) => {
+      if key == "__proto__" {
+        match map.prototype {
+          Some(proto) => return proto
+          None => return Undefined
+        }
+      }
       // 自身のプロパティを検索
       for prop in map.props {
         if prop.key == key {
@@ -537,6 +563,11 @@ pub fn js_get_prop(obj : JSValue, key : String) -> JSValue {
     Array(arr) =>
       if key == "length" {
         Number(arr.length.to_double())
+      } else if key == "__proto__" {
+        match arr.prototype {
+          Some(proto) => proto
+          None => Undefined
+        }
       } else {
         // インデックスアクセス
         let idx = @strconv.parse_int(key) catch { _ => -1 }
@@ -548,7 +579,10 @@ pub fn js_get_prop(obj : JSValue, key : String) -> JSValue {
               return prop.value
             }
           }
-          Undefined
+          match arr.prototype {
+            Some(proto) => js_get_prop(proto, key)
+            None => Undefined
+          }
         }
       }
     String(s) =>
@@ -608,7 +642,14 @@ pub fn js_has_prop(obj : JSValue, key : String) -> Bool {
               break
             }
           }
-          found
+          if found {
+            true
+          } else {
+            match arr.prototype {
+              Some(proto) => js_has_prop(proto, key)
+              None => false
+            }
+          }
         }
       }
     String(s) =>
@@ -627,6 +668,15 @@ pub fn js_has_prop(obj : JSValue, key : String) -> Bool {
 pub fn js_set_prop(obj : JSValue, key : String, value : JSValue) -> JSValue {
   match obj {
     Function(closure) => {
+      if key == "__proto__" {
+        closure.object_proto =
+          match value {
+            Object(_) | Array(_) | Function(_) => Some(value)
+            Null | Undefined => None
+            _ => closure.object_proto
+          }
+        return value
+      }
       for i, prop in closure.props {
         if prop.key == key {
           if prop.get is Some(_) || prop.set is Some(_) {
@@ -659,6 +709,15 @@ pub fn js_set_prop(obj : JSValue, key : String, value : JSValue) -> JSValue {
       value
     }
     Object(map) => {
+      if key == "__proto__" {
+        map.prototype =
+          match value {
+            Object(_) | Array(_) | Function(_) => Some(value)
+            Null | Undefined => None
+            _ => map.prototype
+          }
+        return value
+      }
       // 既存プロパティを更新
       for i, prop in map.props {
         if prop.key == key {
@@ -693,6 +752,15 @@ pub fn js_set_prop(obj : JSValue, key : String, value : JSValue) -> JSValue {
       value
     }
     Array(arr) => {
+      if key == "__proto__" {
+        arr.prototype =
+          match value {
+            Object(_) | Array(_) | Function(_) => Some(value)
+            Null | Undefined => None
+            _ => arr.prototype
+          }
+        return value
+      }
       if key == "length" {
         let new_len = value.to_number().to_int()
         if new_len >= 0 {
@@ -1145,13 +1213,25 @@ pub fn js_define_accessor_prop(
 ///|
 /// 空配列を作成
 pub fn js_new_array() -> JSValue {
-  Array({ id: fresh_array_id(), items: [], props: [], length: 0 })
+  Array({
+    id: fresh_array_id(),
+    items: [],
+    props: [],
+    length: 0,
+    prototype: array_proto_holder.proto,
+  })
 }
 
 ///|
 /// 配列リテラルから作成
 pub fn js_array_from(items : Array[JSValue]) -> JSValue {
-  Array({ id: fresh_array_id(), items, props: [], length: items.length() })
+  Array({
+    id: fresh_array_id(),
+    items,
+    props: [],
+    length: items.length(),
+    prototype: array_proto_holder.proto,
+  })
 }
 
 ///|

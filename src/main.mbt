@@ -234,6 +234,9 @@ fn should_skip_test(meta : Test262Meta, content : String) -> String? {
     if trimmed.starts_with("import ") || trimmed.starts_with("export ") {
       return Some("module syntax")
     }
+    if trimmed.starts_with("with ") || trimmed.starts_with("with(") {
+      return Some("with statement not supported")
+    }
   }
   None
 }

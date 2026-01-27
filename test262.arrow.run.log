@@ -1,0 +1,184 @@
+FAIL: test262/test/language/expressions/arrow-function/dstr/obj-ptrn-list-err.js - Expected SameValue(«1», «0») to be true
+FAIL: test262/test/language/expressions/arrow-function/dstr/ary-init-iter-close.js - Expected SameValue(«0», «1») to be true
+SKIP: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-id.js (with statement not supported)
+SKIP: test262/test/language/expressions/arrow-function/dstr/obj-ptrn-rest-getter.js (missing includes: propertyHelper.js)
+FAIL: test262/test/language/expressions/arrow-function/dstr/ary-init-iter-get-err.js - Expected an error to be thrown
+SKIP: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-rest-init-id.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/obj-ptrn-rest-val-obj.js (missing includes: propertyHelper.js)
+SKIP: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-rest-init-ary.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-rest-init-obj.js (negative test)
+FAIL: test262/test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-list-err.js - Expected SameValue(«1», «0») to be true
+ERROR: test262/test/language/expressions/arrow-function/dstr/obj-ptrn-prop-eval-err.js - ParseError("Expected object binding key, got LBracket")
+FAIL: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-rest-id-elision.js - Expected SameValue(«4», «3») to be true
+FAIL: test262/test/language/expressions/arrow-function/dstr/dflt-ary-init-iter-close.js - Expected SameValue(«0», «1») to be true
+SKIP: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-id-init.js (with statement not supported)
+SKIP: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-prop-id.js (with statement not supported)
+SKIP: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-obj-id.js (with statement not supported)
+SKIP: test262/test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-rest-getter.js (missing includes: propertyHelper.js)
+FAIL: test262/test/language/expressions/arrow-function/dstr/obj-ptrn-id-get-value-err.js - Expected an error to be thrown
+SKIP: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-elem-ary-val-null.js (with statement not supported)
+FAIL: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-elem-id-init-hole.js - Expected SameValue(«null», «23») to be true
+SKIP: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-val-null.js (with statement not supported)
+FAIL: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-rest-id-exhausted.js - Expected SameValue(«1», «0») to be true
+SKIP: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-rest-not-final-id.js (negative test)
+FAIL: test262/test/language/expressions/arrow-function/dstr/dflt-ary-init-iter-get-err.js - Expected an error to be thrown
+SKIP: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-rest-init-id.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-rest-val-obj.js (missing includes: propertyHelper.js)
+SKIP: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-elem-ary-elem-init.js (with statement not supported)
+SKIP: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-elem-ary-elem-iter.js (with statement not supported)
+SKIP: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-elem-ary-rest-init.js (with statement not supported)
+SKIP: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-elem-ary-rest-iter.js (with statement not supported)
+SKIP: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-val-undef.js (with statement not supported)
+SKIP: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-rest-not-final-ary.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-rest-not-final-obj.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-rest-init-ary.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-rest-init-obj.js (negative test)
+ERROR: test262/test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-prop-eval-err.js - ParseError("Expected object binding key, got LBracket")
+SKIP: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-elem-ary-empty-init.js (with statement not supported)
+SKIP: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-elem-ary-empty-iter.js (with statement not supported)
+FAIL: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-elem-id-iter-val-err.js - Expected an error to be thrown
+FAIL: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-rest-id-iter-val-err.js - Expected an error to be thrown
+FAIL: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-rest-id-elision.js - Expected SameValue(«4», «3») to be true
+SKIP: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-elem-ary-elision-init.js (with statement not supported)
+SKIP: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-elem-ary-elision-iter.js (with statement not supported)
+FAIL: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-elem-id-iter-step-err.js - Expected an error to be thrown
+SKIP: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-prop-id-init.js (with statement not supported)
+SKIP: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-obj-id-init.js (with statement not supported)
+SKIP: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-obj-prop-id.js (with statement not supported)
+FAIL: test262/test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-id-get-value-err.js - Expected an error to be thrown
+FAIL: test262/test/language/expressions/arrow-function/dstr/obj-ptrn-id-init-fn-name-class.js - Expected SameValue(«undefined», «cls») to be true
+FAIL: test262/test/language/expressions/arrow-function/dstr/obj-ptrn-id-init-fn-name-cover.js - Expected SameValue(«xCover», «xCover») to be false
+FAIL: test262/test/language/expressions/arrow-function/dstr/obj-ptrn-prop-id-get-value-err.js - Expected an error to be thrown
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-default.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-extends.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-ary-val-null.js (with statement not supported)
+FAIL: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-id-init-hole.js - Expected SameValue(«null», «23») to be true
+SKIP: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-obj-val-null.js (with statement not supported)
+FAIL: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-rest-id-exhausted.js - Expected SameValue(«1», «0») to be true
+SKIP: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-rest-not-final-id.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-ary-elem-init.js (with statement not supported)
+SKIP: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-ary-elem-iter.js (with statement not supported)
+SKIP: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-ary-rest-init.js (with statement not supported)
+SKIP: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-ary-rest-iter.js (with statement not supported)
+SKIP: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-obj-val-undef.js (with statement not supported)
+SKIP: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-rest-not-final-ary.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-rest-not-final-obj.js (negative test)
+ERROR: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-rest-id-elision-next-err.js - ParseError("Expected Comma, got Ellipsis")
+SKIP: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-ary-empty-init.js (with statement not supported)
+SKIP: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-ary-empty-iter.js (with statement not supported)
+SKIP: test262/test/language/expressions/arrow-function/dstr/obj-ptrn-rest-skip-non-enumerable.js (missing includes: propertyHelper.js)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-do-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-if-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-in-escaped.js (negative test)
+FAIL: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-id-iter-val-err.js - Expected an error to be thrown
+FAIL: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-rest-id-iter-val-err.js - Expected an error to be thrown
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-for-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-let-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-new-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-try-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-var-escaped.js (negative test)
+FAIL: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-elem-id-init-fn-name-class.js - Expected SameValue(«undefined», «cls») to be true
+FAIL: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-elem-id-init-fn-name-cover.js - Expected SameValue(«xCover», «xCover») to be false
+SKIP: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-ary-elision-init.js (with statement not supported)
+SKIP: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-ary-elision-iter.js (with statement not supported)
+FAIL: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-id-iter-step-err.js - Expected an error to be thrown
+SKIP: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-obj-prop-id-init.js (with statement not supported)
+FAIL: test262/test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-id-init-fn-name-class.js - Expected SameValue(«undefined», «cls») to be true
+FAIL: test262/test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-id-init-fn-name-cover.js - Expected SameValue(«xCover», «xCover») to be false
+FAIL: test262/test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-prop-id-get-value-err.js - Expected an error to be thrown
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-case-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-else-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-enum-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-this-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-void-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-with-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-break-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-catch-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-class-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-const-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-super-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-throw-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-while-escaped.js (negative test)
+FAIL: test262/test/language/expressions/arrow-function/dstr/ary-init-iter-get-err-array-prototype.js - Expected an error to be thrown
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-delete-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-export-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-import-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-public-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-return-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-static-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-switch-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-typeof-escaped.js (negative test)
+ERROR: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-rest-id-elision-next-err.js - ParseError("Expected Comma, got Ellipsis")
+SKIP: test262/test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-rest-skip-non-enumerable.js (missing includes: propertyHelper.js)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-default-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-extends-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-finally-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-package-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-private-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-continue-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-debugger-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-function-escaped.js (negative test)
+FAIL: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-id-init-fn-name-class.js - Expected SameValue(«undefined», «cls») to be true
+FAIL: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-id-init-fn-name-cover.js - Expected SameValue(«xCover», «xCover») to be false
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-interface-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-protected-escaped.js (negative test)
+FAIL: test262/test/language/expressions/arrow-function/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js - Expected SameValue(«3», «42») to be true
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-implements-escaped.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-instanceof-escaped.js (negative test)
+FAIL: test262/test/language/expressions/arrow-function/dstr/dflt-ary-init-iter-get-err-array-prototype.js - Expected an error to be thrown
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-default-escaped-ext.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-extends-escaped-ext.js (negative test)
+FAIL: test262/test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-id-iter-val-array-prototype.js - Expected SameValue(«3», «42») to be true
+SKIP: test262/test/language/expressions/arrow-function/arrow/capturing-closure-variables-2.js (with statement not supported)
+SKIP: test262/test/language/expressions/arrow-function/syntax/early-errors/asi-restriction-invalid.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/syntax/early-errors/arrowparameters-cover-no-eval.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/syntax/early-errors/arrowparameters-cover-no-yield.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/syntax/early-errors/use-strict-with-non-simple-param.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/syntax/early-errors/arrowparameters-cover-no-arguments.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/syntax/early-errors/arrowparameters-cover-no-duplicates.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/syntax/early-errors/arrowparameters-bindingidentifier-rest.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/syntax/early-errors/arrowparameters-cover-no-duplicates-rest.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/syntax/early-errors/arrowparameters-bindingidentifier-no-eval.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/syntax/early-errors/arrowparameters-bindingidentifier-no-yield.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/syntax/early-errors/arrowparameters-bindingidentifier-identifier.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/syntax/early-errors/asi-restriction-invalid-parenless-parameters.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/syntax/early-errors/arrowparameters-bindingidentifier-no-arguments.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/syntax/early-errors/arrowparameters-cover-no-duplicates-binding-array-1.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/syntax/early-errors/arrowparameters-cover-no-duplicates-binding-array-2.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/syntax/early-errors/arrowparameters-cover-no-duplicates-binding-array-3.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/syntax/early-errors/arrowparameters-cover-no-duplicates-binding-object-1.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/syntax/early-errors/arrowparameters-cover-no-duplicates-binding-object-2.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/syntax/early-errors/arrowparameters-cover-no-duplicates-binding-object-3.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/syntax/early-errors/arrowparameters-cover-no-duplicates-binding-object-4.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/syntax/early-errors/arrowparameters-cover-no-duplicates-binding-object-5.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/syntax/early-errors/arrowparameters-cover-no-duplicates-binding-object-6.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/syntax/early-errors/asi-restriction-invalid-parenless-parameters-expression-body.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/syntax/early-errors/arrowparameters-bindingidentifier-identifier-futurereservedword.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/syntax/early-errors/arrowparameters-bindingidentifier-identifier-strict-futurereservedword.js (negative test)
+ERROR: test262/test/language/expressions/arrow-function/syntax/arrowparameters-bindingidentifier-yield.js - ParseError("Expected Semicolon, got Arrow")
+SKIP: test262/test/language/expressions/arrow-function/name.js (missing includes: propertyHelper.js)
+FAIL: test262/test/language/expressions/arrow-function/strict.js - Expected an error to be thrown
+SKIP: test262/test/language/expressions/arrow-function/length-dflt.js (missing includes: propertyHelper.js)
+SKIP: test262/test/language/expressions/arrow-function/dflt-params-rest.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/params-duplicate.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/unscopables-with.js (with statement not supported)
+FAIL: test262/test/language/expressions/arrow-function/dflt-params-ref-self.js - Expected an error to be thrown
+SKIP: test262/test/language/expressions/arrow-function/param-dflt-yield-expr.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/dflt-params-duplicates.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/rest-param-strict-body.js (negative test)
+FAIL: test262/test/language/expressions/arrow-function/scope-param-elem-var-open.js - Unexpected token: Var
+FAIL: test262/test/language/expressions/arrow-function/scope-paramsbody-var-open.js - Expected SameValue(«inside», «outside») to be true
+SKIP: test262/test/language/expressions/arrow-function/static-init-await-binding.js (negative test)
+FAIL: test262/test/language/expressions/arrow-function/dflt-params-trailing-comma.js - length is properly set Expected SameValue(«2», «1») to be true
+SKIP: test262/test/language/expressions/arrow-function/param-dflt-yield-id-strict.js (negative test)
+FAIL: test262/test/language/expressions/arrow-function/scope-param-elem-var-close.js - Unexpected token: Var
+SKIP: test262/test/language/expressions/arrow-function/static-init-await-reference.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/unscopables-with-in-nested-fn.js (with statement not supported)
+ERROR: test262/test/language/expressions/arrow-function/param-dflt-yield-id-non-strict.js - ParseError("Expected identifier, got Yield")
+FAIL: test262/test/language/expressions/arrow-function/scope-param-rest-elem-var-open.js - Unexpected token: Var
+FAIL: test262/test/language/expressions/arrow-function/scope-param-rest-elem-var-close.js - Unexpected token: Var
+FAIL: test262/test/language/expressions/arrow-function/ArrowFunction_restricted-properties.js - Expected an error to be thrown
+SKIP: test262/test/language/expressions/arrow-function/array-destructuring-param-strict-body.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/object-destructuring-param-strict-body.js (negative test)
+SKIP: test262/test/language/expressions/arrow-function/rest-params-trailing-comma-early-error.js (negative test)
+test262 results: total=343, passed=160, failed=49, skipped=134

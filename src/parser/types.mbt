@@ -85,6 +85,9 @@ pub(all) enum TsExpr {
 
   // 関数式 (function() {})
   FuncExpr(TsFunc)
+
+  // yield 式 (generator)
+  Yield(TsExpr?)
 } derive(Show)
 
 ///|
@@ -215,8 +218,43 @@ pub(all) struct TsBlock {
 /// 関数パラメータ
 pub(all) struct TsParam {
   name : String
+  binding : TsBinding?
+  is_rest : Bool
   type_ : TsType
   default : TsExpr? // デフォルト値 (省略可能)
+} derive(Show)
+
+///|
+/// バインディングパターン
+pub(all) enum TsBinding {
+  Ident(String)
+  Array(TsArrayBinding)
+  Object(TsObjectBinding)
+} derive(Show)
+
+///|
+pub(all) struct TsBindingElem {
+  binding : TsBinding
+  default : TsExpr?
+} derive(Show)
+
+///|
+pub(all) struct TsArrayBinding {
+  items : Array[TsBindingElem?]
+  rest : TsBinding?
+} derive(Show)
+
+///|
+pub(all) struct TsObjectBindingProp {
+  key : String
+  binding : TsBinding
+  default : TsExpr?
+} derive(Show)
+
+///|
+pub(all) struct TsObjectBinding {
+  props : Array[TsObjectBindingProp]
+  rest : String?
 } derive(Show)
 
 ///|
@@ -226,6 +264,7 @@ pub(all) struct TsFunc {
   params : Array[TsParam]
   return_type : TsType
   body : TsBlock
+  is_generator : Bool
 } derive(Show)
 
 ///|

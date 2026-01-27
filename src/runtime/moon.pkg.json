@@ -2,6 +2,7 @@
   "import": [
     "moonbitlang/core/math",
     "moonbitlang/core/strconv",
+    "moonbitlang/regexp",
     {
       "path": "moonbitlang/typescript/parser",
       "alias": "parser"

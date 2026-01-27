@@ -186,6 +186,7 @@ fn infer_literal_type(expr : @parser.TsExpr) -> @parser.TsType {
     @parser.TsExpr::ArrayLit(_) => @parser.TsType::Any // 要素型の推論は複雑なので @parser.TsType::Any
     @parser.TsExpr::ObjectLit(_) => @parser.TsType::Any // オブジェクトリテラルは @parser.TsType::Any
     @parser.TsExpr::Var(_) => @parser.TsType::Any // 変数は文脈から推論する必要あり
+    @parser.TsExpr::Yield(_) => @parser.TsType::Any
     @parser.TsExpr::Seq(_, right) => infer_literal_type(right)
     @parser.TsExpr::PropAssignExpr(_, _, value) => infer_literal_type(value)
     @parser.TsExpr::IndexAssignExpr(_, _, value) => infer_literal_type(value)
@@ -365,6 +366,7 @@ fn infer_type(ctx : CodeGenCtx, expr : @parser.TsExpr) -> @parser.TsType {
     @parser.TsExpr::Seq(_, right) => infer_type(ctx, right)
     @parser.TsExpr::PropAssignExpr(_, _, value) => infer_type(ctx, value)
     @parser.TsExpr::IndexAssignExpr(_, _, value) => infer_type(ctx, value)
+    @parser.TsExpr::Yield(_) => @parser.TsType::Any
     @parser.TsExpr::Var(name) =>
       match ctx.get_local(name) {
         Some(local_var) => local_var.type_
@@ -544,6 +546,8 @@ fn compile_expr(
         Some(local_var) => ctx.emit(LocalGet(local_var.index))
         None => raise CodeGenError("Undefined variable: \{name}")
       }
+    @parser.TsExpr::Yield(_) =>
+      raise CodeGenError("yield is not supported in Wasm compiler (use interpreter)")
     @parser.TsExpr::Seq(_, _) =>
       raise CodeGenError(
         "comma operator is not supported in Wasm compiler (use interpreter)",

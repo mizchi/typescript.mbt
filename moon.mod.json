@@ -2,13 +2,21 @@
   "name": "moonbitlang/typescript",
   "version": "0.1.0",
   "deps": {
-    "moonbitlang/wasm5": { "path": "../wasm5" },
-    "moonbitlang/async": "0.14.2"
+    "moonbitlang/wasm5": {
+      "path": "../wasm5"
+    },
+    "moonbitlang/async": "0.14.2",
+    "moonbitlang/regexp": "0.3.4"
   },
   "readme": "CLAUDE.md",
   "repository": "https://github.com/mizchi/typescript.mbt",
   "license": "Apache-2.0",
-  "keywords": ["typescript", "javascript", "interpreter", "wasm"],
+  "keywords": [
+    "typescript",
+    "javascript",
+    "interpreter",
+    "wasm"
+  ],
   "description": "TypeScript/JavaScript interpreter and compiler to WebAssembly",
   "source": "src",
   "preferred-target": "native"

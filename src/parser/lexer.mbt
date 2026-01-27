@@ -30,6 +30,7 @@ pub enum TokenKind {
   Catch
   Finally
   Throw
+  Yield
   True
   False
   Typeof
@@ -174,6 +175,17 @@ fn Lexer::peek_next(self : Lexer) -> Char? {
 }
 
 ///|
+/// 位置オフセットのバイトを取得
+fn Lexer::peek_byte(self : Lexer, offset : Int) -> Int? {
+  let idx = self.pos + offset
+  if idx >= self.src.length() || idx < 0 {
+    None
+  } else {
+    Some(self.src[idx].to_int())
+  }
+}
+
+///|
 /// 文字を消費
 fn Lexer::advance(self : Lexer) -> Char? {
   let c = self.peek()
@@ -187,6 +199,34 @@ fn Lexer::advance(self : Lexer) -> Char? {
 /// 空白をスキップ
 fn Lexer::skip_whitespace(self : Lexer) -> Unit {
   while true {
+    match self.peek_byte(0) {
+      Some(0x0B) | Some(0x0C) => {
+        self.pos += 1
+        continue
+      }
+      Some(0xA0) | Some(0x2028) | Some(0x2029) => {
+        self.pos += 1
+        continue
+      }
+      Some(0xC2) if self.peek_byte(1) == Some(0xA0) => {
+        self.pos += 2
+        continue
+      }
+      Some(0xE2) if self.peek_byte(1) == Some(0x80) => {
+        match self.peek_byte(2) {
+          Some(0xA8) | Some(0xA9) => {
+            self.pos += 3
+            continue
+          }
+          _ => ()
+        }
+      }
+      Some(0xEF) if self.peek_byte(1) == Some(0xBB) && self.peek_byte(2) == Some(0xBF) => {
+        self.pos += 3
+        continue
+      }
+      _ => ()
+    }
     match self.peek() {
       Some('#') if self.peek_next() == Some('!') => {
         let _ = self.advance()
@@ -613,6 +653,8 @@ fn Lexer::scan_ident(self : Lexer) -> TokenKind {
     Finally
   } else if s == "throw" {
     Throw
+  } else if s == "yield" {
+    Yield
   } else if s == "true" {
     Bool(true)
   } else if s == "false" {

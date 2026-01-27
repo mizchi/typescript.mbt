@@ -11,12 +11,13 @@ pub(all) suberror ParseError {
 pub struct Parser {
   tokens : Array[Token]
   mut pos : Int
+  mut in_generator : Bool
 } derive(Show)
 
 ///|
 /// パーサー作成
 pub fn Parser::new(tokens : Array[Token]) -> Parser {
-  { tokens, pos: 0 }
+  { tokens, pos: 0, in_generator: false }
 }
 
 ///|
@@ -186,6 +187,196 @@ fn Parser::consume_binding_name(self : Parser) -> String raise ParseError {
     }
   }
   name
+}
+
+///|
+/// バインディング識別子をパース
+fn Parser::parse_binding_ident(self : Parser) -> String raise ParseError {
+  match self.peek().kind {
+    Ident(_) => match self.advance().kind {
+      Ident(n) => n
+      _ => "<param>"
+    }
+    Yield => {
+      let _ = self.advance()
+      "yield"
+    }
+    NumberType => {
+      let _ = self.advance()
+      "number"
+    }
+    BooleanType => {
+      let _ = self.advance()
+      "boolean"
+    }
+    StringType => {
+      let _ = self.advance()
+      "string"
+    }
+    VoidType => {
+      let _ = self.advance()
+      "void"
+    }
+    IntType => {
+      let _ = self.advance()
+      "int"
+    }
+    Type => {
+      let _ = self.advance()
+      "type"
+    }
+    Let => {
+      let _ = self.advance()
+      "let"
+    }
+    k => raise ParseError("Expected identifier, got \{k}")
+  }
+}
+
+///|
+fn Parser::binding_first_name(self : Parser, binding : TsBinding) -> String {
+  match binding {
+    TsBinding::Ident(n) => n
+    TsBinding::Array(arr) => {
+      for item in arr.items {
+        match item {
+          Some(elem) => {
+            let name = self.binding_first_name(elem.binding)
+            if name != "<destruct>" {
+              return name
+            }
+          }
+          None => ()
+        }
+      }
+      match arr.rest {
+        Some(rest) => self.binding_first_name(rest)
+        None => "<destruct>"
+      }
+    }
+    TsBinding::Object(obj) => {
+      for prop in obj.props {
+        let name = self.binding_first_name(prop.binding)
+        if name != "<destruct>" {
+          return name
+        }
+      }
+      match obj.rest {
+        Some(name) => name
+        None => "<destruct>"
+      }
+    }
+  }
+}
+
+///|
+fn Parser::parse_binding_element(self : Parser) -> TsBindingElem raise ParseError {
+  let binding = self.parse_binding_pattern()
+  let default : TsExpr? = if self.match_(Eq) {
+    Some(self.parse_assignment())
+  } else {
+    None
+  }
+  { binding, default }
+}
+
+///|
+fn Parser::parse_binding_array(self : Parser) -> TsBinding raise ParseError {
+  let _ = self.expect(LBracket)
+  let items : Array[TsBindingElem?] = []
+  let mut rest : TsBinding? = None
+  if not(self.check(RBracket)) {
+    while true {
+      if self.match_(Comma) {
+        items.push(None)
+      } else if self.match_(Ellipsis) {
+        let rest_binding = self.parse_binding_pattern()
+        rest = Some(rest_binding)
+        if self.match_(Comma) {
+          // trailing comma after rest
+        }
+        break
+      } else {
+        items.push(Some(self.parse_binding_element()))
+      }
+      if self.check(RBracket) {
+        break
+      }
+      let _ = self.expect(Comma)
+      if self.check(RBracket) {
+        break
+      }
+    }
+  }
+  let _ = self.expect(RBracket)
+  TsBinding::Array({ items, rest })
+}
+
+///|
+fn Parser::parse_object_binding_key(self : Parser) -> String raise ParseError {
+  match self.advance().kind {
+    Ident(n) => n
+    Yield => "yield"
+    Str(s) => s
+    Number(n) => "\{n}"
+    Int(n) => "\{n}"
+    k => raise ParseError("Expected object binding key, got \{k}")
+  }
+}
+
+///|
+fn Parser::parse_binding_object(self : Parser) -> TsBinding raise ParseError {
+  let _ = self.expect(LBrace)
+  let props : Array[TsObjectBindingProp] = []
+  let mut rest : String? = None
+  if not(self.check(RBrace)) {
+    while true {
+      if self.match_(Ellipsis) {
+        let name = self.parse_binding_ident()
+        rest = Some(name)
+        if self.match_(Comma) {
+          // trailing comma
+        }
+        break
+      }
+      let key = self.parse_object_binding_key()
+      if self.match_(Colon) {
+        let elem = self.parse_binding_element()
+        props.push({ key, binding: elem.binding, default: elem.default })
+      } else {
+        let mut default : TsExpr? = None
+        if self.match_(Eq) {
+          default = Some(self.parse_assignment())
+        }
+        props.push({
+          key,
+          binding: TsBinding::Ident(key),
+          default,
+        })
+      }
+      if self.check(RBrace) {
+        break
+      }
+      let _ = self.expect(Comma)
+      if self.check(RBrace) {
+        break
+      }
+    }
+  }
+  let _ = self.expect(RBrace)
+  TsBinding::Object({ props, rest })
+}
+
+///|
+fn Parser::parse_binding_pattern(self : Parser) -> TsBinding raise ParseError {
+  match self.peek().kind {
+    LBracket => self.parse_binding_array()
+    LBrace => self.parse_binding_object()
+    _ => {
+      let name = self.parse_binding_ident()
+      TsBinding::Ident(name)
+    }
+  }
 }
 
 ///|
@@ -565,6 +756,22 @@ fn Parser::parse_unary(self : Parser) -> TsExpr raise ParseError {
     // --x (前置デクリメント)
     let operand = self.parse_unary()
     UnaryOp(PreDec, operand)
+  } else if self.match_(Yield) {
+    if self.in_generator {
+      let expr =
+        if self.check(Semicolon) ||
+          self.check(Comma) ||
+          self.check(RParen) ||
+          self.check(RBracket) ||
+          self.check(RBrace) {
+          None
+        } else {
+          Some(self.parse_unary())
+        }
+      Yield(expr)
+    } else {
+      Var("yield")
+    }
   } else {
     self.parse_postfix()
   }
@@ -747,7 +954,16 @@ fn Parser::parse_primary(self : Parser) -> TsExpr raise ParseError {
           let expr = self.parse_expr()
           ArrowExpr(expr)
         }
-        ArrowFunc([{ name, type_: Any, default: None }], body)
+        ArrowFunc(
+          [{
+            name,
+            binding: Some(TsBinding::Ident(name)),
+            is_rest: false,
+            type_: Any,
+            default: None,
+          }],
+          body,
+        )
       } else {
         let _ = self.advance()
         Var(name)
@@ -1065,7 +1281,13 @@ fn Parser::parse_primary(self : Parser) -> TsExpr raise ParseError {
               Any
             }
             let body = self.parse_block()
-            FuncExpr({ name: prop_key, params, return_type, body })
+            FuncExpr({
+              name: prop_key,
+              params,
+              return_type,
+              body,
+              is_generator: false,
+            })
           } else if self.match_(Colon) {
             self.parse_assignment()
           } else if is_ident_key && self.match_(Eq) {
@@ -1081,7 +1303,13 @@ fn Parser::parse_primary(self : Parser) -> TsExpr raise ParseError {
               Any
             }
             let body = self.parse_block()
-            FuncExpr({ name: prop_key, params, return_type, body })
+            FuncExpr({
+              name: prop_key,
+              params,
+              return_type,
+              body,
+              is_generator: false,
+            })
           } else if is_ident_key && (self.check(Comma) || self.check(RBrace)) {
             Var(prop_key)
           } else {
@@ -1204,7 +1432,13 @@ fn Parser::parse_primary(self : Parser) -> TsExpr raise ParseError {
                 Any
               }
               let body = self.parse_block()
-              FuncExpr({ name: prop_key, params, return_type, body })
+              FuncExpr({
+                name: prop_key,
+                params,
+                return_type,
+                body,
+                is_generator: false,
+              })
             } else if self.match_(Colon) {
               self.parse_assignment()
             } else if is_ident_key && self.match_(Eq) {
@@ -1220,7 +1454,13 @@ fn Parser::parse_primary(self : Parser) -> TsExpr raise ParseError {
                 Any
               }
               let body = self.parse_block()
-              FuncExpr({ name: prop_key, params, return_type, body })
+              FuncExpr({
+                name: prop_key,
+                params,
+                return_type,
+                body,
+                is_generator: false,
+              })
             } else if is_ident_key && (self.check(Comma) || self.check(RBrace)) {
               Var(prop_key)
             } else {
@@ -1951,6 +2191,70 @@ fn Parser::skip_class_body(self : Parser) -> Unit raise ParseError {
 }
 
 ///|
+fn Parser::parse_class_method_name(self : Parser) -> String raise ParseError {
+  match self.advance().kind {
+    Ident(n) => n
+    Str(s) => s
+    Number(n) => "\{n}"
+    Int(n) => "\{n}"
+    Return => "return"
+    If => "if"
+    Else => "else"
+    For => "for"
+    While => "while"
+    Break => "break"
+    Continue => "continue"
+    Function => "function"
+    Try => "try"
+    Catch => "catch"
+    Finally => "finally"
+    Throw => "throw"
+    Yield => "yield"
+    Type => "type"
+    Let => "let"
+    Const => "const"
+    Var => "var"
+    Class => "class"
+    New => "new"
+    k => raise ParseError("Expected method name, got \{k}")
+  }
+}
+
+///|
+fn Parser::parse_class_body(
+  self : Parser,
+) -> (TsFunc?, Array[(String, TsFunc)]) raise ParseError {
+  let _ = self.expect(LBrace)
+  let mut ctor : TsFunc? = None
+  let methods : Array[(String, TsFunc)] = []
+  while not(self.check(RBrace)) && not(self.check(Eof)) {
+    if self.match_(Semicolon) {
+      continue
+    }
+    let is_generator = self.match_(Star)
+    let name = self.parse_class_method_name()
+    let _ = self.expect(LParen)
+    let params = self.parse_params()
+    let _ = self.expect(RParen)
+    let return_type = if self.check(Colon) {
+      let _ = self.advance()
+      self.parse_type()
+    } else {
+      Any
+    }
+    let body = self.parse_block()
+    let func : TsFunc = { name, params, return_type, body, is_generator }
+    if name == "constructor" {
+      ctor = Some(func)
+    } else {
+      methods.push((name, func))
+    }
+  }
+  let _ = self.expect(RBrace)
+  (ctor, methods)
+}
+
+///|
 fn Parser::parse_class_stub(self : Parser) -> TsExpr raise ParseError {
   let _ = self.expect(Class)
   let _ =
@@ -1975,14 +2279,60 @@ fn Parser::parse_class_decl(self : Parser) -> TsStmt raise ParseError {
     Ident(n) => n
     _ => "<class>"
   }
+  let mut base : String? = None
   if self.match_(Extends) {
-    self.skip_until_class_body()
+    base = match self.advance().kind {
+      Ident(n) => Some(n)
+      k => raise ParseError("Expected base class name, got \{k}")
+    }
   }
-  self.skip_class_body()
-  let fields : Array[(String, TsExpr)] = []
-  let proto = ObjectLit([])
-  fields.push(("prototype", proto))
-  Let(name, Any, ObjectLit(fields))
+  let (ctor_opt, methods) = self.parse_class_body()
+  let stmts : Array[TsStmt] = []
+
+  let ctor_func = match ctor_opt {
+    Some(func) => func
+    None => {
+      let empty_body : TsBlock = { stmts: [] }
+      {
+        name,
+        params: [],
+        return_type: Any,
+        body: empty_body,
+        is_generator: false,
+      }
+    }
+  }
+  stmts.push(Let(name, Any, FuncExpr(ctor_func)))
+
+  let proto_expr = PropAccess(Var(name), "prototype")
+  match base {
+    Some(base_name) => {
+      let base_proto = PropAccess(Var(base_name), "prototype")
+      stmts.push(PropAssign(Var(name), "__super_ctor", Var(base_name)))
+      stmts.push(PropAssign(Var(name), "__super_proto", base_proto))
+      stmts.push(PropAssign(proto_expr, "__proto__", base_proto))
+    }
+    None => ()
+  }
+
+  for item in methods {
+    let (method_name, func) = item
+    stmts.push(PropAssign(proto_expr, method_name, FuncExpr(func)))
+    match base {
+      Some(base_name) => {
+        let base_proto = PropAccess(Var(base_name), "prototype")
+        let method_ref = PropAccess(proto_expr, method_name)
+        stmts.push(PropAssign(method_ref, "__super_proto", base_proto))
+      }
+      None => ()
+    }
+  }
+
+  if stmts.length() == 1 {
+    stmts[0]
+  } else {
+    Block({ stmts, })
+  }
 }
 
 ///|
@@ -2002,44 +2352,9 @@ fn Parser::parse_block_or_stmt(self : Parser) -> TsBlock raise ParseError {
 ///|
 /// パラメータをパース
 fn Parser::parse_param(self : Parser) -> TsParam raise ParseError {
-  let _ = self.match_ellipsis()
-  let name =
-    match self.peek().kind {
-      Ident(_) => match self.advance().kind {
-        Ident(n) => n
-        _ => "<param>"
-      }
-      NumberType => {
-        let _ = self.advance()
-        "number"
-      }
-      BooleanType => {
-        let _ = self.advance()
-        "boolean"
-      }
-      StringType => {
-        let _ = self.advance()
-        "string"
-      }
-      VoidType => {
-        let _ = self.advance()
-        "void"
-      }
-      IntType => {
-        let _ = self.advance()
-        "int"
-      }
-      Type => {
-        let _ = self.advance()
-        "type"
-      }
-      Let => {
-        let _ = self.advance()
-        "let"
-      }
-      LBracket | LBrace => self.consume_binding_name()
-      k => raise ParseError("Expected parameter name, got \{k}")
-    }
+  let is_rest = self.match_ellipsis()
+  let binding = self.parse_binding_pattern()
+  let name = self.binding_first_name(binding)
   // 型注釈 (オプショナル)
   let type_ = if self.check(Colon) {
     let _ = self.advance()
@@ -2053,7 +2368,7 @@ fn Parser::parse_param(self : Parser) -> TsParam raise ParseError {
   } else {
     None
   }
-  { name, type_, default }
+  { name, binding: Some(binding), is_rest, type_, default }
 }
 
 ///|
@@ -2076,7 +2391,7 @@ fn Parser::parse_params(self : Parser) -> Array[TsParam] raise ParseError {
 /// 関数をパース
 pub fn Parser::parse_function(self : Parser) -> TsFunc raise ParseError {
   let _ = self.expect(Function)
-  let _ = self.match_(Star) // generator function (parser-only)
+  let is_generator = self.match_(Star)
   let name = match self.advance().kind {
     Ident(n) => n
     k => raise ParseError("Expected function name, got \{k}")
@@ -2091,15 +2406,20 @@ pub fn Parser::parse_function(self : Parser) -> TsFunc raise ParseError {
   } else {
     Any // 型注釈がなければ Any
   }
+  let prev = self.in_generator
+  if is_generator {
+    self.in_generator = true
+  }
   let body = self.parse_block()
-  { name, params, return_type, body }
+  self.in_generator = prev
+  { name, params, return_type, body, is_generator }
 }
 
 ///|
 /// 関数式をパース（名前はオプショナル）
 fn Parser::parse_function_expr(self : Parser) -> TsFunc raise ParseError {
   let _ = self.expect(Function)
-  let _ = self.match_(Star) // generator function (parser-only)
+  let is_generator = self.match_(Star)
   let name = match self.peek().kind {
     Ident(n) => {
       let _ = self.advance()
@@ -2116,8 +2436,13 @@ fn Parser::parse_function_expr(self : Parser) -> TsFunc raise ParseError {
   } else {
     Any
   }
+  let prev = self.in_generator
+  if is_generator {
+    self.in_generator = true
+  }
   let body = self.parse_block()
-  { name, params, return_type, body }
+  self.in_generator = prev
+  { name, params, return_type, body, is_generator }
 }
 
 ///|
@@ -2203,4 +2528,27 @@ pub fn Parser::parse_module(self : Parser) -> TsModule raise ParseError {
     }
   }
   { funcs, interfaces, imports }
+}
+
+///|
+/// eval 用: 式を1つだけパースできるときは Some(expr)
+pub fn parse_expr_from_source(source : String) -> TsExpr? raise ParseError {
+  let parser = Parser::from_source(source)
+  let expr = parser.parse_expr()
+  if parser.check(Eof) {
+    Some(expr)
+  } else {
+    None
+  }
+}
+
+///|
+/// eval 用: 文を順にパースしてブロック化
+pub fn parse_block_from_source(source : String) -> TsBlock raise ParseError {
+  let parser = Parser::from_source(source)
+  let stmts : Array[TsStmt] = []
+  while not(parser.check(Eof)) {
+    stmts.push(parser.parse_stmt())
+  }
+  { stmts, }
 }

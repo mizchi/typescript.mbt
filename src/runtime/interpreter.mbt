@@ -10,6 +10,22 @@ pub struct JSInterpreter {
   step_limit : Int
   object_proto : JSValue
   function_proto : JSValue
+  generators : Array[JSGeneratorState]
+}
+
+///|
+pub(all) struct JSGeneratorState {
+  func : @parser.TsFunc
+  env : JSEnv
+  mut index : Int
+  mut done : Bool
+}
+
+///|
+priv enum GenSignal {
+  Continue
+  Yield(JSValue)
+  Return(JSValue)
 }
 
 ///|
@@ -24,6 +40,7 @@ pub fn JSInterpreter::new() -> JSInterpreter {
     env,
     is_arrow: false,
     is_strict: false,
+    is_generator: false,
     props: [],
     object_proto: Some(object_proto),
   })
@@ -34,6 +51,7 @@ pub fn JSInterpreter::new() -> JSInterpreter {
     step_limit: 1_000_000,
     object_proto,
     function_proto,
+    generators: [],
   }
   interp.install_builtins()
   interp
@@ -49,6 +67,7 @@ fn JSInterpreter::make_native(self : JSInterpreter, name : String) -> JSValue {
     env: self.global_env,
     is_arrow: false,
     is_strict: false,
+    is_generator: false,
     props: [],
     object_proto: Some(self.function_proto),
   })
@@ -89,6 +108,32 @@ fn JSInterpreter::make_data_descriptor(
   let _ = js_set_prop(desc, "enumerable", Bool(enumerable))
   let _ = js_set_prop(desc, "configurable", Bool(configurable))
   desc
+}
+
+///|
+/// RegExp オブジェクトを作成
+fn JSInterpreter::make_regexp(
+  self : JSInterpreter,
+  pattern : String,
+  flags : String,
+) -> JSValue {
+  match regexp_compile(pattern, flags) {
+    None =>
+      return self.set_error_kind("SyntaxError", "Invalid regular expression")
+    Some(_) => ()
+  }
+  let ctor = self.global_env.get("RegExp")
+  let proto = match ctor {
+    Function(_) => js_get_prop(ctor, "prototype")
+    _ => self.object_proto
+  }
+  let obj = js_new_object_with_proto(Some(proto))
+  let _ = js_set_prop(obj, "__class", String("RegExp"))
+  let _ = js_set_prop(obj, "source", String(pattern))
+  let _ = js_set_prop(obj, "flags", String(flags))
+  let _ = js_set_prop(obj, "global", Bool(regexp_has_global(flags)))
+  let _ = js_set_prop(obj, "lastIndex", Number(0.0))
+  obj
 }
 
 ///|
@@ -320,6 +365,14 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let _ = js_set_prop(math, "max", self.make_native("Math.max"))
   let _ = js_set_prop(math, "round", self.make_native("Math.round"))
   let _ = js_set_prop(math, "random", self.make_native("Math.random"))
+  let _ = js_set_prop(math, "cos", self.make_native("Math.cos"))
+  let _ = js_set_prop(math, "sin", self.make_native("Math.sin"))
+  let _ = js_set_prop(math, "tan", self.make_native("Math.tan"))
+  let _ = js_set_prop(math, "exp", self.make_native("Math.exp"))
+  let _ = js_set_prop(math, "log", self.make_native("Math.log"))
+  let _ = js_define_data_prop(math, "PI", Number(@math.PI), false, false, false)
+  let _ = js_define_data_prop(math, "E", Number(@math.exp(1.0)), false, false, false)
+  let _ = js_define_data_prop(math, "LN2", Number(@math.ln(2.0)), false, false, false)
   self.global_env.define("Math", math)
   let _ = js_set_prop(global_obj, "Math", math)
 
@@ -382,8 +435,105 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let str_value_of = self.make_native("String.prototype.valueOf")
   self.set_function_length(str_value_of, 0.0)
   let _ = js_set_prop(string_proto, "valueOf", str_value_of)
+  let str_to_string = self.make_native("String.prototype.toString")
+  self.set_function_length(str_to_string, 0.0)
+  let _ = js_set_prop(string_proto, "toString", str_to_string)
+  let str_char_at = self.make_native("String.prototype.charAt")
+  self.set_function_length(str_char_at, 1.0)
+  let _ = js_set_prop(string_proto, "charAt", str_char_at)
+  let str_char_code_at = self.make_native("String.prototype.charCodeAt")
+  self.set_function_length(str_char_code_at, 1.0)
+  let _ = js_set_prop(string_proto, "charCodeAt", str_char_code_at)
+  let str_code_point_at = self.make_native("String.prototype.codePointAt")
+  self.set_function_length(str_code_point_at, 1.0)
+  let _ = js_set_prop(string_proto, "codePointAt", str_code_point_at)
+  let str_index_of = self.make_native("String.prototype.indexOf")
+  self.set_function_length(str_index_of, 1.0)
+  let _ = js_set_prop(string_proto, "indexOf", str_index_of)
+  let str_last_index_of = self.make_native("String.prototype.lastIndexOf")
+  self.set_function_length(str_last_index_of, 1.0)
+  let _ = js_set_prop(string_proto, "lastIndexOf", str_last_index_of)
+  let str_includes = self.make_native("String.prototype.includes")
+  self.set_function_length(str_includes, 1.0)
+  let _ = js_set_prop(string_proto, "includes", str_includes)
+  let str_starts_with = self.make_native("String.prototype.startsWith")
+  self.set_function_length(str_starts_with, 1.0)
+  let _ = js_set_prop(string_proto, "startsWith", str_starts_with)
+  let str_ends_with = self.make_native("String.prototype.endsWith")
+  self.set_function_length(str_ends_with, 1.0)
+  let _ = js_set_prop(string_proto, "endsWith", str_ends_with)
+  let str_at = self.make_native("String.prototype.at")
+  self.set_function_length(str_at, 1.0)
+  let _ = js_set_prop(string_proto, "at", str_at)
+  let str_split = self.make_native("String.prototype.split")
+  self.set_function_length(str_split, 2.0)
+  let _ = js_set_prop(string_proto, "split", str_split)
+  let str_replace = self.make_native("String.prototype.replace")
+  self.set_function_length(str_replace, 2.0)
+  let _ = js_set_prop(string_proto, "replace", str_replace)
+  let str_replace_all = self.make_native("String.prototype.replaceAll")
+  self.set_function_length(str_replace_all, 2.0)
+  let _ = js_set_prop(string_proto, "replaceAll", str_replace_all)
+  let str_trim = self.make_native("String.prototype.trim")
+  self.set_function_length(str_trim, 0.0)
+  let _ = js_set_prop(string_proto, "trim", str_trim)
+  let str_trim_start = self.make_native("String.prototype.trimStart")
+  self.set_function_length(str_trim_start, 0.0)
+  let _ = js_set_prop(string_proto, "trimStart", str_trim_start)
+  let str_trim_end = self.make_native("String.prototype.trimEnd")
+  self.set_function_length(str_trim_end, 0.0)
+  let _ = js_set_prop(string_proto, "trimEnd", str_trim_end)
+  let str_substring = self.make_native("String.prototype.substring")
+  self.set_function_length(str_substring, 2.0)
+  let _ = js_set_prop(string_proto, "substring", str_substring)
+  let str_concat = self.make_native("String.prototype.concat")
+  self.set_function_length(str_concat, 1.0)
+  let _ = js_set_prop(string_proto, "concat", str_concat)
+  let str_to_upper = self.make_native("String.prototype.toUpperCase")
+  self.set_function_length(str_to_upper, 0.0)
+  let _ = js_set_prop(string_proto, "toUpperCase", str_to_upper)
+  let str_to_lower = self.make_native("String.prototype.toLowerCase")
+  self.set_function_length(str_to_lower, 0.0)
+  let _ = js_set_prop(string_proto, "toLowerCase", str_to_lower)
+  let str_to_locale_upper = self.make_native("String.prototype.toLocaleUpperCase")
+  self.set_function_length(str_to_locale_upper, 0.0)
+  let _ = js_set_prop(string_proto, "toLocaleUpperCase", str_to_locale_upper)
+  let str_to_locale_lower = self.make_native("String.prototype.toLocaleLowerCase")
+  self.set_function_length(str_to_locale_lower, 0.0)
+  let _ = js_set_prop(string_proto, "toLocaleLowerCase", str_to_locale_lower)
+  let str_repeat = self.make_native("String.prototype.repeat")
+  self.set_function_length(str_repeat, 1.0)
+  let _ = js_set_prop(string_proto, "repeat", str_repeat)
+  let str_pad_start = self.make_native("String.prototype.padStart")
+  self.set_function_length(str_pad_start, 1.0)
+  let _ = js_set_prop(string_proto, "padStart", str_pad_start)
+  let str_pad_end = self.make_native("String.prototype.padEnd")
+  self.set_function_length(str_pad_end, 1.0)
+  let _ = js_set_prop(string_proto, "padEnd", str_pad_end)
+  let str_from_char_code = self.make_native("String.fromCharCode")
+  self.set_function_length(str_from_char_code, 1.0)
+  let _ = js_set_prop(string_ctor, "fromCharCode", str_from_char_code)
+  let str_from_code_point = self.make_native("String.fromCodePoint")
+  self.set_function_length(str_from_code_point, 1.0)
+  let _ = js_set_prop(string_ctor, "fromCodePoint", str_from_code_point)
   self.global_env.define("String", string_ctor)
   let _ = js_set_prop(global_obj, "String", string_ctor)
+
+  // RegExp (minimal)
+  let regexp_proto = self.new_object()
+  let regexp_ctor = self.make_native("RegExp")
+  self.set_function_length(regexp_ctor, 2.0)
+  self.set_function_name(regexp_ctor, "RegExp")
+  let _ = js_define_data_prop(regexp_ctor, "prototype", regexp_proto, true, false, true)
+  let _ = js_set_prop(regexp_proto, "constructor", regexp_ctor)
+  let re_exec = self.make_native("RegExp.prototype.exec")
+  self.set_function_length(re_exec, 1.0)
+  let _ = js_set_prop(regexp_proto, "exec", re_exec)
+  let re_test = self.make_native("RegExp.prototype.test")
+  self.set_function_length(re_test, 1.0)
+  let _ = js_set_prop(regexp_proto, "test", re_test)
+  self.global_env.define("RegExp", regexp_ctor)
+  let _ = js_set_prop(global_obj, "RegExp", regexp_ctor)
 
   // Array
   let array_proto = self.new_object()
@@ -392,6 +542,106 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   self.set_function_name(array_ctor, "Array")
   let _ = js_define_data_prop(array_ctor, "prototype", array_proto, true, false, true)
   let _ = js_set_prop(array_proto, "constructor", array_ctor)
+  js_set_default_array_proto(array_proto)
+  let array_to_string = self.make_native("Array.prototype.toString")
+  self.set_function_length(array_to_string, 0.0)
+  let _ = js_set_prop(array_proto, "toString", array_to_string)
+  let array_push = self.make_native("Array.prototype.push")
+  self.set_function_length(array_push, 1.0)
+  let _ = js_set_prop(array_proto, "push", array_push)
+  let array_pop = self.make_native("Array.prototype.pop")
+  self.set_function_length(array_pop, 0.0)
+  let _ = js_set_prop(array_proto, "pop", array_pop)
+  let array_shift = self.make_native("Array.prototype.shift")
+  self.set_function_length(array_shift, 0.0)
+  let _ = js_set_prop(array_proto, "shift", array_shift)
+  let array_unshift = self.make_native("Array.prototype.unshift")
+  self.set_function_length(array_unshift, 1.0)
+  let _ = js_set_prop(array_proto, "unshift", array_unshift)
+  let array_join = self.make_native("Array.prototype.join")
+  self.set_function_length(array_join, 1.0)
+  let _ = js_set_prop(array_proto, "join", array_join)
+  let array_index_of = self.make_native("Array.prototype.indexOf")
+  self.set_function_length(array_index_of, 1.0)
+  let _ = js_set_prop(array_proto, "indexOf", array_index_of)
+  let array_last_index_of = self.make_native("Array.prototype.lastIndexOf")
+  self.set_function_length(array_last_index_of, 1.0)
+  let _ = js_set_prop(array_proto, "lastIndexOf", array_last_index_of)
+  let array_includes = self.make_native("Array.prototype.includes")
+  self.set_function_length(array_includes, 1.0)
+  let _ = js_set_prop(array_proto, "includes", array_includes)
+  let array_map = self.make_native("Array.prototype.map")
+  self.set_function_length(array_map, 1.0)
+  let _ = js_set_prop(array_proto, "map", array_map)
+  let array_filter = self.make_native("Array.prototype.filter")
+  self.set_function_length(array_filter, 1.0)
+  let _ = js_set_prop(array_proto, "filter", array_filter)
+  let array_reduce = self.make_native("Array.prototype.reduce")
+  self.set_function_length(array_reduce, 1.0)
+  let _ = js_set_prop(array_proto, "reduce", array_reduce)
+  let array_reduce_right = self.make_native("Array.prototype.reduceRight")
+  self.set_function_length(array_reduce_right, 1.0)
+  let _ = js_set_prop(array_proto, "reduceRight", array_reduce_right)
+  let array_for_each = self.make_native("Array.prototype.forEach")
+  self.set_function_length(array_for_each, 1.0)
+  let _ = js_set_prop(array_proto, "forEach", array_for_each)
+  let array_find = self.make_native("Array.prototype.find")
+  self.set_function_length(array_find, 1.0)
+  let _ = js_set_prop(array_proto, "find", array_find)
+  let array_find_index = self.make_native("Array.prototype.findIndex")
+  self.set_function_length(array_find_index, 1.0)
+  let _ = js_set_prop(array_proto, "findIndex", array_find_index)
+  let array_find_last = self.make_native("Array.prototype.findLast")
+  self.set_function_length(array_find_last, 1.0)
+  let _ = js_set_prop(array_proto, "findLast", array_find_last)
+  let array_find_last_index = self.make_native("Array.prototype.findLastIndex")
+  self.set_function_length(array_find_last_index, 1.0)
+  let _ = js_set_prop(array_proto, "findLastIndex", array_find_last_index)
+  let array_every = self.make_native("Array.prototype.every")
+  self.set_function_length(array_every, 1.0)
+  let _ = js_set_prop(array_proto, "every", array_every)
+  let array_some = self.make_native("Array.prototype.some")
+  self.set_function_length(array_some, 1.0)
+  let _ = js_set_prop(array_proto, "some", array_some)
+  let array_concat = self.make_native("Array.prototype.concat")
+  self.set_function_length(array_concat, 1.0)
+  let _ = js_set_prop(array_proto, "concat", array_concat)
+  let array_slice = self.make_native("Array.prototype.slice")
+  self.set_function_length(array_slice, 2.0)
+  let _ = js_set_prop(array_proto, "slice", array_slice)
+  let array_splice = self.make_native("Array.prototype.splice")
+  self.set_function_length(array_splice, 2.0)
+  let _ = js_set_prop(array_proto, "splice", array_splice)
+  let array_sort = self.make_native("Array.prototype.sort")
+  self.set_function_length(array_sort, 1.0)
+  let _ = js_set_prop(array_proto, "sort", array_sort)
+  let array_to_sorted = self.make_native("Array.prototype.toSorted")
+  self.set_function_length(array_to_sorted, 1.0)
+  let _ = js_set_prop(array_proto, "toSorted", array_to_sorted)
+  let array_to_reversed = self.make_native("Array.prototype.toReversed")
+  self.set_function_length(array_to_reversed, 0.0)
+  let _ = js_set_prop(array_proto, "toReversed", array_to_reversed)
+  let array_to_spliced = self.make_native("Array.prototype.toSpliced")
+  self.set_function_length(array_to_spliced, 2.0)
+  let _ = js_set_prop(array_proto, "toSpliced", array_to_spliced)
+  let array_with = self.make_native("Array.prototype.with")
+  self.set_function_length(array_with, 2.0)
+  let _ = js_set_prop(array_proto, "with", array_with)
+  let array_flat = self.make_native("Array.prototype.flat")
+  self.set_function_length(array_flat, 0.0)
+  let _ = js_set_prop(array_proto, "flat", array_flat)
+  let array_flat_map = self.make_native("Array.prototype.flatMap")
+  self.set_function_length(array_flat_map, 1.0)
+  let _ = js_set_prop(array_proto, "flatMap", array_flat_map)
+  let array_fill = self.make_native("Array.prototype.fill")
+  self.set_function_length(array_fill, 1.0)
+  let _ = js_set_prop(array_proto, "fill", array_fill)
+  let array_copy_within = self.make_native("Array.prototype.copyWithin")
+  self.set_function_length(array_copy_within, 2.0)
+  let _ = js_set_prop(array_proto, "copyWithin", array_copy_within)
+  let array_at = self.make_native("Array.prototype.at")
+  self.set_function_length(array_at, 1.0)
+  let _ = js_set_prop(array_proto, "at", array_at)
   let is_array_fn = self.make_native("Array.isArray")
   self.set_function_length(is_array_fn, 1.0)
   let _ = js_set_prop(array_ctor, "isArray", is_array_fn)
@@ -424,6 +674,11 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let _ = js_define_data_prop(ref_ctor, "prototype", self.new_object(), true, false, true)
   self.global_env.define("ReferenceError", ref_ctor)
   let _ = js_set_prop(global_obj, "ReferenceError", ref_ctor)
+  let range_ctor = self.make_native("RangeError")
+  self.set_function_name(range_ctor, "RangeError")
+  let _ = js_define_data_prop(range_ctor, "prototype", self.new_object(), true, false, true)
+  self.global_env.define("RangeError", range_ctor)
+  let _ = js_set_prop(global_obj, "RangeError", range_ctor)
   let test262_ctor = self.make_native("Test262Error")
   self.set_function_name(test262_ctor, "Test262Error")
   let _ = js_define_data_prop(test262_ctor, "prototype", self.new_object(), true, false, true)
@@ -447,6 +702,11 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
     assert_obj,
     "compareArray",
     self.make_native("assert.compareArray"),
+  )
+  let _ = js_set_prop(
+    assert_obj,
+    "throws",
+    self.make_native("assert.throws"),
   )
   self.global_env.define("assert", assert_obj)
   let _ = js_set_prop(global_obj, "assert", assert_obj)
@@ -524,8 +784,11 @@ pub fn JSInterpreter::eval_expr(
     @parser.TsExpr::BoolLit(b) => Bool(b)
     @parser.TsExpr::StringLit(s) => String(s)
     @parser.TsExpr::NullLit => Null
+    @parser.TsExpr::Yield(_) => Undefined
     @parser.TsExpr::Var(name) =>
-      if env.has(name) {
+      if name == "super" && env.has("__super_proto") {
+        env.get("__super_proto")
+      } else if env.has(name) {
         env.get(name)
       } else {
         let global_obj = self.global_env.get("globalThis")
@@ -719,8 +982,35 @@ pub fn JSInterpreter::eval_expr(
           let _ = self.eval_expr(operand, env)
           Undefined
         }
-      }
+    }
     @parser.TsExpr::Call(name, args) => {
+      if name == "eval" {
+        let src = if args.length() > 0 {
+          self.eval_expr(args[0], env).to_js_string()
+        } else {
+          ""
+        }
+        return self.direct_eval(src, env)
+      }
+      if name == "super" && env.has("__super_ctor") {
+        let super_ctor = env.get("__super_ctor")
+        let mut already_called = false
+        match env.get("__super_called") {
+          Bool(true) => already_called = true
+          _ => ()
+        }
+        let _ = env.set("__super_called", Bool(true))
+        let arg_values : Array[JSValue] = []
+        for arg in args {
+          arg_values.push(self.eval_expr(arg, env))
+        }
+        let _ = self.call_function(super_ctor, env.get("this"), arg_values)
+        if already_called {
+          let _ = self.set_error_kind("ReferenceError", "super already called")
+          return Undefined
+        }
+        return Undefined
+      }
       // 関数を環境から取得
       let func = env.get(name)
       let arg_values : Array[JSValue] = []
@@ -754,6 +1044,19 @@ pub fn JSInterpreter::eval_expr(
       }
     }
     @parser.TsExpr::MethodCall(obj_expr, method_name, args) => {
+      match obj_expr {
+        @parser.TsExpr::Var(name) if name == "super" && env.has("__super_proto") => {
+          let super_proto = env.get("__super_proto")
+          let super_this = if env.has("__super_this") { env.get("__super_this") } else { env.get("this") }
+          let arg_values : Array[JSValue] = []
+          for arg in args {
+            arg_values.push(self.eval_expr(arg, env))
+          }
+          let func = self.get_prop_value(super_proto, method_name)
+          return self.call_function(func, super_this, arg_values)
+        }
+        _ => ()
+      }
       let obj = self.eval_expr(obj_expr, env)
       let arg_values : Array[JSValue] = []
       for arg in args {
@@ -791,8 +1094,16 @@ pub fn JSInterpreter::eval_expr(
       self.get_prop_value(obj, key)
     }
     @parser.TsExpr::PropAccess(obj_expr, prop) => {
-      let obj = self.eval_expr(obj_expr, env)
-      self.get_prop_value(obj, prop)
+      match obj_expr {
+        @parser.TsExpr::Var(name) if name == "super" && env.has("__super_proto") => {
+          let super_proto = env.get("__super_proto")
+          self.get_prop_value(super_proto, prop)
+        }
+        _ => {
+          let obj = self.eval_expr(obj_expr, env)
+          self.get_prop_value(obj, prop)
+        }
+      }
     }
     @parser.TsExpr::AssignExpr(name, val_expr) => {
       let val = self.eval_expr(val_expr, env)
@@ -854,6 +1165,11 @@ pub fn JSInterpreter::eval_expr(
       for param in params {
         param_names.push(param.name)
       }
+      let is_strict = match body {
+        @parser.TsArrowBody::ArrowExpr(_) => env.has("__strict__")
+        @parser.TsArrowBody::ArrowBlock(block) =>
+          self.is_strict_body(block, env.has("__strict__"))
+      }
       let closure = JSValue::Function({
         id: fresh_function_id(),
         params: param_names,
@@ -864,6 +1180,7 @@ pub fn JSInterpreter::eval_expr(
               params,
               return_type: @parser.TsType::Any,
               body: { stmts: [@parser.TsStmt::Return(Some(expr))] },
+              is_generator: false,
             })
           @parser.TsArrowBody::ArrowBlock(block) =>
             Ast({
@@ -871,11 +1188,13 @@ pub fn JSInterpreter::eval_expr(
               params,
               return_type: @parser.TsType::Any,
               body: block,
+              is_generator: false,
             })
         },
         env,
         is_arrow: true,
-        is_strict: false,
+        is_strict,
+        is_generator: false,
         props: [],
         object_proto: Some(self.function_proto),
       })
@@ -894,16 +1213,73 @@ pub fn JSInterpreter::eval_expr(
         env,
         is_arrow: false,
         is_strict: self.is_strict_body(func.body, env.has("__strict__")),
+        is_generator: func.is_generator,
         props: [],
         object_proto: Some(self.function_proto),
       })
       self.set_function_length(closure, param_names.length().to_double())
+      if func.name != "<anon>" {
+        self.set_function_name(closure, func.name)
+      }
       let proto = self.new_object()
       let _ = js_set_prop(proto, "constructor", closure)
       let _ = js_define_data_prop(closure, "prototype", proto, true, false, true)
       closure
     }
   }
+}
+
+///|
+/// direct eval: 同一環境で式/文を実行
+fn JSInterpreter::direct_eval(self : JSInterpreter, source : String, env : JSEnv) -> JSValue {
+  let parsed_expr = try { @parser.parse_expr_from_source(source) } catch {
+    @parser.ParseError::ParseError(msg) => {
+      let _ = self.set_error_kind("SyntaxError", msg)
+      return JSValue::Undefined
+    }
+    _ => {
+      let _ = self.set_error_kind("SyntaxError", "eval parse error")
+      return JSValue::Undefined
+    }
+  }
+  match parsed_expr {
+    Some(expr) => self.eval_expr(expr, env)
+    None => {
+      let block = try { @parser.parse_block_from_source(source) } catch {
+        @parser.ParseError::ParseError(msg) => {
+          let _ = self.set_error_kind("SyntaxError", msg)
+          return JSValue::Undefined
+        }
+        _ => {
+          let _ = self.set_error_kind("SyntaxError", "eval parse error")
+          return JSValue::Undefined
+        }
+      }
+      self.exec_eval_block(block, env)
+    }
+  }
+}
+
+///|
+fn JSInterpreter::exec_eval_block(
+  self : JSInterpreter,
+  block : @parser.TsBlock,
+  env : JSEnv,
+) -> JSValue {
+  let mut last = JSValue::Undefined
+  for stmt in block.stmts {
+    match stmt {
+      @parser.TsStmt::Expr(expr) => {
+        last = self.eval_expr(expr, env)
+      }
+      _ =>
+        match self.exec_stmt(stmt, env) {
+          Some(val) => return val
+          None => ()
+        }
+    }
+  }
+  last
 }
 
 ///|
@@ -925,6 +1301,7 @@ pub fn JSInterpreter::exec_stmt(
         Some(err) => return Some(err)
         None => ()
       }
+      self.maybe_set_function_name(val, name)
       env.define(name, val)
       match env.parent {
         None => {
@@ -950,6 +1327,7 @@ pub fn JSInterpreter::exec_stmt(
         Some(err) => return Some(err)
         None => ()
       }
+      self.maybe_set_function_name(val, name)
       if not(env.set(name, val)) {
         self.global_env.define(name, val)
         let global_obj = self.global_env.get("globalThis")
@@ -1271,6 +1649,7 @@ fn JSInterpreter::get_proto(self : JSInterpreter, value : JSValue) -> JSValue? {
   match value {
     Object(map) => map.prototype
     Function(closure) => closure.object_proto
+    Array(arr) => arr.prototype
     _ => None
   }
 }
@@ -1328,7 +1707,10 @@ fn JSInterpreter::get_prop_value_with_receiver(
           if key == "constructor" {
             self.global_env.get("Array")
           } else {
-            Undefined
+            match arr.prototype {
+              Some(proto) => self.get_prop_value_with_receiver(proto, receiver, key)
+              None => Undefined
+            }
           }
         }
       }
@@ -1597,16 +1979,23 @@ fn JSInterpreter::to_primitive_for_add(
 fn JSInterpreter::to_string_value(self : JSInterpreter, value : JSValue) -> String {
   match value {
     Object(_) | Array(_) | Function(_) => {
-      let prim = js_get_prop(value, "value")
-      match prim {
-        Undefined => ()
-        _ => return prim.to_js_string()
-      }
       let to_str = js_get_prop(value, "toString")
-      match to_str {
-        Function(_) => self.call_function(to_str, value, []).to_js_string()
-        _ => value.to_js_string()
+      if self.is_callable(to_str) {
+        let res = self.call_function(to_str, value, [])
+        match res {
+          Object(_) | Array(_) | Function(_) => ()
+          _ => return res.to_js_string()
+        }
       }
+      let value_of = js_get_prop(value, "valueOf")
+      if self.is_callable(value_of) {
+        let res = self.call_function(value_of, value, [])
+        match res {
+          Object(_) | Array(_) | Function(_) => ()
+          _ => return res.to_js_string()
+        }
+      }
+      value.to_js_string()
     }
     _ => value.to_js_string()
   }
@@ -1706,6 +2095,495 @@ fn JSInterpreter::is_constructor(self : JSInterpreter, value : JSValue) -> Bool 
 }
 
 ///|
+fn JSInterpreter::make_generator(
+  self : JSInterpreter,
+  closure : JSClosure,
+  this_arg : JSValue,
+  args : Array[JSValue],
+  new_target : JSValue,
+) -> JSValue {
+  let call_env = js_new_env(Some(closure.env))
+  if closure.is_strict {
+    call_env.define("__strict__", Bool(true))
+  }
+  let bound_this = if closure.is_strict {
+    this_arg
+  } else {
+    match this_arg {
+      Undefined | Null => closure.env.get("globalThis")
+      Bool(_) | Number(_) | String(_) => self.wrap_primitive(closure.env, this_arg)
+      _ => this_arg
+    }
+  }
+  call_env.define("this", bound_this)
+  let new_meta = self.new_object()
+  let _ = js_set_prop(new_meta, "target", new_target)
+  call_env.define("new", new_meta)
+  let args_obj = js_array_from(args)
+  call_env.define("arguments", args_obj)
+  match closure.body {
+    Ast(func_def) => {
+      self.bind_params(func_def.params, args, call_env)
+      let state : JSGeneratorState = {
+        func: func_def,
+        env: call_env,
+        index: 0,
+        done: false,
+      }
+      self.generators.push(state)
+      let gen_id = self.generators.length() - 1
+      let obj = self.new_object()
+      let _ = js_set_prop(obj, "__class", String("Generator"))
+      let _ = js_set_prop(obj, "__gen_id", Number(gen_id.to_double()))
+      let _ = js_set_prop(obj, "next", self.make_native("Generator.prototype.next"))
+      obj
+    }
+    _ => Undefined
+  }
+}
+
+///|
+fn contains_key(keys : Array[String], key : String) -> Bool {
+  for item in keys {
+    if item == key {
+      return true
+    }
+  }
+  false
+}
+
+///|
+fn JSInterpreter::array_like_length(self : JSInterpreter, value : JSValue) -> Int {
+  match js_get_prop(value, "length") {
+    Number(n) => n.to_int()
+    _ => 0
+  }
+}
+
+///|
+fn JSInterpreter::array_like_get(self : JSInterpreter, value : JSValue, index : Int) -> JSValue {
+  js_get_prop(value, index.to_string())
+}
+
+///|
+fn JSInterpreter::maybe_set_function_name_for_binding(
+  self : JSInterpreter,
+  binding : @parser.TsBinding,
+  value : JSValue,
+) -> Unit {
+  match binding {
+    @parser.TsBinding::Ident(name) => self.maybe_set_function_name(value, name)
+    _ => ()
+  }
+}
+
+///|
+fn JSInterpreter::maybe_set_function_name(
+  self : JSInterpreter,
+  value : JSValue,
+  name : String,
+) -> Unit {
+  if name == "<destruct>" {
+    return
+  }
+  match value {
+    Function(_) =>
+      if not(self.has_own_prop(value, "name")) {
+        self.set_function_name(value, name)
+      } else {
+        match js_get_prop(value, "name") {
+          String(s) =>
+            if s.length() == 0 || s == "<anon>" || s == "<arrow>" {
+              self.set_function_name(value, name)
+            }
+          _ => ()
+        }
+      }
+    _ => ()
+  }
+}
+
+///|
+fn JSInterpreter::bind_pattern(
+  self : JSInterpreter,
+  binding : @parser.TsBinding,
+  value : JSValue,
+  env : JSEnv,
+) -> Unit {
+  match binding {
+    @parser.TsBinding::Ident(name) => env.define(name, value)
+    @parser.TsBinding::Array(arr) => self.bind_array_pattern(arr, value, env)
+    @parser.TsBinding::Object(obj) => self.bind_object_pattern(obj, value, env)
+  }
+}
+
+///|
+fn JSInterpreter::bind_array_pattern(
+  self : JSInterpreter,
+  pattern : @parser.TsArrayBinding,
+  value : JSValue,
+  env : JSEnv,
+) -> Unit {
+  match value {
+    Undefined | Null => {
+      let _ = self.set_error_kind(
+        "TypeError",
+        "Cannot destructure undefined or null",
+      )
+      return
+    }
+    _ => ()
+  }
+  match self.get_generator_id(value) {
+    Some(gen_id) => {
+      let mut done = false
+      let next_value = fn() -> JSValue {
+        if done {
+          JSValue::Undefined
+        } else {
+          let result = self.generator_next(gen_id)
+          let (is_done, val) = self.iter_result_value_done(result)
+          done = is_done
+          val
+        }
+      }
+      for item in pattern.items {
+        match item {
+          None => {
+            if not(done) {
+              let _ = next_value()
+            }
+          }
+          Some(elem) => {
+            let mut val = if done { JSValue::Undefined } else { next_value() }
+            let mut used_default = false
+            match elem.default {
+              Some(expr) =>
+                if val is Undefined {
+                  val = self.eval_expr(expr, env)
+                  used_default = true
+                }
+              None => ()
+            }
+            if used_default {
+              self.maybe_set_function_name_for_binding(elem.binding, val)
+            }
+            self.bind_pattern(elem.binding, val, env)
+          }
+        }
+      }
+      match pattern.rest {
+        None => ()
+        Some(rest_binding) => {
+          let rest_items : Array[JSValue] = []
+          while not(done) {
+            let val = next_value()
+            if done {
+              break
+            }
+            rest_items.push(val)
+          }
+          let rest_val = js_array_from(rest_items)
+          self.bind_pattern(rest_binding, rest_val, env)
+        }
+      }
+    }
+    None => {
+      let len = self.array_like_length(value)
+      let mut index = 0
+      for item in pattern.items {
+        match item {
+          None => index = index + 1
+          Some(elem) => {
+            let mut val = if index < len {
+              self.array_like_get(value, index)
+            } else {
+              Undefined
+            }
+            let mut used_default = false
+            match elem.default {
+              Some(expr) =>
+                if val is Undefined {
+                  val = self.eval_expr(expr, env)
+                  used_default = true
+                }
+              None => ()
+            }
+            if used_default {
+              self.maybe_set_function_name_for_binding(elem.binding, val)
+            }
+            self.bind_pattern(elem.binding, val, env)
+            index = index + 1
+          }
+        }
+      }
+      match pattern.rest {
+        None => ()
+        Some(rest_binding) => {
+          let rest_items : Array[JSValue] = []
+          while index < len {
+            rest_items.push(self.array_like_get(value, index))
+            index = index + 1
+          }
+          let rest_val = js_array_from(rest_items)
+          self.bind_pattern(rest_binding, rest_val, env)
+        }
+      }
+    }
+  }
+}
+
+///|
+fn JSInterpreter::bind_object_pattern(
+  self : JSInterpreter,
+  pattern : @parser.TsObjectBinding,
+  value : JSValue,
+  env : JSEnv,
+) -> Unit {
+  match value {
+    Undefined | Null => {
+      let _ = self.set_error_kind(
+        "TypeError",
+        "Cannot destructure undefined or null",
+      )
+      return
+    }
+    _ => ()
+  }
+  let used_keys : Array[String] = []
+  for prop in pattern.props {
+    used_keys.push(prop.key)
+    let mut val = js_get_prop(value, prop.key)
+    let mut used_default = false
+    match prop.default {
+      Some(expr) =>
+        if val is Undefined {
+          val = self.eval_expr(expr, env)
+          used_default = true
+        }
+      None => ()
+    }
+    if used_default {
+      self.maybe_set_function_name_for_binding(prop.binding, val)
+    }
+    self.bind_pattern(prop.binding, val, env)
+  }
+  match pattern.rest {
+    None => ()
+    Some(rest_name) => {
+      let rest_obj = self.new_object()
+      match value {
+        Object(map) => {
+          for prop in map.props {
+            if not(contains_key(used_keys, prop.key)) {
+              let _ = js_set_prop(rest_obj, prop.key, prop.value)
+            }
+          }
+        }
+        Array(arr) => {
+          for i, item in arr.items {
+            let key = i.to_string()
+            if not(contains_key(used_keys, key)) {
+              let _ = js_set_prop(rest_obj, key, item)
+            }
+          }
+          for prop in arr.props {
+            if not(contains_key(used_keys, prop.key)) {
+              let _ = js_set_prop(rest_obj, prop.key, prop.value)
+            }
+          }
+        }
+        Function(closure) => {
+          for prop in closure.props {
+            if not(contains_key(used_keys, prop.key)) {
+              let _ = js_set_prop(rest_obj, prop.key, prop.value)
+            }
+          }
+        }
+        _ => ()
+      }
+      env.define(rest_name, rest_obj)
+    }
+  }
+}
+
+///|
+fn JSInterpreter::bind_params(
+  self : JSInterpreter,
+  params : Array[@parser.TsParam],
+  args : Array[JSValue],
+  env : JSEnv,
+) -> Unit {
+  let mut arg_index = 0
+  for param in params {
+    let mut val = if param.is_rest {
+      let rest_items : Array[JSValue] = []
+      while arg_index < args.length() {
+        rest_items.push(args[arg_index])
+        arg_index = arg_index + 1
+      }
+      js_array_from(rest_items)
+    } else {
+      let v = if arg_index < args.length() { args[arg_index] } else { Undefined }
+      arg_index = arg_index + 1
+      v
+    }
+    let mut used_default = false
+    match param.default {
+      Some(expr) =>
+        if val is Undefined {
+          val = self.eval_expr(expr, env)
+          used_default = true
+        }
+      None => ()
+    }
+    match param.binding {
+      Some(binding) => {
+        if used_default {
+          self.maybe_set_function_name_for_binding(binding, val)
+        }
+        self.bind_pattern(binding, val, env)
+      }
+      None => {
+        if used_default {
+          self.maybe_set_function_name(val, param.name)
+        }
+        env.define(param.name, val)
+      }
+    }
+  }
+}
+
+///|
+fn JSInterpreter::make_iter_result(
+  self : JSInterpreter,
+  value : JSValue,
+  done : Bool,
+) -> JSValue {
+  let obj = self.new_object()
+  let _ = js_set_prop(obj, "value", value)
+  let _ = js_set_prop(obj, "done", Bool(done))
+  obj
+}
+
+///|
+fn JSInterpreter::get_generator_id(self : JSInterpreter, value : JSValue) -> Int? {
+  match js_get_prop(value, "__gen_id") {
+    Number(n) => Some(n.to_int())
+    _ => None
+  }
+}
+
+///|
+fn JSInterpreter::generator_next(self : JSInterpreter, gen_id : Int) -> JSValue {
+  if gen_id < 0 || gen_id >= self.generators.length() {
+    return self.set_error_kind("TypeError", "Invalid generator")
+  }
+  let state = self.generators[gen_id]
+  if state.done {
+    return self.make_iter_result(Undefined, true)
+  }
+  let stmts = state.func.body.stmts
+  while state.index < stmts.length() {
+    let stmt = stmts[state.index]
+    state.index = state.index + 1
+    match self.exec_stmt_gen(stmt, state.env) {
+      GenSignal::Continue => ()
+      GenSignal::Yield(val) => {
+        self.generators[gen_id] = state
+        return self.make_iter_result(val, false)
+      }
+      GenSignal::Return(val) => {
+        state.done = true
+        self.generators[gen_id] = state
+        return self.make_iter_result(val, true)
+      }
+    }
+    match self.peek_error() {
+      Some(err) => {
+        state.done = true
+        self.generators[gen_id] = state
+        return err
+      }
+      None => ()
+    }
+  }
+  state.done = true
+  self.generators[gen_id] = state
+  self.make_iter_result(Undefined, true)
+}
+
+///|
+fn JSInterpreter::iter_result_value_done(
+  self : JSInterpreter,
+  result : JSValue,
+) -> (Bool, JSValue) {
+  match result {
+    Object(_) => {
+      let done_val = js_get_prop(result, "done")
+      let done = done_val.to_boolean()
+      let val = js_get_prop(result, "value")
+      (done, val)
+    }
+    _ => (true, Undefined)
+  }
+}
+
+///|
+fn JSInterpreter::exec_stmt_gen(
+  self : JSInterpreter,
+  stmt : @parser.TsStmt,
+  env : JSEnv,
+) -> GenSignal {
+  self.tick()
+  match self.peek_error() {
+    Some(err) => return GenSignal::Return(err)
+    None => ()
+  }
+  match stmt {
+    @parser.TsStmt::Expr(expr) =>
+      match expr {
+        @parser.TsExpr::Yield(opt) => {
+          let val = match opt {
+            Some(e) => self.eval_expr(e, env)
+            None => Undefined
+          }
+          GenSignal::Yield(val)
+        }
+        _ => {
+          let _ = self.eval_expr(expr, env)
+          match self.peek_error() {
+            Some(err) => GenSignal::Return(err)
+            None => GenSignal::Continue
+          }
+        }
+      }
+    @parser.TsStmt::Return(opt) => {
+      let val = match opt {
+        Some(e) => self.eval_expr(e, env)
+        None => Undefined
+      }
+      GenSignal::Return(val)
+    }
+    @parser.TsStmt::Block(block) => {
+      for inner in block.stmts {
+        match self.exec_stmt_gen(inner, env) {
+          GenSignal::Continue => ()
+          other => return other
+        }
+      }
+      GenSignal::Continue
+    }
+    _ =>
+      match self.exec_stmt(stmt, env) {
+        Some(BreakSignal) | Some(ContinueSignal) => GenSignal::Continue
+        Some(val) => GenSignal::Return(val)
+        None => GenSignal::Continue
+      }
+  }
+}
+
+///|
 /// instanceof の簡易判定
 fn JSInterpreter::instanceof(self : JSInterpreter, left : JSValue, right : JSValue) -> Bool {
   self.ordinary_has_instance(right, left)
@@ -1722,6 +2600,9 @@ pub fn JSInterpreter::call_function(
 ) -> JSValue {
   match func {
     Function(closure) => {
+      if closure.is_generator {
+        return self.make_generator(closure, this_arg, args, new_target)
+      }
       // 新しい環境を作成
       let call_env = js_new_env(Some(closure.env))
       if closure.is_strict {
@@ -1738,19 +2619,39 @@ pub fn JSInterpreter::call_function(
           }
           call_env.define("this", bound_this)
         }
+        let new_meta = self.new_object()
+        let _ = js_set_prop(new_meta, "target", new_target)
+        call_env.define("new", new_meta)
+
+        let args_obj = js_array_from(args)
+        call_env.define("arguments", args_obj)
       }
 
-      let new_meta = self.new_object()
-      let _ = js_set_prop(new_meta, "target", new_target)
-      call_env.define("new", new_meta)
-
-      let args_obj = js_array_from(args)
-      call_env.define("arguments", args_obj)
+      let super_ctor = js_get_prop(func, "__super_ctor")
+      match super_ctor {
+        Undefined => ()
+        _ => {
+          call_env.define("__super_ctor", super_ctor)
+          call_env.define("__super_called", Bool(false))
+        }
+      }
+      let super_proto = js_get_prop(func, "__super_proto")
+      match super_proto {
+        Undefined => ()
+        _ => {
+          call_env.define("__super_proto", super_proto)
+          call_env.define("__super_this", call_env.get("this"))
+        }
+      }
 
       // 引数をバインド
-      for i, param in closure.params {
-        let val = if i < args.length() { args[i] } else { Undefined }
-        call_env.define(param, val)
+      match closure.body {
+        Ast(func_def) => self.bind_params(func_def.params, args, call_env)
+        _ =>
+          for i, param in closure.params {
+            let val = if i < args.length() { args[i] } else { Undefined }
+            call_env.define(param, val)
+          }
       }
 
       // 本体を実行
@@ -1858,6 +2759,7 @@ fn JSInterpreter::function_method(
         env: self.global_env,
         is_arrow: false,
         is_strict: false,
+        is_generator: false,
         props: [],
         object_proto: Some(self.function_proto),
       })
@@ -1882,13 +2784,15 @@ fn JSInterpreter::function_method(
 ///|
 /// 文字列メソッド
 fn JSInterpreter::string_method(
-  _self : JSInterpreter,
+  self : JSInterpreter,
   s : String,
   method_name : String,
   args : Array[JSValue],
 ) -> JSValue {
   match method_name {
     "length" => Number(s.length().to_double())
+    "valueOf" => String(s)
+    "toString" => String(s)
     "charAt" => {
       let idx = if args.length() > 0 { args[0].to_number().to_int() } else { 0 }
       if idx >= 0 && idx < s.length() {
@@ -1897,21 +2801,55 @@ fn JSInterpreter::string_method(
         String("")
       }
     }
+    "charCodeAt" => {
+      let idx = if args.length() > 0 { args[0].to_number().to_int() } else { 0 }
+      if idx >= 0 && idx < s.length() {
+        Number(s[idx].to_int().to_double())
+      } else {
+        Number(0.0 / 0.0)
+      }
+    }
+    "codePointAt" => {
+      let idx = if args.length() > 0 { args[0].to_number().to_int() } else { 0 }
+      if idx < 0 || idx >= s.length() {
+        Undefined
+      } else {
+        let cu1 = s[idx]
+        if cu1.is_leading_surrogate() && idx + 1 < s.length() {
+          let cu2 = s[idx + 1]
+          if cu2.is_trailing_surrogate() {
+            let hi = cu1.to_int() - 0xd800
+            let lo = cu2.to_int() - 0xdc00
+            let code = hi * 0x400 + lo + 0x10000
+            Number(code.to_double())
+          } else {
+            Number(cu1.to_int().to_double())
+          }
+        } else {
+          Number(cu1.to_int().to_double())
+        }
+      }
+    }
     "indexOf" => {
       let search_str = if args.length() > 0 {
         args[0].to_js_string()
       } else {
         ""
       }
-      let start_idx = if args.length() > 1 {
+      let mut start_idx = if args.length() > 1 {
         args[1].to_number().to_int()
       } else {
         0
       }
-      // 手動実装: s.index_of() は存在しないのでループで検索
+      if start_idx < 0 {
+        start_idx = 0
+      }
+      if search_str.length() == 0 {
+        return Number(start_idx.to_double())
+      }
+      let search_len = search_str.length()
       let mut idx = -1
-      if start_idx < s.length() && search_str.length() > 0 {
-        let search_len = search_str.length()
+      if start_idx < s.length() && start_idx + search_len <= s.length() {
         let end_idx = s.length() - search_len + 1
         let mut i = start_idx
         while i < end_idx && idx == -1 {
@@ -1923,39 +2861,333 @@ fn JSInterpreter::string_method(
       }
       Number(idx.to_double())
     }
+    "lastIndexOf" => {
+      let search_str = if args.length() > 0 {
+        args[0].to_js_string()
+      } else {
+        ""
+      }
+      let mut pos = if args.length() > 1 {
+        args[1].to_number().to_int()
+      } else {
+        s.length()
+      }
+      if pos > s.length() {
+        pos = s.length()
+      }
+      if pos < 0 {
+        pos = 0
+      }
+      if search_str.length() == 0 {
+        return Number(pos.to_double())
+      }
+      let search_len = search_str.length()
+      let mut idx = -1
+      let mut i = pos - search_len
+      if i < 0 {
+        i = 0
+      }
+      while i >= 0 {
+        if (try { s[i:i + search_len].to_string() } catch { _ => "" }) == search_str {
+          idx = i
+          break
+        }
+        if i == 0 {
+          break
+        }
+        i = i - 1
+      }
+      Number(idx.to_double())
+    }
+    "includes" => {
+      let search_str = if args.length() > 0 { args[0].to_js_string() } else { "" }
+      let mut start_idx = if args.length() > 1 { args[1].to_number().to_int() } else { 0 }
+      if start_idx < 0 {
+        start_idx = 0
+      }
+      if search_str.length() == 0 {
+        Bool(true)
+      } else if start_idx + search_str.length() > s.length() {
+        Bool(false)
+      } else {
+        let search_len = search_str.length()
+        let end_idx = s.length() - search_len + 1
+        let mut i = start_idx
+        let mut found = false
+        while i < end_idx && not(found) {
+          if (try { s[i:i + search_len].to_string() } catch { _ => "" }) == search_str {
+            found = true
+          }
+          i = i + 1
+        }
+        Bool(found)
+      }
+    }
+    "startsWith" => {
+      let search_str = if args.length() > 0 { args[0].to_js_string() } else { "" }
+      let mut pos = if args.length() > 1 { args[1].to_number().to_int() } else { 0 }
+      if pos < 0 {
+        pos = 0
+      }
+      let search_len = search_str.length()
+      if search_len == 0 {
+        Bool(true)
+      } else if pos + search_len > s.length() {
+        Bool(false)
+      } else {
+        Bool(
+          (try { s[pos:pos + search_len].to_string() } catch { _ => "" }) == search_str,
+        )
+      }
+    }
+    "endsWith" => {
+      let search_str = if args.length() > 0 { args[0].to_js_string() } else { "" }
+      let mut end_pos = if args.length() > 1 { args[1].to_number().to_int() } else { s.length() }
+      if end_pos > s.length() {
+        end_pos = s.length()
+      }
+      if end_pos < 0 {
+        end_pos = 0
+      }
+      let search_len = search_str.length()
+      if search_len == 0 {
+        Bool(true)
+      } else if search_len > end_pos {
+        Bool(false)
+      } else {
+        let start = end_pos - search_len
+        Bool(
+          (try { s[start:end_pos].to_string() } catch { _ => "" }) == search_str,
+        )
+      }
+    }
+    "at" => {
+      let mut idx = if args.length() > 0 { args[0].to_number().to_int() } else { 0 }
+      if idx < 0 {
+        idx = s.length() + idx
+      }
+      if idx < 0 || idx >= s.length() {
+        Undefined
+      } else {
+        String(try { s[idx:idx + 1].to_string() } catch { _ => "" })
+      }
+    }
     "split" => {
-      let sep = if args.length() > 0 { args[0].to_js_string() } else { "" }
-      let parts = s.split(sep)
+      let limit = if args.length() > 1 {
+        let n = args[1].to_number()
+        if n.is_nan() || n <= 0.0 {
+          0
+        } else {
+          let two32 = 4294967296.0
+          let mut m = n % two32
+          if m < 0.0 {
+            m = m + two32
+          }
+          let lim = m.floor()
+          if lim > 2147483647.0 {
+            2147483647
+          } else {
+            lim.to_int()
+          }
+        }
+      } else {
+        -1
+      }
+      if limit == 0 {
+        return js_new_array()
+      }
+      let sep_val = if args.length() > 0 { args[0] } else { Undefined }
+      if is_regexp(sep_val) {
+        let pattern = regexp_source(sep_val)
+        let flags = regexp_flags(sep_val)
+        let result = regexp_split_simple(pattern, flags, s, limit)
+        return js_array_from(result)
+      }
+      match sep_val {
+        Undefined => {
+          return js_array_from([String(s)])
+        }
+        _ => ()
+      }
+      let sep = sep_val.to_js_string()
       let result : Array[JSValue] = []
-      for part in parts {
-        result.push(String(part.to_string()))
+      if sep.length() == 0 {
+        if s.length() == 0 {
+          result.push(String(""))
+        } else {
+          for i in 0..<s.length() {
+            if limit >= 0 && result.length() >= limit {
+              break
+            }
+            result.push(String(try { s[i:i + 1].to_string() } catch { _ => "" }))
+          }
+        }
+        return js_array_from(result)
+      }
+      let mut start = 0
+      let sep_len = sep.length()
+      while start <= s.length() {
+        if limit >= 0 && result.length() >= limit {
+          break
+        }
+        let mut found = false
+        let mut pos = start
+        if start + sep_len <= s.length() {
+          let end_idx = s.length() - sep_len + 1
+          while pos < end_idx && not(found) {
+            if (try { s[pos:pos + sep_len].to_string() } catch { _ => "" }) == sep {
+              found = true
+            } else {
+              pos = pos + 1
+            }
+          }
+        }
+        if found {
+          result.push(String(try { s[start:pos].to_string() } catch { _ => "" }))
+          start = pos + sep_len
+        } else {
+          result.push(String(try { s[start:s.length()].to_string() } catch { _ => "" }))
+          break
+        }
       }
       js_array_from(result)
     }
     "replace" => {
+      if args.length() > 0 && is_regexp(args[0]) {
+        let pattern = regexp_source(args[0])
+        let flags = regexp_flags(args[0])
+        let to = if args.length() > 1 { args[1].to_js_string() } else { "" }
+        String(regexp_replace_simple(
+          pattern,
+          flags,
+          s,
+          to,
+          regexp_has_global(flags),
+        ))
+      } else {
+        let from = if args.length() > 0 { args[0].to_js_string() } else { "" }
+        let to = if args.length() > 1 { args[1].to_js_string() } else { "" }
+        String(s.replace(old=from, new=to))
+      }
+    }
+    "replaceAll" => {
       let from = if args.length() > 0 { args[0].to_js_string() } else { "" }
       let to = if args.length() > 1 { args[1].to_js_string() } else { "" }
-      String(s.replace(old=from, new=to))
+      String(s.replace_all(old=from, new=to))
     }
-    "trim" => {
-      let trim_result = s.trim()
-      String(trim_result.to_string())
+    "match" => {
+      let pat = if args.length() > 0 { args[0] } else { Undefined }
+      if is_regexp(pat) {
+        let pattern = regexp_source(pat)
+        let flags = regexp_flags(pat)
+        regexp_match_simple(pattern, flags, s, regexp_has_global(flags))
+      } else {
+        let pattern = pat.to_js_string()
+        regexp_match_simple(pattern, "", s, false)
+      }
     }
+    "search" => {
+      let pat = if args.length() > 0 { args[0] } else { Undefined }
+      if is_regexp(pat) {
+        let pattern = regexp_source(pat)
+        let flags = regexp_flags(pat)
+        Number(regexp_search_simple(pattern, flags, s).to_double())
+      } else {
+        let pattern = pat.to_js_string()
+        Number(regexp_search_simple(pattern, "", s).to_double())
+      }
+    }
+    "trim" => String(trim_js_string(s, "both"))
+    "trimStart" => String(trim_js_string(s, "start"))
+    "trimEnd" => String(trim_js_string(s, "end"))
     "substring" => {
-      let start = if args.length() > 0 {
+      let mut start = if args.length() > 0 {
         args[0].to_number().to_int()
       } else {
         0
       }
-      let end = if args.length() > 1 {
+      let mut end = if args.length() > 1 {
         args[1].to_number().to_int()
       } else {
         s.length()
+      }
+      if start < 0 {
+        start = 0
+      }
+      if end < 0 {
+        end = 0
+      }
+      if start > end {
+        let tmp = start
+        start = end
+        end = tmp
+      }
+      if start > s.length() {
+        start = s.length()
+      }
+      if end > s.length() {
+        end = s.length()
       }
       String(try { s[start:end].to_string() } catch { _ => "" })
     }
     "toUpperCase" => String(s.to_upper())
     "toLowerCase" => String(s.to_lower())
+    "toLocaleUpperCase" => String(s.to_upper())
+    "toLocaleLowerCase" => String(s.to_lower())
+    "repeat" => {
+      let count = if args.length() > 0 { args[0].to_number().to_int() } else { 0 }
+      if count <= 0 {
+        String("")
+      } else {
+        let mut out = ""
+        for _ in 0..<count {
+          out = out + s
+        }
+        String(out)
+      }
+    }
+    "padStart" => {
+      let target_len = if args.length() > 0 { args[0].to_number().to_int() } else { 0 }
+      let pad = if args.length() > 1 { args[1].to_js_string() } else { " " }
+      if target_len <= s.length() {
+        String(s)
+      } else {
+        let needed = target_len - s.length()
+        let mut pad_str = ""
+        if pad.length() == 0 {
+          pad_str = ""
+        } else {
+          while pad_str.length() < needed {
+            pad_str = pad_str + pad
+          }
+          if pad_str.length() > needed {
+            pad_str = (try { pad_str[:needed].to_string() } catch { _ => pad_str })
+          }
+        }
+        String(pad_str + s)
+      }
+    }
+    "padEnd" => {
+      let target_len = if args.length() > 0 { args[0].to_number().to_int() } else { 0 }
+      let pad = if args.length() > 1 { args[1].to_js_string() } else { " " }
+      if target_len <= s.length() {
+        String(s)
+      } else {
+        let needed = target_len - s.length()
+        let mut pad_str = ""
+        if pad.length() == 0 {
+          pad_str = ""
+        } else {
+          while pad_str.length() < needed {
+            pad_str = pad_str + pad
+          }
+          if pad_str.length() > needed {
+            pad_str = (try { pad_str[:needed].to_string() } catch { _ => pad_str })
+          }
+        }
+        String(s + pad_str)
+      }
+    }
     "concat" => {
       let mut result = s
       for arg in args {
@@ -1968,6 +3200,92 @@ fn JSInterpreter::string_method(
 }
 
 ///|
+/// JS 仕様の trim 用ホワイトスペース判定
+fn is_js_trim_whitespace(unit : UInt16) -> Bool {
+  let code = unit.to_int()
+  if code == 0x0009 { return true }
+  if code == 0x000a { return true }
+  if code == 0x000b { return true }
+  if code == 0x000c { return true }
+  if code == 0x000d { return true }
+  if code == 0x0020 { return true }
+  if code == 0x00a0 { return true }
+  if code == 0x1680 { return true }
+  if code >= 0x2000 && code <= 0x200a { return true }
+  if code == 0x2028 { return true }
+  if code == 0x2029 { return true }
+  if code == 0x202f { return true }
+  if code == 0x205f { return true }
+  if code == 0x3000 { return true }
+  if code == 0xfeff { return true }
+  false
+}
+
+///|
+/// JS 仕様の trim 実装
+fn trim_js_string(s : String, mode : String) -> String {
+  let len = s.length()
+  let mut start = 0
+  let mut end = len
+  if mode == "both" || mode == "start" {
+    while start < end && is_js_trim_whitespace(s[start]) {
+      start = start + 1
+    }
+  }
+  if mode == "both" || mode == "end" {
+    while end > start && is_js_trim_whitespace(s[end - 1]) {
+      end = end - 1
+    }
+  }
+  try { s[start:end].to_string() } catch { _ => "" }
+}
+
+///|
+/// SameValueZero 判定
+fn JSInterpreter::same_value_zero(
+  _self : JSInterpreter,
+  left : JSValue,
+  right : JSValue,
+) -> Bool {
+  match js_strict_eq(left, right) {
+    Bool(true) => true
+    _ => {
+      let left_nan = match left {
+        Number(n) => n.is_nan()
+        _ => false
+      }
+      let right_nan = match right {
+        Number(n) => n.is_nan()
+        _ => false
+      }
+      left_nan && right_nan
+    }
+  }
+}
+
+///|
+/// 配列のフラット化
+fn JSInterpreter::flatten_array_items(
+  self : JSInterpreter,
+  items : Array[JSValue],
+  depth : Int,
+  out : Array[JSValue],
+) -> Unit {
+  if depth <= 0 {
+    for item in items {
+      out.push(item)
+    }
+  } else {
+    for item in items {
+      match item {
+        Array(arr) => self.flatten_array_items(arr.items, depth - 1, out)
+        _ => out.push(item)
+      }
+    }
+  }
+}
+
+///|
 /// 配列メソッド
 fn JSInterpreter::array_method(
   self : JSInterpreter,
@@ -1975,6 +3293,7 @@ fn JSInterpreter::array_method(
   method_name : String,
   args : Array[JSValue],
 ) -> JSValue {
+  let len = arr.items.length()
   match method_name {
     "length" => JSValue::Number(arr.length.to_double())
     "push" => {
@@ -1995,7 +3314,6 @@ fn JSInterpreter::array_method(
     "shift" =>
       if arr.items.length() > 0 {
         let first = arr.items[0]
-        // Remove first element by creating new array
         let new_arr : Array[JSValue] = []
         for i in 1..<arr.items.length() {
           new_arr.push(arr.items[i])
@@ -2009,6 +3327,21 @@ fn JSInterpreter::array_method(
       } else {
         Undefined
       }
+    "unshift" => {
+      let new_arr : Array[JSValue] = []
+      for arg in args {
+        new_arr.push(arg)
+      }
+      for item in arr.items {
+        new_arr.push(item)
+      }
+      arr.items.clear()
+      for item in new_arr {
+        arr.items.push(item)
+      }
+      arr.length = arr.items.length()
+      JSValue::Number(arr.length.to_double())
+    }
     "join" => {
       let sep = if args.length() > 0 { args[0].to_js_string() } else { "," }
       let parts : Array[String] = []
@@ -2017,26 +3350,82 @@ fn JSInterpreter::array_method(
       }
       JSValue::String(parts.join(sep))
     }
+    "toString" => {
+      let parts : Array[String] = []
+      for item in arr.items {
+        parts.push(item.to_js_string())
+      }
+      JSValue::String(parts.join(","))
+    }
     "indexOf" => {
-      if args.length() > 0 {
-        let target = args[0]
-        for i, item in arr.items {
-          match js_strict_eq(item, target) {
-            JSValue::Bool(true) => return JSValue::Number(i.to_double())
-            _ => ()
-          }
+      let target = if args.length() > 0 { args[0] } else { Undefined }
+      let mut start_idx = if args.length() > 1 {
+        args[1].to_number().to_int()
+      } else {
+        0
+      }
+      if start_idx < 0 {
+        start_idx = len + start_idx
+        if start_idx < 0 {
+          start_idx = 0
+        }
+      }
+      if start_idx >= len {
+        return JSValue::Number(-1.0)
+      }
+      for i in start_idx..<len {
+        match js_strict_eq(arr.items[i], target) {
+          JSValue::Bool(true) => return JSValue::Number(i.to_double())
+          _ => ()
         }
       }
       JSValue::Number(-1.0)
     }
+    "lastIndexOf" => {
+      let target = if args.length() > 0 { args[0] } else { Undefined }
+      let mut from_idx = if args.length() > 1 {
+        args[1].to_number().to_int()
+      } else {
+        len - 1
+      }
+      if from_idx < 0 {
+        from_idx = len + from_idx
+      }
+      if from_idx >= len {
+        from_idx = len - 1
+      }
+      if from_idx < 0 {
+        return JSValue::Number(-1.0)
+      }
+      let mut i = from_idx
+      while i >= 0 {
+        match js_strict_eq(arr.items[i], target) {
+          JSValue::Bool(true) => return JSValue::Number(i.to_double())
+          _ => ()
+        }
+        if i == 0 {
+          break
+        }
+        i = i - 1
+      }
+      JSValue::Number(-1.0)
+    }
     "includes" => {
-      if args.length() > 0 {
-        let target = args[0]
-        for _, item in arr.items {
-          match js_strict_eq(item, target) {
-            Bool(true) => return JSValue::Bool(true)
-            _ => ()
-          }
+      let target = if args.length() > 0 { args[0] } else { Undefined }
+      let mut start_idx = if args.length() > 1 {
+        args[1].to_number().to_int()
+      } else {
+        0
+      }
+      if start_idx < 0 {
+        start_idx = len + start_idx
+        if start_idx < 0 {
+          start_idx = 0
+        }
+      }
+      for i in start_idx..<len {
+        if self.same_value_zero(arr.items[i], target) {
+          return Bool(true)
         }
       }
       Bool(false)
@@ -2047,22 +3436,19 @@ fn JSInterpreter::array_method(
           JSValue::Function(closure) => {
             let this_arg = if args.length() > 1 { args[1] } else { Undefined }
             let result : Array[JSValue] = []
-            let len = arr.items.length()
             let mut i = 0
             while i < len {
-              if i < arr.items.length() {
-                let args_array = [
-                  arr.items[i],
-                  JSValue::Number(i.to_double()),
-                  JSValue::Array(arr),
-                ]
-                let mapped = self.call_function(
-                  JSValue::Function(closure),
-                  this_arg,
-                  args_array,
-                )
-                result.push(mapped)
-              }
+              let args_array = [
+                arr.items[i],
+                JSValue::Number(i.to_double()),
+                JSValue::Array(arr),
+              ]
+              let mapped = self.call_function(
+                JSValue::Function(closure),
+                this_arg,
+                args_array,
+              )
+              result.push(mapped)
               i += 1
             }
             js_array_from(result)
@@ -2078,25 +3464,22 @@ fn JSInterpreter::array_method(
           JSValue::Function(closure) => {
             let this_arg = if args.length() > 1 { args[1] } else { Undefined }
             let result : Array[JSValue] = []
-            let len = arr.items.length()
             let mut i = 0
             while i < len {
-              if i < arr.items.length() {
-                let item = arr.items[i]
-                let args_array = [
-                  item,
-                  JSValue::Number(i.to_double()),
-                  JSValue::Array(arr),
-                ]
-                let filtered = self.call_function(
-                  JSValue::Function(closure),
-                  this_arg,
-                  args_array,
-                )
-                match filtered {
-                  Bool(true) => result.push(item)
-                  _ => ()
-                }
+              let item = arr.items[i]
+              let args_array = [
+                item,
+                JSValue::Number(i.to_double()),
+                JSValue::Array(arr),
+              ]
+              let filtered = self.call_function(
+                JSValue::Function(closure),
+                this_arg,
+                args_array,
+              )
+              match filtered {
+                Bool(true) => result.push(item)
+                _ => ()
               }
               i += 1
             }
@@ -2111,40 +3494,69 @@ fn JSInterpreter::array_method(
       if args.length() > 0 {
         match args[0] {
           JSValue::Function(closure) => {
-            let initial_value = if args.length() > 1 {
+            let has_init = args.length() > 1
+            if len == 0 && not(has_init) {
+              return self.set_error_kind(
+                "TypeError",
+                "Reduce of empty array with no initial value",
+              )
+            }
+            let mut accumulator = if has_init { args[1] } else { arr.items[0] }
+            let mut i = if has_init { 0 } else { 1 }
+            while i < len {
+              let args_array = [
+                accumulator,
+                arr.items[i],
+                JSValue::Number(i.to_double()),
+                JSValue::Array(arr),
+              ]
+              accumulator = self.call_function(
+                JSValue::Function(closure),
+                Undefined,
+                args_array,
+              )
+              i += 1
+            }
+            accumulator
+          }
+          _ => Undefined
+        }
+      } else {
+        Undefined
+      }
+    "reduceRight" =>
+      if args.length() > 0 {
+        match args[0] {
+          JSValue::Function(closure) => {
+            let has_init = args.length() > 1
+            if len == 0 && not(has_init) {
+              return self.set_error_kind(
+                "TypeError",
+                "Reduce of empty array with no initial value",
+              )
+            }
+            let mut accumulator = if has_init {
               args[1]
             } else {
-              Undefined
+              arr.items[len - 1]
             }
-            let mut accumulator = initial_value
-            let mut start_index = 0
-            let len = arr.items.length()
-            let eq_result = js_strict_eq(initial_value, Undefined)
-            let is_undefined = match eq_result {
-              JSValue::Bool(true) => true
-              JSValue::Bool(false) => false
-              _ => false
-            }
-            if is_undefined && len > 0 {
-              accumulator = arr.items[0]
-              start_index = 1
-            }
-            let mut i = start_index
-            while i < len {
-              if i < arr.items.length() {
-                let args_array = [
-                  accumulator,
-                  arr.items[i],
-                  JSValue::Number(i.to_double()),
-                  JSValue::Array(arr),
-                ]
-                accumulator = self.call_function(
-                  JSValue::Function(closure),
-                  Undefined,
-                  args_array,
-                )
+            let mut i = if has_init { len - 1 } else { len - 2 }
+            while i >= 0 {
+              let args_array = [
+                accumulator,
+                arr.items[i],
+                JSValue::Number(i.to_double()),
+                JSValue::Array(arr),
+              ]
+              accumulator = self.call_function(
+                JSValue::Function(closure),
+                Undefined,
+                args_array,
+              )
+              if i == 0 {
+                break
               }
-              i += 1
+              i = i - 1
             }
             accumulator
           }
@@ -2158,21 +3570,18 @@ fn JSInterpreter::array_method(
         match args[0] {
           JSValue::Function(closure) => {
             let this_arg = if args.length() > 1 { args[1] } else { Undefined }
-            let len = arr.items.length()
             let mut i = 0
             while i < len {
-              if i < arr.items.length() {
-                let args_array = [
-                  arr.items[i],
-                  JSValue::Number(i.to_double()),
-                  JSValue::Array(arr),
-                ]
-                let _ = self.call_function(
-                  JSValue::Function(closure),
-                  this_arg,
-                  args_array,
-                )
-              }
+              let args_array = [
+                arr.items[i],
+                JSValue::Number(i.to_double()),
+                JSValue::Array(arr),
+              ]
+              let _ = self.call_function(
+                JSValue::Function(closure),
+                this_arg,
+                args_array,
+              )
               i += 1
             }
             Undefined
@@ -2181,31 +3590,88 @@ fn JSInterpreter::array_method(
         }
       } else {
         Undefined
+      }
+    "every" =>
+      if args.length() > 0 {
+        match args[0] {
+          JSValue::Function(closure) => {
+            let this_arg = if args.length() > 1 { args[1] } else { Undefined }
+            let mut i = 0
+            while i < len {
+              let args_array = [
+                arr.items[i],
+                JSValue::Number(i.to_double()),
+                JSValue::Array(arr),
+              ]
+              let ok = self.call_function(
+                JSValue::Function(closure),
+                this_arg,
+                args_array,
+              )
+              match ok {
+                Bool(true) => ()
+                _ => return Bool(false)
+              }
+              i += 1
+            }
+            Bool(true)
+          }
+          _ => Bool(false)
+        }
+      } else {
+        Bool(false)
+      }
+    "some" =>
+      if args.length() > 0 {
+        match args[0] {
+          JSValue::Function(closure) => {
+            let this_arg = if args.length() > 1 { args[1] } else { Undefined }
+            let mut i = 0
+            while i < len {
+              let args_array = [
+                arr.items[i],
+                JSValue::Number(i.to_double()),
+                JSValue::Array(arr),
+              ]
+              let ok = self.call_function(
+                JSValue::Function(closure),
+                this_arg,
+                args_array,
+              )
+              match ok {
+                Bool(true) => return Bool(true)
+                _ => ()
+              }
+              i += 1
+            }
+            Bool(false)
+          }
+          _ => Bool(false)
+        }
+      } else {
+        Bool(false)
       }
     "find" =>
       if args.length() > 0 {
         match args[0] {
           JSValue::Function(closure) => {
             let this_arg = if args.length() > 1 { args[1] } else { Undefined }
-            let len = arr.items.length()
             let mut i = 0
             while i < len {
-              if i < arr.items.length() {
-                let item = arr.items[i]
-                let args_array = [
-                  item,
-                  JSValue::Number(i.to_double()),
-                  JSValue::Array(arr),
-                ]
-                let found = self.call_function(
-                  JSValue::Function(closure),
-                  this_arg,
-                  args_array,
-                )
-                match found {
-                  Bool(true) => return item
-                  _ => ()
-                }
+              let item = arr.items[i]
+              let args_array = [
+                item,
+                JSValue::Number(i.to_double()),
+                JSValue::Array(arr),
+              ]
+              let found = self.call_function(
+                JSValue::Function(closure),
+                this_arg,
+                args_array,
+              )
+              match found {
+                Bool(true) => return item
+                _ => ()
               }
               i += 1
             }
@@ -2216,72 +3682,372 @@ fn JSInterpreter::array_method(
       } else {
         Undefined
       }
-    "slice" =>
+    "findIndex" =>
       if args.length() > 0 {
         match args[0] {
-          Array(arr) => {
-            let mut start = if args.length() > 1 {
-              match args[1] {
-                JSValue::Number(n) => {
-                  let si = n.to_int()
-                  if si < 0 {
-                    let len = arr.items.length()
-                    if -si > len {
-                      0
-                    } else {
-                      len + si
-                    }
-                  } else {
-                    si
-                  }
-                }
-                _ => 0
+          JSValue::Function(closure) => {
+            let this_arg = if args.length() > 1 { args[1] } else { Undefined }
+            let mut i = 0
+            while i < len {
+              let item = arr.items[i]
+              let args_array = [
+                item,
+                JSValue::Number(i.to_double()),
+                JSValue::Array(arr),
+              ]
+              let found = self.call_function(
+                JSValue::Function(closure),
+                this_arg,
+                args_array,
+              )
+              match found {
+                Bool(true) => return Number(i.to_double())
+                _ => ()
               }
-            } else {
-              0
+              i += 1
             }
-            let mut end = if args.length() > 2 {
-              match args[2] {
-                JSValue::Number(n) => {
-                  let ei = n.to_int()
-                  if ei < 0 {
-                    let len = arr.items.length()
-                    if -ei > len {
-                      0
-                    } else {
-                      len + ei
-                    }
-                  } else {
-                    ei
-                  }
-                }
-                _ => arr.items.length()
+            Number(-1.0)
+          }
+          _ => Number(-1.0)
+        }
+      } else {
+        Number(-1.0)
+      }
+    "findLast" =>
+      if args.length() > 0 {
+        match args[0] {
+          JSValue::Function(closure) => {
+            let this_arg = if args.length() > 1 { args[1] } else { Undefined }
+            let mut i = len - 1
+            while i >= 0 {
+              let item = arr.items[i]
+              let args_array = [
+                item,
+                JSValue::Number(i.to_double()),
+                JSValue::Array(arr),
+              ]
+              let found = self.call_function(
+                JSValue::Function(closure),
+                this_arg,
+                args_array,
+              )
+              match found {
+                Bool(true) => return item
+                _ => ()
               }
-            } else {
-              arr.items.length()
+              if i == 0 {
+                break
+              }
+              i = i - 1
             }
-            let len = arr.items.length()
-            if start < 0 {
-              start = 0
+            Undefined
+          }
+          _ => Undefined
+        }
+      } else {
+        Undefined
+      }
+    "findLastIndex" =>
+      if args.length() > 0 {
+        match args[0] {
+          JSValue::Function(closure) => {
+            let this_arg = if args.length() > 1 { args[1] } else { Undefined }
+            let mut i = len - 1
+            while i >= 0 {
+              let item = arr.items[i]
+              let args_array = [
+                item,
+                JSValue::Number(i.to_double()),
+                JSValue::Array(arr),
+              ]
+              let found = self.call_function(
+                JSValue::Function(closure),
+                this_arg,
+                args_array,
+              )
+              match found {
+                Bool(true) => return Number(i.to_double())
+                _ => ()
+              }
+              if i == 0 {
+                break
+              }
+              i = i - 1
             }
-            if end < 0 {
-              end = 0
+            Number(-1.0)
+          }
+          _ => Number(-1.0)
+        }
+      } else {
+        Number(-1.0)
+      }
+    "slice" => {
+      let mut start = if args.length() > 0 {
+        args[0].to_number().to_int()
+      } else {
+        0
+      }
+      let mut end = if args.length() > 1 {
+        args[1].to_number().to_int()
+      } else {
+        len
+      }
+      if start < 0 {
+        start = len + start
+        if start < 0 {
+          start = 0
+        }
+      }
+      if end < 0 {
+        end = len + end
+        if end < 0 {
+          end = 0
+        }
+      }
+      if start > len {
+        start = len
+      }
+      if end > len {
+        end = len
+      }
+      if end < start {
+        end = start
+      }
+      let result : Array[JSValue] = []
+      for i in start..<end {
+        result.push(arr.items[i])
+      }
+      js_array_from(result)
+    }
+    "concat" => {
+      let result : Array[JSValue] = arr.items.copy()
+      for arg in args {
+        match arg {
+          Array(other_arr) =>
+            for item in other_arr.items {
+              result.push(item)
             }
-            if start > len {
-              start = len
+          _ => result.push(arg)
+        }
+      }
+      js_array_from(result)
+    }
+    "splice" => {
+      let mut start = if args.length() > 0 {
+        args[0].to_number().to_int()
+      } else {
+        0
+      }
+      if start < 0 {
+        start = len + start
+        if start < 0 {
+          start = 0
+        }
+      }
+      if start > len {
+        start = len
+      }
+      let mut delete_count = if args.length() > 1 {
+        args[1].to_number().to_int()
+      } else {
+        len - start
+      }
+      if delete_count < 0 {
+        delete_count = 0
+      }
+      if delete_count > len - start {
+        delete_count = len - start
+      }
+      let removed : Array[JSValue] = []
+      for i in 0..<delete_count {
+        removed.push(arr.items[start + i])
+      }
+      let insert_items : Array[JSValue] = []
+      if args.length() > 2 {
+        for i in 2..<args.length() {
+          insert_items.push(args[i])
+        }
+      }
+      let new_items : Array[JSValue] = []
+      for i in 0..<start {
+        new_items.push(arr.items[i])
+      }
+      for item in insert_items {
+        new_items.push(item)
+      }
+      for i in (start + delete_count)..<len {
+        new_items.push(arr.items[i])
+      }
+      arr.items.clear()
+      for item in new_items {
+        arr.items.push(item)
+      }
+      arr.length = arr.items.length()
+      js_array_from(removed)
+    }
+    "toSpliced" => {
+      let mut start = if args.length() > 0 {
+        args[0].to_number().to_int()
+      } else {
+        0
+      }
+      if start < 0 {
+        start = len + start
+        if start < 0 {
+          start = 0
+        }
+      }
+      if start > len {
+        start = len
+      }
+      let mut delete_count = if args.length() > 1 {
+        args[1].to_number().to_int()
+      } else {
+        len - start
+      }
+      if delete_count < 0 {
+        delete_count = 0
+      }
+      if delete_count > len - start {
+        delete_count = len - start
+      }
+      let insert_items : Array[JSValue] = []
+      if args.length() > 2 {
+        for i in 2..<args.length() {
+          insert_items.push(args[i])
+        }
+      }
+      let new_items : Array[JSValue] = []
+      for i in 0..<start {
+        new_items.push(arr.items[i])
+      }
+      for item in insert_items {
+        new_items.push(item)
+      }
+      for i in (start + delete_count)..<len {
+        new_items.push(arr.items[i])
+      }
+      js_array_from(new_items)
+    }
+    "sort" => {
+      let compare_fn = if args.length() > 0 { args[0] } else { Undefined }
+      let mut i = 0
+      while i < len {
+        let mut j = i + 1
+        while j < len {
+          let order = match compare_fn {
+            Function(closure) => {
+              let res = self.call_function(
+                JSValue::Function(closure),
+                Undefined,
+                [arr.items[i], arr.items[j]],
+              )
+              let n = res.to_number()
+              if n.is_nan() {
+                0
+              } else if n < 0.0 {
+                -1
+              } else if n > 0.0 {
+                1
+              } else {
+                0
+              }
             }
-            if end > len {
-              end = len
+            _ => {
+              let a = arr.items[i].to_js_string()
+              let b = arr.items[j].to_js_string()
+              a.compare(b)
             }
-            if start > end {
-              let temp = start
-              start = end
-              end = temp
+          }
+          if order > 0 {
+            let tmp = arr.items[i]
+            arr.items[i] = arr.items[j]
+            arr.items[j] = tmp
+          }
+          j += 1
+        }
+        i += 1
+      }
+      JSValue::Array(arr)
+    }
+    "toSorted" => {
+      let compare_fn = if args.length() > 0 { args[0] } else { Undefined }
+      let new_items : Array[JSValue] = arr.items.copy()
+      let new_arr : JSArray = {
+        id: fresh_array_id(),
+        items: new_items,
+        props: [],
+        length: new_items.length(),
+        prototype: arr.prototype,
+      }
+      let _ = self.array_method(new_arr, "sort", [compare_fn])
+      JSValue::Array(new_arr)
+    }
+    "toReversed" => {
+      let result : Array[JSValue] = []
+      if len > 0 {
+        let mut i = len - 1
+        while i >= 0 {
+          result.push(arr.items[i])
+          if i == 0 {
+            break
+          }
+          i = i - 1
+        }
+      }
+      js_array_from(result)
+    }
+    "with" =>
+      if args.length() >= 2 {
+        let mut idx = args[0].to_number().to_int()
+        if idx < 0 {
+          idx = len + idx
+        }
+        if idx < 0 || idx >= len {
+          self.set_error_kind("RangeError", "Invalid array index")
+        } else {
+          let result : Array[JSValue] = arr.items.copy()
+          result[idx] = args[1]
+          js_array_from(result)
+        }
+      } else {
+        js_array_from(arr.items.copy())
+      }
+    "flat" => {
+      let depth = if args.length() > 0 { args[0].to_number().to_int() } else { 1 }
+      let result : Array[JSValue] = []
+      if depth <= 0 {
+        for item in arr.items {
+          result.push(item)
+        }
+      } else {
+        self.flatten_array_items(arr.items, depth, result)
+      }
+      js_array_from(result)
+    }
+    "flatMap" =>
+      if args.length() > 0 {
+        match args[0] {
+          JSValue::Function(closure) => {
+            let this_arg = if args.length() > 1 { args[1] } else { Undefined }
+            let mapped : Array[JSValue] = []
+            let mut i = 0
+            while i < len {
+              let args_array = [
+                arr.items[i],
+                JSValue::Number(i.to_double()),
+                JSValue::Array(arr),
+              ]
+              let value = self.call_function(
+                JSValue::Function(closure),
+                this_arg,
+                args_array,
+              )
+              mapped.push(value)
+              i += 1
             }
             let result : Array[JSValue] = []
-            for i in start..<end {
-              result.push(arr.items[i])
-            }
+            self.flatten_array_items(mapped, 1, result)
             js_array_from(result)
           }
           _ => js_new_array()
@@ -2289,50 +4055,88 @@ fn JSInterpreter::array_method(
       } else {
         js_new_array()
       }
-    "concat" =>
-      if args.length() > 0 {
-        match args[0] {
-          Array(arr) => {
-            let result : Array[JSValue] = arr.items.copy()
-            if args.length() > 1 {
-              match args[1] {
-                Array(other_arr) =>
-                  for item in other_arr.items {
-                    result.push(item)
-                  }
-                _ => result.push(args[1])
-              }
-            }
-            js_array_from(result)
-          }
-          _ => js_new_array()
+    "fill" => {
+      let value = if args.length() > 0 { args[0] } else { Undefined }
+      let mut start = if args.length() > 1 { args[1].to_number().to_int() } else { 0 }
+      let mut end = if args.length() > 2 { args[2].to_number().to_int() } else { len }
+      if start < 0 {
+        start = len + start
+        if start < 0 {
+          start = 0
         }
-      } else {
-        js_new_array()
       }
-    "unshift" =>
-      if args.length() > 0 {
-        match args[0] {
-          Array(arr) => {
-            let new_arr : Array[JSValue] = []
-            for i in 1..<args.length() {
-              new_arr.push(args[i])
-            }
-            for item in arr.items {
-              new_arr.push(item)
-            }
-            arr.items.clear()
-            for item in new_arr {
-              arr.items.push(item)
-            }
-            arr.length = arr.items.length()
-            JSValue::Number(arr.length.to_double())
-          }
-          _ => JSValue::Number(0)
+      if end < 0 {
+        end = len + end
+        if end < 0 {
+          end = 0
         }
-      } else {
-        JSValue::Number(0)
       }
+      if start > len {
+        start = len
+      }
+      if end > len {
+        end = len
+      }
+      for i in start..<end {
+        arr.items[i] = value
+      }
+      arr.length = arr.items.length()
+      JSValue::Array(arr)
+    }
+    "copyWithin" => {
+      let mut target = if args.length() > 0 { args[0].to_number().to_int() } else { 0 }
+      let mut start = if args.length() > 1 { args[1].to_number().to_int() } else { 0 }
+      let mut end = if args.length() > 2 { args[2].to_number().to_int() } else { len }
+      if target < 0 {
+        target = len + target
+      }
+      if start < 0 {
+        start = len + start
+      }
+      if end < 0 {
+        end = len + end
+      }
+      if target < 0 {
+        target = 0
+      }
+      if start < 0 {
+        start = 0
+      }
+      if end < 0 {
+        end = 0
+      }
+      if target > len {
+        target = len
+      }
+      if start > len {
+        start = len
+      }
+      if end > len {
+        end = len
+      }
+      let count = if end - start < len - target { end - start } else { len - target }
+      if count > 0 {
+        let temp : Array[JSValue] = []
+        for i in 0..<count {
+          temp.push(arr.items[start + i])
+        }
+        for i in 0..<count {
+          arr.items[target + i] = temp[i]
+        }
+      }
+      JSValue::Array(arr)
+    }
+    "at" => {
+      let mut idx = if args.length() > 0 { args[0].to_number().to_int() } else { 0 }
+      if idx < 0 {
+        idx = len + idx
+      }
+      if idx < 0 || idx >= len {
+        Undefined
+      } else {
+        arr.items[idx]
+      }
+    }
     _ => Undefined
   }
 }
@@ -2344,6 +4148,31 @@ fn JSInterpreter::call_native(
   this_arg : JSValue,
   args : Array[JSValue],
 ) -> JSValue {
+  if name.has_prefix("Array.prototype.") {
+    let method_name = (try { name[16:] } catch { _ => "" }).to_string()
+    match this_arg {
+      Array(arr) => return self.array_method(arr, method_name, args)
+      _ =>
+        return self.set_error_kind(
+          "TypeError",
+          "Array.prototype." + method_name + " called on non-array",
+        )
+    }
+  }
+  if name.has_prefix("String.prototype.") {
+    let method_name = (try { name[17:] } catch { _ => "" }).to_string()
+    match this_arg {
+      Undefined | Null =>
+        return self.set_error_kind(
+          "TypeError",
+          "String.prototype." + method_name + " called on null or undefined",
+        )
+      _ => {
+        let s = self.to_string_value(this_arg)
+        return self.string_method(s, method_name, args)
+      }
+    }
+  }
   match name {
     "Object" =>
       if args.length() == 0 {
@@ -2375,6 +4204,10 @@ fn JSInterpreter::call_native(
           None => Null
         }
         Function(closure) => match closure.object_proto {
+          Some(p) => p
+          None => Null
+        }
+        Array(arr) => match arr.prototype {
           Some(p) => p
           None => Null
         }
@@ -2698,6 +4531,10 @@ fn JSInterpreter::call_native(
       let msg = if args.length() > 0 { args[0].to_js_string() } else { "" }
       self.make_error_obj("ReferenceError", msg)
     }
+    "RangeError" => {
+      let msg = if args.length() > 0 { args[0].to_js_string() } else { "" }
+      self.make_error_obj("RangeError", msg)
+    }
     "Test262Error" => {
       let msg = if args.length() > 0 { args[0].to_js_string() } else { "" }
       self.make_error_obj("Test262Error", msg)
@@ -2743,6 +4580,7 @@ fn JSInterpreter::call_native(
             env: self.global_env,
             is_arrow: false,
             is_strict: self.is_strict_body(func.body, false),
+            is_generator: func.is_generator,
             props: [],
             object_proto: Some(self.function_proto),
           })
@@ -2819,6 +4657,7 @@ fn JSInterpreter::call_native(
         env: self.global_env,
         is_arrow: false,
         is_strict: false,
+        is_generator: false,
         props: [],
         object_proto: Some(self.function_proto),
       })
@@ -2835,6 +4674,13 @@ fn JSInterpreter::call_native(
       }
       self.set_function_name(bound, "bound " + target_name)
       bound
+    }
+    "Generator.prototype.next" => {
+      match self.get_generator_id(this_arg) {
+        Some(gen_id) => self.generator_next(gen_id)
+        None =>
+          self.set_error_kind("TypeError", "Generator.prototype.next called on non-generator")
+      }
     }
     "Array" => {
       if args.length() == 0 {
@@ -2998,6 +4844,91 @@ fn JSInterpreter::call_native(
           prim
         }
       }
+    "String.fromCharCode" => {
+      let mut out = ""
+      for arg in args {
+        let code = arg.to_number().to_int()
+        let unit = code.to_uint16()
+        let ch = unit.unsafe_to_char()
+        out = out + ch.to_string()
+      }
+      String(out)
+    }
+    "String.fromCodePoint" => {
+      let mut out = ""
+      for arg in args {
+        let code = arg.to_number().to_int()
+        if code < 0 || code > 0x10ffff {
+          return self.set_error_kind("RangeError", "Invalid code point")
+        }
+        let ch = code.unsafe_to_char()
+        out = out + ch.to_string()
+      }
+      String(out)
+    }
+    "RegExp" => {
+      let pattern_val = if args.length() > 0 { args[0] } else { String("") }
+      let flags = if args.length() > 1 { args[1].to_js_string() } else { "" }
+      if is_regexp(pattern_val) && flags == "" {
+        pattern_val
+      } else {
+        let pattern = pattern_val.to_js_string()
+        self.make_regexp(pattern, flags)
+      }
+    }
+    "RegExp.prototype.exec" => {
+      if not(is_regexp(this_arg)) {
+        return self.set_error_kind("TypeError", "RegExp.prototype.exec called on non-RegExp")
+      }
+      let input = if args.length() > 0 { self.to_string_value(args[0]) } else { "" }
+      let pattern = regexp_source(this_arg)
+      let flags = regexp_flags(this_arg)
+      let mut last_index = 0
+      if regexp_has_global(flags) {
+        match js_get_prop(this_arg, "lastIndex") {
+          Number(n) => last_index = n.to_int()
+          _ => last_index = 0
+        }
+      }
+      match regexp_exec_groups(pattern, flags, input, last_index) {
+        None => {
+          let _ = js_set_prop(this_arg, "lastIndex", Number(0.0))
+          Null
+        }
+        Some((start, end, groups)) => {
+          let arr = js_array_from(groups)
+          let _ = js_set_prop(arr, "index", Number(start.to_double()))
+          let _ = js_set_prop(arr, "input", String(input))
+          let _ = js_set_prop(this_arg, "lastIndex", Number(end.to_double()))
+          arr
+        }
+      }
+    }
+    "RegExp.prototype.test" => {
+      if not(is_regexp(this_arg)) {
+        return self.set_error_kind("TypeError", "RegExp.prototype.test called on non-RegExp")
+      }
+      let input = if args.length() > 0 { self.to_string_value(args[0]) } else { "" }
+      let pattern = regexp_source(this_arg)
+      let flags = regexp_flags(this_arg)
+      let mut last_index = 0
+      if regexp_has_global(flags) {
+        match js_get_prop(this_arg, "lastIndex") {
+          Number(n) => last_index = n.to_int()
+          _ => last_index = 0
+        }
+      }
+      match regexp_first_match(pattern, flags, input, last_index) {
+        None => {
+          let _ = js_set_prop(this_arg, "lastIndex", Number(0.0))
+          Bool(false)
+        }
+        Some((_start, end)) => {
+          let _ = js_set_prop(this_arg, "lastIndex", Number(end.to_double()))
+          Bool(true)
+        }
+      }
+    }
     "console.log" => {
       let parts : Array[String] = []
       for arg in args {
@@ -3075,15 +5006,51 @@ fn JSInterpreter::call_native(
       } else {
         Number(js_nan)
       }
+    "Math.cos" =>
+      if args.length() > 0 {
+        Number(@math.cos(args[0].to_number()))
+      } else {
+        Number(js_nan)
+      }
+    "Math.sin" =>
+      if args.length() > 0 {
+        Number(@math.sin(args[0].to_number()))
+      } else {
+        Number(js_nan)
+      }
+    "Math.tan" =>
+      if args.length() > 0 {
+        Number(@math.tan(args[0].to_number()))
+      } else {
+        Number(js_nan)
+      }
+    "Math.exp" =>
+      if args.length() > 0 {
+        Number(@math.exp(args[0].to_number()))
+      } else {
+        Number(js_nan)
+      }
+    "Math.log" =>
+      if args.length() > 0 {
+        Number(@math.ln(args[0].to_number()))
+      } else {
+        Number(js_nan)
+      }
     "Math.min" =>
       if args.length() == 0 {
-        Number(1.0e308) // Infinity
+        Number(1.0 / 0.0)
       } else if args.length() == 1 {
-        args[0]
+        Number(args[0].to_number())
       } else {
         let mut min_val = args[0].to_number()
+        if min_val.is_nan() {
+          return Number(min_val)
+        }
         for i in 1..<args.length() {
           let val = args[i].to_number()
+          if val.is_nan() {
+            return Number(val)
+          }
           if val < min_val {
             min_val = val
           }
@@ -3092,13 +5059,19 @@ fn JSInterpreter::call_native(
       }
     "Math.max" =>
       if args.length() == 0 {
-        Number(-1.0e308) // -Infinity
+        Number(-1.0 / 0.0)
       } else if args.length() == 1 {
-        args[0]
+        Number(args[0].to_number())
       } else {
         let mut max_val = args[0].to_number()
+        if max_val.is_nan() {
+          return Number(max_val)
+        }
         for i in 1..<args.length() {
           let val = args[i].to_number()
+          if val.is_nan() {
+            return Number(val)
+          }
           if val > max_val {
             max_val = val
           }
@@ -3187,6 +5160,35 @@ fn JSInterpreter::call_native(
       } else {
         Undefined
       }
+    "assert.throws" => {
+      if args.length() < 2 {
+        return self.set_error("assert.throws requires 2 args")
+      }
+      let expected = args[0]
+      let thunk = args[1]
+      match thunk {
+        Function(_) => ()
+        _ => return self.set_error_kind("TypeError", "assert.throws requires a function")
+      }
+      let _ = self.take_error()
+      let _ = self.call_function(thunk, Undefined, [])
+      match self.take_error() {
+        None => self.set_error("Expected an error to be thrown")
+        Some(e) => {
+          let expected_name = js_get_prop(expected, "name")
+          let actual_name = js_get_prop(e, "name")
+          match (expected_name, actual_name) {
+            (String(en), String(an)) =>
+              if en == an {
+                Undefined
+              } else {
+                self.set_error("Expected " + en + " but got " + an)
+              }
+            _ => Undefined
+          }
+        }
+      }
+    }
     "$DONOTEVALUATE" => {
       // This function should never be called in a passing test
       self.set_error("$DONOTEVALUATE was called")
@@ -3322,6 +5324,16 @@ fn JSInterpreter::new_instance(
       } else {
         js_array_from(args.copy())
       }
+    "RegExp" => {
+      let pattern_val = if args.length() > 0 { args[0] } else { String("") }
+      let flags = if args.length() > 1 { args[1].to_js_string() } else { "" }
+      if is_regexp(pattern_val) && flags == "" {
+        pattern_val
+      } else {
+        let pattern = pattern_val.to_js_string()
+        self.make_regexp(pattern, flags)
+      }
+    }
     "Object" => self.new_object()
     _ => {
       // カスタムクラスのコンストラクタを検索
@@ -3353,10 +5365,12 @@ pub fn JSInterpreter::run_module(
       env: self.global_env,
       is_arrow: false,
       is_strict: self.is_strict_body(func.body, false),
+      is_generator: func.is_generator,
       props: [],
       object_proto: Some(self.function_proto),
     })
     self.set_function_length(closure, param_names.length().to_double())
+    self.set_function_name(closure, func.name)
     let proto = self.new_object()
     let _ = js_set_prop(proto, "constructor", closure)
     let _ = js_define_data_prop(closure, "prototype", proto, true, false, true)
