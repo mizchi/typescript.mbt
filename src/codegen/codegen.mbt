@@ -316,6 +316,15 @@ fn CodeGenCtx::add_local(
 }
 
 ///|
+/// 一時ローカルを追加（名前解決には使わない）
+fn CodeGenCtx::add_temp_local(self : CodeGenCtx, type_ : @parser.TsType) -> UInt {
+  let idx = self.next_local
+  self.local_types.push(type_)
+  self.next_local += 1
+  idx
+}
+
+///|
 /// ローカル変数を検索
 fn CodeGenCtx::get_local(self : CodeGenCtx, name : String) -> LocalVar? {
   self.locals.get(name)
@@ -339,6 +348,8 @@ fn ts_type_to_valtype(t : @parser.TsType) -> @core.ValType {
     @parser.TsType::Int => I32
     @parser.TsType::Boolean => I32
     @parser.TsType::String_ => I32 // 文字列はメモリ上のポインタ
+    @parser.TsType::Array(_) => I32 // 配列はメモリ上のポインタ
+    @parser.TsType::Named(_) => I32 // struct 参照はポインタ
     @parser.TsType::Void => I32 // void は実際には使わない
     _ => F64 // デフォルトは f64
   }
@@ -552,14 +563,10 @@ fn compile_expr(
       raise CodeGenError(
         "comma operator is not supported in Wasm compiler (use interpreter)",
       )
-    @parser.TsExpr::PropAssignExpr(_, _, _) =>
-      raise CodeGenError(
-        "property assignment expression is not supported in Wasm compiler",
-      )
-    @parser.TsExpr::IndexAssignExpr(_, _, _) =>
-      raise CodeGenError(
-        "index assignment expression is not supported in Wasm compiler",
-      )
+    @parser.TsExpr::PropAssignExpr(obj, prop, value) =>
+      compile_prop_assign_expr(ctx, obj, prop, value)
+    @parser.TsExpr::IndexAssignExpr(arr, index, value) =>
+      compile_index_assign_expr(ctx, arr, index, value)
     @parser.TsExpr::BinOp(op, left, right) => compile_binop(ctx, op, left, right, expected_type)
     @parser.TsExpr::UnaryOp(op, operand) => compile_unaryop(ctx, op, operand, expected_type)
     @parser.TsExpr::Call(name, args) => compile_call(ctx, name, args, expected_type)
@@ -616,10 +623,14 @@ fn compile_expr(
       raise CodeGenError(
         "ObjectLit is not supported in Wasm compiler (use interpreter)",
       )
-    @parser.TsExpr::AssignExpr(_, _) =>
-      raise CodeGenError(
-        "AssignExpr is not supported in Wasm compiler (use interpreter)",
-      )
+    @parser.TsExpr::AssignExpr(name, value) =>
+      match ctx.get_local(name) {
+        Some(lvar) => {
+          compile_expr(ctx, value, lvar.type_)
+          ctx.emit(LocalTee(lvar.index))
+        }
+        None => raise CodeGenError("Undefined variable: \{name}")
+      }
     @parser.TsExpr::ArrowFunc(_, _) =>
       raise CodeGenError(
         "ArrowFunc is not supported in Wasm compiler (use interpreter)",
@@ -1213,6 +1224,56 @@ fn compile_prop_assign(
 }
 
 ///|
+/// プロパティへの代入式をコンパイル（値を返す）
+fn compile_prop_assign_expr(
+  ctx : CodeGenCtx,
+  obj : @parser.TsExpr,
+  prop : String,
+  value : @parser.TsExpr,
+) -> Unit raise CodeGenError {
+  let obj_type = infer_type(ctx, obj)
+  match obj_type {
+    @parser.TsType::Named(type_name) =>
+      match ctx.interfaces.get(type_name) {
+        Some(fields) =>
+          match field_offset(fields, prop) {
+            Some(offset) =>
+              match field_type(fields, prop) {
+                Some(ft) => {
+                  let obj_local = ctx.add_temp_local(@parser.TsType::Int)
+                  let val_local = ctx.add_temp_local(ft)
+                  // obj を先に評価
+                  compile_expr(ctx, obj, obj_type)
+                  ctx.emit(LocalSet(obj_local))
+                  // value を評価
+                  compile_expr(ctx, value, ft)
+                  ctx.emit(LocalSet(val_local))
+                  // ストア
+                  ctx.emit(LocalGet(obj_local))
+                  ctx.emit(I32Const(offset.reinterpret_as_uint()))
+                  ctx.emit(I32Add)
+                  ctx.emit(LocalGet(val_local))
+                  if is_f64_type(ft) {
+                    ctx.emit(F64Store(3U, 0U, 0U))
+                  } else {
+                    ctx.emit(I32Store(2U, 0U, 0U))
+                  }
+                  // 値を返す
+                  ctx.emit(LocalGet(val_local))
+                  return
+                }
+                None => ()
+              }
+            None => ()
+          }
+        None => ()
+      }
+    _ => ()
+  }
+  raise CodeGenError("Cannot assign to property: \{prop}")
+}
+
+///|
 /// 配列要素への代入をコンパイル
 fn compile_index_assign(
   ctx : CodeGenCtx,
@@ -1243,6 +1304,53 @@ fn compile_index_assign(
   } else {
     ctx.emit(I32Store(2U, 0U, 0U))
   }
+}
+
+///|
+/// 配列要素への代入式をコンパイル（値を返す）
+fn compile_index_assign_expr(
+  ctx : CodeGenCtx,
+  arr : @parser.TsExpr,
+  index : @parser.TsExpr,
+  value : @parser.TsExpr,
+) -> Unit raise CodeGenError {
+  let arr_type = infer_type(ctx, arr)
+  let elem_type = match arr_type {
+    @parser.TsType::Array(t) => t
+    _ => @parser.TsType::Number
+  }
+  let elem_sz = element_size(elem_type)
+  let arr_local = ctx.add_temp_local(@parser.TsType::Int)
+  let idx_local = ctx.add_temp_local(@parser.TsType::Int)
+  let val_local = ctx.add_temp_local(elem_type)
+
+  // arr -> index -> value の順で評価
+  compile_expr(ctx, arr, arr_type)
+  ctx.emit(LocalSet(arr_local))
+  compile_expr(ctx, index, @parser.TsType::Int)
+  ctx.emit(LocalSet(idx_local))
+  compile_expr(ctx, value, elem_type)
+  ctx.emit(LocalSet(val_local))
+
+  // アドレス計算: arr + 4 + index * elem_size
+  ctx.emit(LocalGet(arr_local))
+  ctx.emit(I32Const(4U))
+  ctx.emit(I32Add)
+  ctx.emit(LocalGet(idx_local))
+  ctx.emit(I32Const(elem_sz.reinterpret_as_uint()))
+  ctx.emit(I32Mul)
+  ctx.emit(I32Add)
+
+  // 値をストア
+  ctx.emit(LocalGet(val_local))
+  if is_f64_type(elem_type) {
+    ctx.emit(F64Store(3U, 0U, 0U))
+  } else {
+    ctx.emit(I32Store(2U, 0U, 0U))
+  }
+
+  // 値を返す
+  ctx.emit(LocalGet(val_local))
 }
 
 ///|
