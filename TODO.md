@@ -17,3 +17,13 @@
 7. Expand test262 harness includes (propertyHelper.js, isConstructor.js, and friends) to reduce SKIPs.
 8. Parser coverage for remaining syntax as needed: `??`, `?.`, class, modules, generators, async/await.
 9. AnnexB Date `getYear`/`setYear` and other low-priority built-ins only if TS needs them.
+
+## Statements coverage gaps (parser/runtime)
+
+- Missing statements: `with`, `debugger`, `import/export`.
+- Labeled statements implemented; validate semantics against test262.
+- `for await...of` is unsupported (no `await` keyword).
+
+## Statements implementation order (suggested)
+
+1. Add `debugger` (no-op) and decide `with` (likely unsupported).

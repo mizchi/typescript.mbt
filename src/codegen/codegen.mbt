@@ -1944,6 +1944,7 @@ fn compile_stmt(
         compile_stmt(ctx, stmt, return_type)
       }
     }
+    @parser.TsStmt::Label(_, inner) => compile_stmt(ctx, inner, return_type)
     @parser.TsStmt::Return(Some(expr)) => {
       compile_expr(ctx, expr, return_type)
       ctx.emit(Return)
@@ -1956,16 +1957,29 @@ fn compile_stmt(
     @parser.TsStmt::If(cond, then_block, else_block) =>
       compile_if(ctx, cond, then_block, else_block, return_type)
     @parser.TsStmt::While(cond, body) => compile_while(ctx, cond, body, return_type)
+    @parser.TsStmt::Switch(_, _) =>
+      raise CodeGenError("switch is not supported in Wasm compiler")
     @parser.TsStmt::For(init, cond, update, body) =>
       compile_for(ctx, init, cond, update, body, return_type)
     @parser.TsStmt::ForOf(kind, binding, var_type, iterable, body) =>
       compile_for_of(ctx, kind, binding, var_type, iterable, body, return_type)
-    Break =>
-      // loop block
-      ctx.emit(Br((ctx.loop_depth * 2 - 1).reinterpret_as_uint()))
-    Continue =>
-      // loop head
-      ctx.emit(Br(((ctx.loop_depth - 1) * 2).reinterpret_as_uint()))
+    @parser.TsStmt::ForIn(_, _, _, _, _) =>
+      raise CodeGenError("for-in is not supported in Wasm compiler")
+    @parser.TsStmt::Break(label) =>
+      match label {
+        None =>
+          // loop block
+          ctx.emit(Br((ctx.loop_depth * 2 - 1).reinterpret_as_uint()))
+        Some(_) => raise CodeGenError("labeled break is not supported in Wasm compiler")
+      }
+    @parser.TsStmt::Continue(label) =>
+      match label {
+        None =>
+          // loop head
+          ctx.emit(Br(((ctx.loop_depth - 1) * 2).reinterpret_as_uint()))
+        Some(_) =>
+          raise CodeGenError("labeled continue is not supported in Wasm compiler")
+      }
   }
 }
 

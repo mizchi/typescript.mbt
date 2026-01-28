@@ -720,3 +720,51 @@ test "interpreter: for...of with break" {
     _ => fail("expected Number")
   }
 }
+
+///|
+test "interpreter: labeled break in nested loops" {
+  let interp = JSInterpreter::new()
+  let result = interp.run(
+    (
+      #|function main() {
+      #|  let sum = 0;
+      #|  outer: for (let i = 0; i < 3; i++) {
+      #|    for (let j = 0; j < 3; j++) {
+      #|      sum += 1;
+      #|      break outer;
+      #|    }
+      #|  }
+      #|  return sum;
+      #|}
+    ),
+  )
+  match result {
+    Number(n) => assert_eq(n, 1.0)
+    _ => fail("expected Number")
+  }
+}
+
+///|
+test "interpreter: labeled continue in nested loops" {
+  let interp = JSInterpreter::new()
+  let result = interp.run(
+    (
+      #|function main() {
+      #|  let sum = 0;
+      #|  outer: for (let i = 0; i < 3; i++) {
+      #|    for (let j = 0; j < 3; j++) {
+      #|      if (j == 1) {
+      #|        continue outer;
+      #|      }
+      #|      sum += 1;
+      #|    }
+      #|  }
+      #|  return sum;
+      #|}
+    ),
+  )
+  match result {
+    Number(n) => assert_eq(n, 3.0)
+    _ => fail("expected Number")
+  }
+}

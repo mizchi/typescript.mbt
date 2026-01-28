@@ -703,6 +703,7 @@ fn collect_decl_names_from_stmt(
       for inner in block.stmts {
         collect_decl_names_from_stmt(inner, names)
       }
+    @parser.TsStmt::Label(_, inner) => collect_decl_names_from_stmt(inner, names)
     @parser.TsStmt::If(_, then_block, else_block) => {
       for inner in then_block.stmts {
         collect_decl_names_from_stmt(inner, names)
@@ -728,7 +729,22 @@ fn collect_decl_names_from_stmt(
         collect_decl_names_from_stmt(inner, names)
       }
     }
+    @parser.TsStmt::Switch(_, cases) => {
+      for case_ in cases {
+        for inner in case_.body.stmts {
+          collect_decl_names_from_stmt(inner, names)
+        }
+      }
+    }
     @parser.TsStmt::ForOf(kind, binding, _, _, body) => {
+      if kind != @parser.TsForOfKind::Assign {
+        collect_binding_names(binding, names)
+      }
+      for inner in body.stmts {
+        collect_decl_names_from_stmt(inner, names)
+      }
+    }
+    @parser.TsStmt::ForIn(kind, binding, _, _, body) => {
       if kind != @parser.TsForOfKind::Assign {
         collect_binding_names(binding, names)
       }
@@ -880,6 +896,392 @@ fn JSInterpreter::apply_for_of_binding(
 }
 
 ///|
+fn JSInterpreter::collect_for_in_keys(
+  self : JSInterpreter,
+  original : JSValue,
+  target : JSValue,
+) -> Array[String] {
+  let keys : Array[String] = []
+  let seen : Array[String] = []
+  fn push_key(keys : Array[String], seen : Array[String], key : String) -> Unit {
+    if not(contains_key(seen, key)) {
+      keys.push(key)
+      seen.push(key)
+    }
+  }
+  match original {
+    String(s) =>
+      for i in 0..<s.length() {
+        push_key(keys, seen, i.to_string())
+      }
+    _ => ()
+  }
+  let mut current : JSValue? = Some(target)
+  while current is Some(obj) {
+    match obj {
+      Array(arr) => {
+        for i in 0..<arr.items.length() {
+          if arr.present[i] {
+            push_key(keys, seen, i.to_string())
+          }
+        }
+        for prop in arr.props {
+          if prop.enumerable {
+            push_key(keys, seen, prop.key)
+          }
+        }
+      }
+      Object(map) =>
+        for prop in map.props {
+          if prop.enumerable {
+            push_key(keys, seen, prop.key)
+          }
+        }
+      Function(closure) =>
+        for prop in closure.props {
+          if prop.enumerable {
+            push_key(keys, seen, prop.key)
+          }
+        }
+      String(s) =>
+        for i in 0..<s.length() {
+          push_key(keys, seen, i.to_string())
+        }
+      _ => ()
+    }
+    current = self.get_proto(obj)
+  }
+  keys
+}
+
+///|
+fn loop_label_matches(loop_label : String?, signal_label : String?) -> Bool {
+  match signal_label {
+    None => true
+    Some(lbl) =>
+      match loop_label {
+        Some(loop_lbl) => loop_lbl == lbl
+        None => false
+      }
+  }
+}
+
+///|
+fn JSInterpreter::exec_while_loop(
+  self : JSInterpreter,
+  cond : @parser.TsExpr,
+  body : @parser.TsBlock,
+  env : JSEnv,
+  loop_label : String?,
+) -> JSValue? {
+  while self.eval_expr(cond, env).to_boolean() {
+    match self.peek_error() {
+      Some(err) => return Some(err)
+      None => ()
+    }
+    self.tick()
+    match self.peek_error() {
+      Some(err) => return Some(err)
+      None => ()
+    }
+    match self.exec_block(body, env) {
+      Some(BreakSignal(label)) =>
+        if loop_label_matches(loop_label, label) {
+          break
+        } else {
+          return Some(BreakSignal(label))
+        }
+      Some(ContinueSignal(label)) =>
+        if loop_label_matches(loop_label, label) {
+          continue
+        } else {
+          return Some(ContinueSignal(label))
+        }
+      Some(val) => return Some(val)
+      None => ()
+    }
+  }
+  None
+}
+
+///|
+fn JSInterpreter::exec_for_loop(
+  self : JSInterpreter,
+  init : @parser.TsStmt?,
+  cond : @parser.TsExpr?,
+  update : @parser.TsStmt?,
+  body : @parser.TsBlock,
+  env : JSEnv,
+  loop_label : String?,
+) -> JSValue? {
+  // initialize
+  match init {
+    Some(init_stmt) =>
+      match self.exec_stmt(init_stmt, env) {
+        Some(val) => return Some(val)
+        None => ()
+      }
+    None => ()
+  }
+  // loop
+  while (match cond {
+          Some(c) => self.eval_expr(c, env).to_boolean()
+          None => true
+        }) {
+    match self.peek_error() {
+      Some(err) => return Some(err)
+      None => ()
+    }
+    self.tick()
+    match self.peek_error() {
+      Some(err) => return Some(err)
+      None => ()
+    }
+    match self.exec_block(body, env) {
+      Some(BreakSignal(label)) =>
+        if loop_label_matches(loop_label, label) {
+          break
+        } else {
+          return Some(BreakSignal(label))
+        }
+      Some(ContinueSignal(label)) =>
+        if loop_label_matches(loop_label, label) {
+          match update {
+            Some(u) =>
+              match self.exec_stmt(u, env) {
+                Some(val) => return Some(val)
+                None => ()
+              }
+            None => ()
+          }
+          continue
+        } else {
+          return Some(ContinueSignal(label))
+        }
+      Some(val) => return Some(val)
+      None => ()
+    }
+    match update {
+      Some(u) =>
+        match self.exec_stmt(u, env) {
+          Some(val) => return Some(val)
+          None => ()
+        }
+      None => ()
+    }
+  }
+  None
+}
+
+///|
+fn JSInterpreter::exec_for_of_loop(
+  self : JSInterpreter,
+  kind : @parser.TsForOfKind,
+  binding : @parser.TsBinding,
+  iterable : @parser.TsExpr,
+  body : @parser.TsBlock,
+  env : JSEnv,
+  loop_label : String?,
+) -> JSValue? {
+  let iter_val = self.eval_expr(iterable, env)
+  match self.peek_error() {
+    Some(err) => return Some(err)
+    None => ()
+  }
+  match self.get_iterator(iter_val) {
+    Some(iterator) => {
+      while true {
+        self.tick()
+        match self.peek_error() {
+          Some(err) => return Some(err)
+          None => ()
+        }
+        let next_method = self.get_prop_value(iterator, "next")
+        match self.peek_error() {
+          Some(err) => return Some(err)
+          None => ()
+        }
+        let next_val = self.call_function(next_method, iterator, [])
+        match self.peek_error() {
+          Some(err) => return Some(err)
+          None => ()
+        }
+        let done = self.get_prop_value(next_val, "done").to_boolean()
+        if done {
+          break
+        }
+        let value = self.get_prop_value(next_val, "value")
+        self.apply_for_of_binding(kind, binding, value, env)
+        match self.peek_error() {
+          Some(err) => {
+            self.iterator_close_on_error(iterator)
+            return Some(err)
+          }
+          None => ()
+        }
+        match self.exec_block(body, env) {
+          Some(BreakSignal(label)) =>
+            if loop_label_matches(loop_label, label) {
+              self.iterator_close(iterator)
+              break
+            } else {
+              self.iterator_close(iterator)
+              return Some(BreakSignal(label))
+            }
+          Some(ContinueSignal(label)) =>
+            if loop_label_matches(loop_label, label) {
+              continue
+            } else {
+              self.iterator_close(iterator)
+              return Some(ContinueSignal(label))
+            }
+          Some(val) => {
+            match self.peek_error() {
+              Some(_) => self.iterator_close_on_error(iterator)
+              None => self.iterator_close(iterator)
+            }
+            return Some(val)
+          }
+          None => ()
+        }
+      }
+    }
+    None =>
+      match iter_val {
+        Array(arr) => {
+          let arr_val = JSValue::Array(arr)
+          let mut idx = 0
+          while idx < arr.length {
+            self.tick()
+            match self.peek_error() {
+              Some(err) => return Some(err)
+              None => ()
+            }
+            let item = self.get_prop_value(arr_val, idx.to_string())
+            self.apply_for_of_binding(kind, binding, item, env)
+            match self.peek_error() {
+              Some(err) => return Some(err)
+              None => ()
+            }
+            match self.exec_block(body, env) {
+              Some(BreakSignal(label)) =>
+                if loop_label_matches(loop_label, label) {
+                  break
+                } else {
+                  return Some(BreakSignal(label))
+                }
+              Some(ContinueSignal(label)) =>
+                if loop_label_matches(loop_label, label) {
+                  idx += 1
+                  continue
+                } else {
+                  return Some(ContinueSignal(label))
+                }
+              Some(val) => return Some(val)
+              None => ()
+            }
+            idx += 1
+          }
+        }
+        String(s) => {
+          let mut idx = 0
+          while idx < s.length() {
+            self.tick()
+            match self.peek_error() {
+              Some(err) => return Some(err)
+              None => ()
+            }
+            let char_str = try { s[idx:idx + 1].to_string() } catch { _ => "" }
+            self.apply_for_of_binding(kind, binding, String(char_str), env)
+            match self.peek_error() {
+              Some(err) => return Some(err)
+              None => ()
+            }
+            match self.exec_block(body, env) {
+              Some(BreakSignal(label)) =>
+                if loop_label_matches(loop_label, label) {
+                  break
+                } else {
+                  return Some(BreakSignal(label))
+                }
+              Some(ContinueSignal(label)) =>
+                if loop_label_matches(loop_label, label) {
+                  idx += 1
+                  continue
+                } else {
+                  return Some(ContinueSignal(label))
+                }
+              Some(val) => return Some(val)
+              None => ()
+            }
+            idx += 1
+          }
+        }
+        _ => ()
+      }
+  }
+  None
+}
+
+///|
+fn JSInterpreter::exec_for_in_loop(
+  self : JSInterpreter,
+  kind : @parser.TsForOfKind,
+  binding : @parser.TsBinding,
+  iterable : @parser.TsExpr,
+  body : @parser.TsBlock,
+  env : JSEnv,
+  loop_label : String?,
+) -> JSValue? {
+  let iter_val = self.eval_expr(iterable, env)
+  match self.peek_error() {
+    Some(err) => return Some(err)
+    None => ()
+  }
+  let target = match iter_val {
+    Undefined | Null => {
+      let err = self.set_error_kind(
+        "TypeError",
+        "Cannot convert undefined or null to object",
+      )
+      return Some(err)
+    }
+    Bool(_) | Number(_) | String(_) => self.wrap_primitive(env, iter_val)
+    _ => iter_val
+  }
+  let keys = self.collect_for_in_keys(iter_val, target)
+  for key in keys {
+    self.tick()
+    match self.peek_error() {
+      Some(err) => return Some(err)
+      None => ()
+    }
+    self.apply_for_of_binding(kind, binding, String(key), env)
+    match self.peek_error() {
+      Some(err) => return Some(err)
+      None => ()
+    }
+    match self.exec_block(body, env) {
+      Some(BreakSignal(label)) =>
+        if loop_label_matches(loop_label, label) {
+          break
+        } else {
+          return Some(BreakSignal(label))
+        }
+      Some(ContinueSignal(label)) =>
+        if loop_label_matches(loop_label, label) {
+          continue
+        } else {
+          return Some(ContinueSignal(label))
+        }
+      Some(val) => return Some(val)
+      None => ()
+    }
+  }
+  None
+}
+
+///|
 // / statementrun(return valueReturnSome)
 pub fn JSInterpreter::exec_stmt(
   self : JSInterpreter,
@@ -922,6 +1324,34 @@ pub fn JSInterpreter::exec_stmt(
     }
     Empty => None
     @parser.TsStmt::Block(block) => self.exec_block(block, env)
+    @parser.TsStmt::Label(name, inner) => {
+      match inner {
+        @parser.TsStmt::While(cond, body) =>
+          self.exec_while_loop(cond, body, env, Some(name))
+        @parser.TsStmt::For(init, cond, update, body) =>
+          self.exec_for_loop(init, cond, update, body, env, Some(name))
+        @parser.TsStmt::ForOf(kind, binding, _, iterable, body) =>
+          self.exec_for_of_loop(kind, binding, iterable, body, env, Some(name))
+        @parser.TsStmt::ForIn(kind, binding, _, iterable, body) =>
+          self.exec_for_in_loop(kind, binding, iterable, body, env, Some(name))
+        _ =>
+          match self.exec_stmt(inner, env) {
+            Some(BreakSignal(label)) =>
+              match label {
+                Some(lbl) if lbl == name => None
+                _ => Some(BreakSignal(label))
+              }
+            Some(ContinueSignal(label)) =>
+              match label {
+                Some(lbl) if lbl == name =>
+                  Some(self.set_error_kind("SyntaxError", "Illegal continue statement"))
+                _ => Some(ContinueSignal(label))
+              }
+            Some(val) => Some(val)
+            None => None
+          }
+      }
+    }
     @parser.TsStmt::Assign(name, val_expr) => {
       let val = self.eval_expr(val_expr, env)
       match self.peek_error() {
@@ -1010,87 +1440,50 @@ pub fn JSInterpreter::exec_stmt(
         }
       }
     }
-    @parser.TsStmt::While(cond, body) => {
-      while self.eval_expr(cond, env).to_boolean() {
-        match self.peek_error() {
-          Some(err) => return Some(err)
-          None => ()
-        }
-        self.tick()
-        match self.peek_error() {
-          Some(err) => return Some(err)
-          None => ()
-        }
-        match self.exec_block(body, env) {
-          Some(BreakSignal) => break
-          Some(ContinueSignal) => continue
-          Some(val) => return Some(val)
-          None => ()
-        }
+    @parser.TsStmt::While(cond, body) => self.exec_while_loop(cond, body, env, None)
+    @parser.TsStmt::Switch(expr, cases) => {
+      let discr = self.eval_expr(expr, env)
+      match self.peek_error() {
+        Some(err) => return Some(err)
+        None => ()
       }
-      None
-    }
-    @parser.TsStmt::For(init, cond, update, body) => {
-      // initialize
-      match init {
-        Some(init_stmt) => {
-          match self.exec_stmt(init_stmt, env) {
+      let mut matched = false
+      for case_ in cases {
+        if not(matched) {
+          match case_.test_expr {
+            None => matched = true
+            Some(test_expr) => {
+              let test_val = self.eval_expr(test_expr, env)
+              match self.peek_error() {
+                Some(err) => return Some(err)
+                None => ()
+              }
+              match js_strict_eq(discr, test_val) {
+                Bool(true) => matched = true
+                _ => ()
+              }
+            }
+          }
+        }
+        if matched {
+          match self.exec_block(case_.body, env) {
+            Some(BreakSignal(label)) =>
+              match label {
+                None => return None
+                Some(_) => return Some(BreakSignal(label))
+              }
+            Some(ContinueSignal(label)) => return Some(ContinueSignal(label))
             Some(val) => return Some(val)
             None => ()
           }
-
-        }
-        None => ()
-      }
-      // loop
-      while (match cond {
-              Some(c) => self.eval_expr(c, env).to_boolean()
-              None => true
-            }) {
-        match self.peek_error() {
-          Some(err) => return Some(err)
-          None => ()
-        }
-        self.tick()
-        match self.peek_error() {
-          Some(err) => return Some(err)
-          None => ()
-        }
-        match self.exec_block(body, env) {
-          Some(BreakSignal) => break
-          Some(ContinueSignal) => {
-            // updaterun
-            match update {
-              Some(u) => {
-                match self.exec_stmt(u, env) {
-                  Some(val) => return Some(val)
-                  None => ()
-                }
-
-              }
-              None => ()
-            }
-            continue
-          }
-          Some(val) => return Some(val)
-          None => ()
-        }
-        // update
-        match update {
-          Some(u) => {
-            match self.exec_stmt(u, env) {
-              Some(val) => return Some(val)
-              None => ()
-            }
-
-          }
-          None => ()
         }
       }
       None
     }
-    Break => Some(BreakSignal)
-    Continue => Some(ContinueSignal)
+    @parser.TsStmt::For(init, cond, update, body) =>
+      self.exec_for_loop(init, cond, update, body, env, None)
+    Break(label) => Some(BreakSignal(label))
+    Continue(label) => Some(ContinueSignal(label))
     @parser.TsStmt::CompoundAssign(name, op, val_expr) => {
       let current = env.get(name)
       let val = self.eval_expr(val_expr, env)
@@ -1129,120 +1522,10 @@ pub fn JSInterpreter::exec_stmt(
       self.set_prop_value(obj, prop, val)
       None
     }
-    @parser.TsStmt::ForOf(kind, binding, _, iterable, body) => {
-      let iter_val = self.eval_expr(iterable, env)
-      match self.peek_error() {
-        Some(err) => return Some(err)
-        None => ()
-      }
-      match self.get_iterator(iter_val) {
-        Some(iterator) => {
-          while true {
-            self.tick()
-            match self.peek_error() {
-              Some(err) => return Some(err)
-              None => ()
-            }
-            let next_method = self.get_prop_value(iterator, "next")
-            match self.peek_error() {
-              Some(err) => return Some(err)
-              None => ()
-            }
-            let next_val = self.call_function(next_method, iterator, [])
-            match self.peek_error() {
-              Some(err) => return Some(err)
-              None => ()
-            }
-            let done = self.get_prop_value(next_val, "done").to_boolean()
-            if done {
-              break
-            }
-            let value = self.get_prop_value(next_val, "value")
-            self.apply_for_of_binding(kind, binding, value, env)
-            match self.peek_error() {
-              Some(err) => {
-                self.iterator_close_on_error(iterator)
-                return Some(err)
-              }
-              None => ()
-            }
-            match self.exec_block(body, env) {
-              Some(BreakSignal) => {
-                self.iterator_close(iterator)
-                break
-              }
-              Some(ContinueSignal) => continue
-              Some(val) => {
-                match self.peek_error() {
-                  Some(_) => self.iterator_close_on_error(iterator)
-                  None => self.iterator_close(iterator)
-                }
-                return Some(val)
-              }
-              None => ()
-            }
-          }
-        }
-        None =>
-          match iter_val {
-            Array(arr) => {
-              let arr_val = JSValue::Array(arr)
-              let mut idx = 0
-              while idx < arr.length {
-                self.tick()
-                match self.peek_error() {
-                  Some(err) => return Some(err)
-                  None => ()
-                }
-                let item = self.get_prop_value(arr_val, idx.to_string())
-                self.apply_for_of_binding(kind, binding, item, env)
-                match self.peek_error() {
-                  Some(err) => return Some(err)
-                  None => ()
-                }
-                match self.exec_block(body, env) {
-                  Some(BreakSignal) => break
-                  Some(ContinueSignal) => {
-                    idx += 1
-                    continue
-                  }
-                  Some(val) => return Some(val)
-                  None => ()
-                }
-                idx += 1
-              }
-            }
-            String(s) => {
-              let mut idx = 0
-              while idx < s.length() {
-                self.tick()
-                match self.peek_error() {
-                  Some(err) => return Some(err)
-                  None => ()
-                }
-                let char_str = try { s[idx:idx + 1].to_string() } catch { _ => "" }
-                self.apply_for_of_binding(kind, binding, String(char_str), env)
-                match self.peek_error() {
-                  Some(err) => return Some(err)
-                  None => ()
-                }
-                match self.exec_block(body, env) {
-                  Some(BreakSignal) => break
-                  Some(ContinueSignal) => {
-                    idx += 1
-                    continue
-                  }
-                  Some(val) => return Some(val)
-                  None => ()
-                }
-                idx += 1
-              }
-            }
-            _ => ()
-          }
-      }
-      None
-    }
+    @parser.TsStmt::ForOf(kind, binding, _, iterable, body) =>
+      self.exec_for_of_loop(kind, binding, iterable, body, env, None)
+    @parser.TsStmt::ForIn(kind, binding, _, iterable, body) =>
+      self.exec_for_in_loop(kind, binding, iterable, body, env, None)
   }
 }
 
@@ -1282,6 +1565,7 @@ fn JSInterpreter::hoist_stmt(self : JSInterpreter, stmt : @parser.TsStmt, env : 
         }
       }
     @parser.TsStmt::Block(block) => self.hoist_block(block, env)
+    @parser.TsStmt::Label(_, inner) => self.hoist_stmt(inner, env)
     @parser.TsStmt::If(_, then_block, else_block) => {
       self.hoist_block(then_block, env)
       match else_block {
@@ -1294,6 +1578,35 @@ fn JSInterpreter::hoist_stmt(self : JSInterpreter, stmt : @parser.TsStmt, env : 
       match init {
         Some(s) => self.hoist_stmt(s, env)
         None => ()
+      }
+      self.hoist_block(body, env)
+    }
+    @parser.TsStmt::Switch(_, cases) =>
+      for case_ in cases {
+        self.hoist_block(case_.body, env)
+      }
+    @parser.TsStmt::ForIn(kind, binding, _, _, body) => {
+      if kind != @parser.TsForOfKind::Assign {
+        let names : Array[String] = []
+        collect_binding_names(binding, names)
+        let is_const = kind == @parser.TsForOfKind::Const
+        for name in names {
+          if not(env.has(name)) {
+            match kind {
+              @parser.TsForOfKind::Var => env.define_var(name, Undefined)
+              @parser.TsForOfKind::Let | @parser.TsForOfKind::Const =>
+                env.define_uninitialized(name, is_const)
+              @parser.TsForOfKind::Assign => ()
+            }
+            match env.parent {
+              None => {
+                let global_obj = self.global_env.get("globalThis")
+                let _ = js_set_prop(global_obj, name, Undefined)
+              }
+              Some(_) => ()
+            }
+          }
+        }
       }
       self.hoist_block(body, env)
     }
@@ -3917,7 +4230,7 @@ fn JSInterpreter::exec_stmt_gen(
     @parser.TsStmt::Block(block) => self.exec_block_gen(block, env)
     _ =>
       match self.exec_stmt(stmt, env) {
-        Some(BreakSignal) | Some(ContinueSignal) => GenSignal::Continue
+        Some(BreakSignal(_)) | Some(ContinueSignal(_)) => GenSignal::Continue
         Some(val) => GenSignal::Return(val)
         None => GenSignal::Continue
       }

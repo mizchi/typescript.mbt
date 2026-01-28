@@ -132,10 +132,13 @@ fn Parser::consume_semicolon(self : Parser) -> Unit raise ParseError {
     | Return
     | Class
     | If
+    | Switch
     | While
     | For
     | Break
     | Continue
+    | Case
+    | Default
     | Try
     | Throw
     | Function
@@ -228,6 +231,18 @@ fn Parser::parse_binding_ident(self : Parser) -> String raise ParseError {
     Let => {
       let _ = self.advance()
       "let"
+    }
+    Switch => {
+      let _ = self.advance()
+      "switch"
+    }
+    Case => {
+      let _ = self.advance()
+      "case"
+    }
+    Default => {
+      let _ = self.advance()
+      "default"
     }
     k => raise ParseError("Expected identifier, got \{k}")
   }
@@ -338,6 +353,9 @@ fn Parser::parse_object_binding_key(self : Parser) -> String raise ParseError {
     In => "in"
     Do => "do"
     Try => "try"
+    Switch => "switch"
+    Case => "case"
+    Default => "default"
     Catch => "catch"
     Finally => "finally"
     Throw => "throw"
@@ -1760,6 +1778,7 @@ pub fn Parser::parse_stmt(self : Parser) -> TsStmt raise ParseError {
     Throw => self.parse_throw()
     Class => self.parse_class_decl()
     If => self.parse_if()
+    Switch => self.parse_switch()
     Do => self.parse_do_while()
     While => self.parse_while()
     For => self.parse_for()
@@ -1772,13 +1791,27 @@ pub fn Parser::parse_stmt(self : Parser) -> TsStmt raise ParseError {
     }
     Break => {
       let _ = self.advance()
+      let label = match self.peek().kind {
+        Ident(_) => match self.advance().kind {
+          Ident(name) => Some(name)
+          _ => None
+        }
+        _ => None
+      }
       self.consume_semicolon()
-      Break
+      Break(label)
     }
     Continue => {
       let _ = self.advance()
+      let label = match self.peek().kind {
+        Ident(_) => match self.advance().kind {
+          Ident(name) => Some(name)
+          _ => None
+        }
+        _ => None
+      }
       self.consume_semicolon()
-      Continue
+      Continue(label)
     }
     Semicolon => {
       let _ = self.advance()
@@ -1789,10 +1822,14 @@ pub fn Parser::parse_stmt(self : Parser) -> TsStmt raise ParseError {
       Block(block)
     }
     Ident(_) if self.peek_at(1).kind == Colon => {
-      let _ = self.advance()
+      let name = match self.advance().kind {
+        Ident(n) => n
+        _ => "<label>"
+      }
       let _ = self.expect(Colon)
       // statement
-      self.parse_stmt()
+      let stmt = self.parse_stmt()
+      Label(name, stmt)
     }
     _ =>
       // assignment or expressionstatement
@@ -2003,6 +2040,33 @@ fn Parser::parse_do_while(self : Parser) -> TsStmt raise ParseError {
 }
 
 ///|
+fn Parser::parse_switch(self : Parser) -> TsStmt raise ParseError {
+  let _ = self.expect(Switch)
+  let _ = self.expect(LParen)
+  let expr = self.parse_expr()
+  let _ = self.expect(RParen)
+  let _ = self.expect(LBrace)
+  let cases : Array[TsSwitchCase] = []
+  while not(self.check(RBrace)) {
+    let case_test : TsExpr? = if self.match_(Case) {
+      Some(self.parse_expr())
+    } else if self.match_(Default) {
+      None
+    } else {
+      raise ParseError("Expected case or default in switch")
+    }
+    let _ = self.expect(Colon)
+    let stmts : Array[TsStmt] = []
+    while not(self.check(Case)) && not(self.check(Default)) && not(self.check(RBrace)) {
+      stmts.push(self.parse_stmt())
+    }
+    cases.push({ test_expr: case_test, body: { stmts, } })
+  }
+  let _ = self.expect(RBrace)
+  Switch(expr, cases)
+}
+
+///|
 fn Parser::is_for_of_head(self : Parser) -> Bool {
   let mut i = 0
   let mut paren = 0
@@ -2055,11 +2119,15 @@ fn Parser::parse_for(self : Parser) -> TsStmt raise ParseError {
     let binding = self.parse_binding_pattern()
     // for...of / for...in check
     if self.check(Of) || self.check(In) {
+      let is_in = self.check(In)
       let _ = self.advance() // of/in
       let iterable = self.parse_expr()
       let _ = self.expect(RParen)
       let body = self.parse_block_or_stmt()
       // arrayelementtype ( Number)
+      if is_in {
+        return ForIn(kind, binding, Number, iterable, body)
+      }
       return ForOf(kind, binding, Number, iterable, body)
     }
     // regular for (let x: type = init; ...) or for (let x = init; ...)
@@ -2090,10 +2158,14 @@ fn Parser::parse_for(self : Parser) -> TsStmt raise ParseError {
     if self.is_for_of_head() {
       let binding = self.parse_assignment_binding_pattern()
       if self.check(Of) || self.check(In) {
+        let is_in = self.check(In)
         let _ = self.advance()
         let iterable = self.parse_expr()
         let _ = self.expect(RParen)
         let body = self.parse_block_or_stmt()
+        if is_in {
+          return ForIn(TsForOfKind::Assign, binding, Number, iterable, body)
+        }
         return ForOf(TsForOfKind::Assign, binding, Number, iterable, body)
       }
     }

@@ -217,17 +217,26 @@ pub(all) enum TsStmt {
   While(TsExpr, TsBlock)
   For(TsStmt?, TsExpr?, TsStmt?, TsBlock) // init, cond, update, body
   ForOf(TsForOfKind, TsBinding, TsType, TsExpr, TsBlock) // kind, binding, varType, iterable, body
+  ForIn(TsForOfKind, TsBinding, TsType, TsExpr, TsBlock) // kind, binding, varType, iterable, body
+  Switch(TsExpr, Array[TsSwitchCase])
+  Label(String, TsStmt)
   Block(TsBlock)
 
   // break/continue
-  Break
-  Continue
+  Break(String?)
+  Continue(String?)
 } derive(Show)
 
 ///|
 // / block (statementarray)
 pub(all) struct TsBlock {
   stmts : Array[TsStmt]
+} derive(Show)
+
+///|
+pub(all) struct TsSwitchCase {
+  test_expr : TsExpr?
+  body : TsBlock
 } derive(Show)
 
 ///|

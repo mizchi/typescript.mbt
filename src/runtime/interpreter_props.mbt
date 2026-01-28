@@ -593,6 +593,6 @@ fn JSInterpreter::json_stringify_value(
       }
       Some("{" + parts.join(",") + "}")
     }
-    BreakSignal | ContinueSignal => None
+    BreakSignal(_) | ContinueSignal(_) => None
   }
 }

@@ -21,6 +21,9 @@ pub enum TokenKind {
   Return
   If
   Else
+  Switch
+  Case
+  Default
   While
   Do
   For
@@ -697,6 +700,12 @@ fn Lexer::scan_ident(self : Lexer) -> TokenKind {
     If
   } else if s == "else" {
     Else
+  } else if s == "switch" {
+    Switch
+  } else if s == "case" {
+    Case
+  } else if s == "default" {
+    Default
   } else if s == "while" {
     While
   } else if s == "do" {

@@ -118,8 +118,8 @@ pub enum JSValue {
   Array(JSArray)
   Function(JSClosure)
   // internal
-  BreakSignal
-  ContinueSignal
+  BreakSignal(String?)
+  ContinueSignal(String?)
 } derive(Show)
 
 ///|
@@ -185,7 +185,7 @@ pub fn JSValue::tag(self : JSValue) -> JSTag {
     Object(_) => JSTag::Object
     Array(_) => JSTag::Array
     Function(_) => JSTag::Function
-    BreakSignal | ContinueSignal => JSTag::Undefined // internal
+    BreakSignal(_) | ContinueSignal(_) => JSTag::Undefined // internal
   }
 }
 
@@ -275,7 +275,7 @@ pub fn JSValue::to_boolean(self : JSValue) -> Bool {
     Object(_) => true
     Array(_) => true
     Function(_) => true
-    BreakSignal | ContinueSignal => false // internal
+    BreakSignal(_) | ContinueSignal(_) => false // internal
   }
 }
 
@@ -309,7 +309,7 @@ pub fn JSValue::to_number(self : JSValue) -> Double {
         _ => prim.to_number()
       }
     }
-    BreakSignal | ContinueSignal => js_nan // internal
+    BreakSignal(_) | ContinueSignal(_) => js_nan // internal
   }
 }
 
@@ -332,7 +332,7 @@ pub fn JSValue::to_js_string(self : JSValue) -> String {
       parts.join(",")
     }
     Function(_) => "[function]"
-    BreakSignal | ContinueSignal => "" // internal
+    BreakSignal(_) | ContinueSignal(_) => "" // internal
   }
 }
 
@@ -408,7 +408,7 @@ pub fn js_typeof(val : JSValue) -> JSValue {
       Object(_) => "object"
       Array(_) => "object"
     Function(_) => "function"
-    BreakSignal | ContinueSignal => "undefined" // internal
+    BreakSignal(_) | ContinueSignal(_) => "undefined" // internal
   },
   )
 }

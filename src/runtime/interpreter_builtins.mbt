@@ -2314,7 +2314,7 @@ fn JSInterpreter::call_native(
             }
           }
         }
-        BreakSignal | ContinueSignal => "Object"
+        BreakSignal(_) | ContinueSignal(_) => "Object"
       }
       String("[object " + tag + "]")
     }
