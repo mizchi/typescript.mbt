@@ -26,6 +26,10 @@ pub enum TokenKind {
   Default
   With
   Debugger
+  Import
+  Export
+  From
+  As
   While
   Do
   For
@@ -712,6 +716,14 @@ fn Lexer::scan_ident(self : Lexer) -> TokenKind {
     With
   } else if s == "debugger" {
     Debugger
+  } else if s == "import" {
+    Import
+  } else if s == "export" {
+    Export
+  } else if s == "from" {
+    From
+  } else if s == "as" {
+    As
   } else if s == "while" {
     While
   } else if s == "do" {

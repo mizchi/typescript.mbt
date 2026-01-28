@@ -389,6 +389,29 @@ test "parser: parse module with imports" {
 }
 
 ///|
+test "parser: parse module with import/export" {
+  let src =
+    #|import { a as b } from "mod";
+    #|export { b as c };
+    #|export function foo(): void {
+    #|}
+  let parser = Parser::from_source(src)
+  let m = parser.parse_module()
+  assert_eq(m.funcs.length(), 1)
+  assert_eq(m.funcs[0].name, "foo")
+}
+
+///|
+test "parser: parse export default function expr" {
+  let src =
+    #|export default function() {
+    #|}
+  let parser = Parser::from_source(src)
+  let m = parser.parse_module()
+  assert_eq(m.funcs.length(), 0)
+}
+
+///|
 test "parser: parse javascript without type annotations" {
   // type JavaScript
   let src =

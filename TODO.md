@@ -20,7 +20,7 @@
 
 ## Statements coverage gaps (parser/runtime)
 
-- Missing statements: `import/export`.
+- `import/export` are parsed but not executed/linked (module semantics missing).
 - Labeled statements implemented; validate semantics against test262.
 - `for await...of` is unsupported (no `await` keyword).
 

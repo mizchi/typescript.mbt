@@ -141,6 +141,8 @@ fn Parser::consume_semicolon(self : Parser) -> Unit raise ParseError {
     | Default
     | With
     | Debugger
+    | Import
+    | Export
     | Try
     | Throw
     | Function
@@ -253,6 +255,22 @@ fn Parser::parse_binding_ident(self : Parser) -> String raise ParseError {
     Debugger => {
       let _ = self.advance()
       "debugger"
+    }
+    Import => {
+      let _ = self.advance()
+      "import"
+    }
+    Export => {
+      let _ = self.advance()
+      "export"
+    }
+    From => {
+      let _ = self.advance()
+      "from"
+    }
+    As => {
+      let _ = self.advance()
+      "as"
     }
     k => raise ParseError("Expected identifier, got \{k}")
   }
@@ -368,6 +386,10 @@ fn Parser::parse_object_binding_key(self : Parser) -> String raise ParseError {
     Default => "default"
     With => "with"
     Debugger => "debugger"
+    Import => "import"
+    Export => "export"
+    From => "from"
+    As => "as"
     Catch => "catch"
     Finally => "finally"
     Throw => "throw"
@@ -2098,6 +2120,157 @@ fn Parser::parse_debugger(self : Parser) -> TsStmt raise ParseError {
 }
 
 ///|
+fn Parser::match_ident(self : Parser, name : String) -> Bool {
+  match self.peek().kind {
+    Ident(n) if n == name => {
+      let _ = self.advance()
+      true
+    }
+    _ => false
+  }
+}
+
+///|
+fn Parser::expect_from(self : Parser) -> Unit raise ParseError {
+  if self.match_(From) || self.match_ident("from") {
+    return
+  }
+  raise ParseError("Expected 'from' in import/export")
+}
+
+///|
+fn Parser::parse_import_specifiers(self : Parser) -> Unit raise ParseError {
+  while not(self.check(RBrace)) {
+    let _ = self.parse_binding_ident()
+    if self.match_(As) || self.match_ident("as") {
+      let _ = self.parse_binding_ident()
+    }
+    if self.match_(Comma) {
+      if self.check(RBrace) {
+        break
+      }
+      continue
+    }
+    break
+  }
+}
+
+///|
+fn Parser::parse_import_stmt(self : Parser) -> Unit raise ParseError {
+  let _ = self.expect(Import)
+  if self.match_(Type) || self.match_ident("type") {
+    // import type ...
+  }
+  match self.peek().kind {
+    Str(_) => {
+      let _ = self.advance()
+      self.consume_semicolon()
+      return
+    }
+    _ => ()
+  }
+  match self.peek().kind {
+    Ident(_) => {
+      let _ = self.advance()
+      if self.match_(Comma) {
+        // continue to namespace/named
+      } else {
+        self.expect_from()
+        let _ = self.expect_str_literal()
+        self.consume_semicolon()
+        return
+      }
+    }
+    _ => ()
+  }
+  if self.match_(Star) {
+    if not(self.match_(As) || self.match_ident("as")) {
+      raise ParseError("Expected 'as' in import namespace")
+    }
+    let _ = self.parse_binding_ident()
+  } else if self.match_(LBrace) {
+    self.parse_import_specifiers()
+    let _ = self.expect(RBrace)
+  }
+  self.expect_from()
+  let _ = self.expect_str_literal()
+  self.consume_semicolon()
+}
+
+///|
+fn Parser::expect_str_literal(self : Parser) -> String raise ParseError {
+  match self.advance().kind {
+    Str(s) => s
+    k => raise ParseError("Expected string literal, got \{k}")
+  }
+}
+
+///|
+fn Parser::parse_export_stmt(
+  self : Parser,
+  funcs : Array[TsFunc],
+  interfaces : Array[TsInterface],
+  imports : Array[TsImport],
+) -> Unit raise ParseError {
+  let _ = self.expect(Export)
+  if self.match_(Default) || self.match_ident("default") {
+    if self.check(Function) {
+      let func = self.parse_function_expr()
+      if func.name != "<anon>" {
+        funcs.push(func)
+      }
+      return
+    }
+    if self.check(Class) {
+      let _ = self.parse_class_decl()
+      return
+    }
+    let _ = self.parse_expr()
+    self.consume_semicolon()
+    return
+  }
+  if self.check(Function) {
+    funcs.push(self.parse_function())
+    return
+  }
+  if self.check(Interface) {
+    interfaces.push(self.parse_interface())
+    return
+  }
+  if self.check(Declare) {
+    imports.push(self.parse_import())
+    return
+  }
+  if self.match_(Star) {
+    if self.match_(As) || self.match_ident("as") {
+      let _ = self.parse_binding_ident()
+    }
+    self.expect_from()
+    let _ = self.expect_str_literal()
+    self.consume_semicolon()
+    return
+  }
+  if self.match_(LBrace) {
+    self.parse_import_specifiers()
+    let _ = self.expect(RBrace)
+    if self.match_(From) || self.match_ident("from") {
+      let _ = self.expect_str_literal()
+    }
+    self.consume_semicolon()
+    return
+  }
+  // export let/const/var/class/function (fallback)
+  if self.check(Class) {
+    let _ = self.parse_class_decl()
+    return
+  }
+  if self.check(Let) || self.check(Const) || self.check(Var) {
+    let _ = self.parse_stmt()
+    return
+  }
+  raise ParseError("Unsupported export statement")
+}
+///|
 fn Parser::is_for_of_head(self : Parser) -> Bool {
   let mut i = 0
   let mut paren = 0
@@ -2969,8 +3142,12 @@ pub fn Parser::parse_module(self : Parser) -> TsModule raise ParseError {
       interfaces.push(self.parse_interface())
     } else if self.check(Declare) {
       imports.push(self.parse_import())
+    } else if self.check(Import) {
+      self.parse_import_stmt()
+    } else if self.check(Export) {
+      self.parse_export_stmt(funcs, interfaces, imports)
     } else {
-      raise ParseError("Expected function, interface, or declare declaration")
+      raise ParseError("Expected function, interface, declare, import, or export declaration")
     }
   }
   { funcs, interfaces, imports }
