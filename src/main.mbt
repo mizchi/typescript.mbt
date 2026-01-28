@@ -466,6 +466,12 @@ async fn run_test262(test_path : String) -> Unit {
   let mut skipped = 0
 
   for i, path in files {
+    let _ =
+      @fs.write_file(
+        "test262.current.txt",
+        @utf8.encode(path),
+        create=0o644,
+      ) catch { _ => () }
     let content = @fs.read_file(path).text() catch {
       e => {
         failed += 1
@@ -520,6 +526,12 @@ async fn run_test262(test_path : String) -> Unit {
       }
       _ => passed += 1
     }
+    let _ =
+      @fs.write_file(
+        "test262.last_done.txt",
+        @utf8.encode(path),
+        create=0o644,
+      ) catch { _ => () }
     let done = i + 1
     if done % progress_interval == 0 || done == total_files {
       println(

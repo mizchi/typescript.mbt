@@ -118,6 +118,7 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   self.set_function_name(boolean_ctor, "Boolean")
   let _ = js_define_data_prop(boolean_ctor, "prototype", boolean_proto, true, false, true)
   let _ = js_set_prop(boolean_proto, "constructor", boolean_ctor)
+  let _ = js_set_prop(boolean_proto, "value", Bool(false))
   let bool_value_of = self.make_native("Boolean.prototype.valueOf")
   self.set_function_length(bool_value_of, 0.0)
   let _ = js_set_prop(boolean_proto, "valueOf", bool_value_of)
@@ -130,6 +131,7 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   self.set_function_name(number_ctor, "Number")
   let _ = js_define_data_prop(number_ctor, "prototype", number_proto, true, false, true)
   let _ = js_set_prop(number_proto, "constructor", number_ctor)
+  let _ = js_set_prop(number_proto, "value", Number(0.0))
   let num_value_of = self.make_native("Number.prototype.valueOf")
   self.set_function_length(num_value_of, 0.0)
   let _ = js_set_prop(number_proto, "valueOf", num_value_of)
@@ -144,6 +146,7 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   self.set_function_name(string_ctor, "String")
   let _ = js_define_data_prop(string_ctor, "prototype", string_proto, true, false, true)
   let _ = js_set_prop(string_proto, "constructor", string_ctor)
+  let _ = js_set_prop(string_proto, "value", String(""))
   let str_value_of = self.make_native("String.prototype.valueOf")
   self.set_function_length(str_value_of, 0.0)
   let _ = js_set_prop(string_proto, "valueOf", str_value_of)
@@ -228,6 +231,9 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let str_from_code_point = self.make_native("String.fromCodePoint")
   self.set_function_length(str_from_code_point, 1.0)
   let _ = js_set_prop(string_ctor, "fromCodePoint", str_from_code_point)
+  let str_iterator = self.make_native("String.prototype[@@iterator]")
+  self.set_function_length(str_iterator, 0.0)
+  let _ = js_set_prop(string_proto, "@@iterator", str_iterator)
   self.global_env.define_var("String", string_ctor)
   let _ = js_set_prop(global_obj, "String", string_ctor)
 
@@ -357,6 +363,9 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let array_at = self.make_native("Array.prototype.at")
   self.set_function_length(array_at, 1.0)
   let _ = js_set_prop(array_proto, "at", array_at)
+  let array_iterator = self.make_native("Array.prototype[@@iterator]")
+  self.set_function_length(array_iterator, 0.0)
+  let _ = js_set_prop(array_proto, "@@iterator", array_iterator)
   let is_array_fn = self.make_native("Array.isArray")
   self.set_function_length(is_array_fn, 1.0)
   let _ = js_set_prop(array_ctor, "isArray", is_array_fn)
@@ -462,6 +471,7 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let _ = js_set_prop(t262, "createRealm", self.make_native("$262.createRealm"))
   let html_dda = self.new_object()
   let _ = js_set_prop(html_dda, "__class", String("IsHTMLDDA"))
+  let _ = js_set_prop(html_dda, "$call", self.make_native("IsHTMLDDA"))
   let _ = js_set_prop(t262, "IsHTMLDDA", html_dda)
   self.global_env.define_var("$262", t262)
   let _ = js_set_prop(global_obj, "$262", t262)
@@ -483,6 +493,7 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let symbol_fn = self.make_native("Symbol")
   self.set_function_length(symbol_fn, 0.0)
   let _ = js_set_prop(symbol_fn, "hasInstance", String("@@hasInstance"))
+  let _ = js_set_prop(symbol_fn, "iterator", String("@@iterator"))
   self.global_env.define_var("Symbol", symbol_fn)
   let _ = js_set_prop(global_obj, "Symbol", symbol_fn)
 
@@ -494,74 +505,1394 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
 }
 
 ///|
+fn JSInterpreter::array_like_string_value(
+  _self : JSInterpreter,
+  receiver : JSValue,
+) -> String? {
+  match receiver {
+    String(s) => Some(s)
+    Object(_) | Function(_) =>
+      match js_get_prop(receiver, "value") {
+        String(s) => Some(s)
+        _ => None
+      }
+    _ => None
+  }
+}
+
+///|
+fn JSInterpreter::array_like_method(
+  self : JSInterpreter,
+  receiver : JSValue,
+  method_name : String,
+  args : Array[JSValue],
+) -> JSValue {
+  let str_value = self.array_like_string_value(receiver)
+  let len = self.array_like_length(receiver)
+  match self.peek_error() {
+    Some(err) => return err
+    None => ()
+  }
+  match method_name {
+    "join" => {
+      let sep = if args.length() > 0 { args[0].to_js_string() } else { "," }
+      let parts : Array[String] = []
+      for i in 0..<len {
+        let key = i.to_string()
+        let has_prop = js_has_prop(receiver, key)
+        let use_string =
+          match str_value {
+            Some(s) => not(has_prop) && i >= 0 && i < s.length()
+            None => false
+          }
+        if has_prop {
+          let value = self.get_prop_value(receiver, key)
+          parts.push(value.to_js_string())
+        } else if use_string {
+          match str_value {
+            Some(s) =>
+              parts.push(try { s[i:i + 1].to_string() } catch { _ => "" })
+            None => parts.push("")
+          }
+        } else {
+          parts.push("")
+        }
+      }
+      String(parts.join(sep))
+    }
+    "indexOf" => {
+      let target = if args.length() > 0 { args[0] } else { Undefined }
+      let mut start_idx = if args.length() > 1 {
+        args[1].to_number().to_int()
+      } else {
+        0
+      }
+      if start_idx < 0 {
+        start_idx = len + start_idx
+        if start_idx < 0 {
+          start_idx = 0
+        }
+      }
+      if start_idx >= len {
+        return Number(-1.0)
+      }
+      for i in start_idx..<len {
+        let key = i.to_string()
+        let has_prop = js_has_prop(receiver, key)
+        let use_string =
+          match str_value {
+            Some(s) => not(has_prop) && i >= 0 && i < s.length()
+            None => false
+          }
+        if not(has_prop) && not(use_string) {
+          continue
+        }
+        let value =
+          if has_prop {
+            self.get_prop_value(receiver, key)
+          } else {
+            match str_value {
+              Some(s) =>
+                String(try { s[i:i + 1].to_string() } catch { _ => "" })
+              None => Undefined
+            }
+          }
+        match js_strict_eq(value, target) {
+          Bool(true) => return Number(i.to_double())
+          _ => ()
+        }
+      }
+      Number(-1.0)
+    }
+    "lastIndexOf" => {
+      let target = if args.length() > 0 { args[0] } else { Undefined }
+      let mut from_idx = if args.length() > 1 {
+        args[1].to_number().to_int()
+      } else {
+        len - 1
+      }
+      if from_idx < 0 {
+        from_idx = len + from_idx
+      }
+      if from_idx >= len {
+        from_idx = len - 1
+      }
+      if from_idx < 0 {
+        return Number(-1.0)
+      }
+      let mut i = from_idx
+      while i >= 0 {
+        let key = i.to_string()
+        let has_prop = js_has_prop(receiver, key)
+        let use_string =
+          match str_value {
+            Some(s) => not(has_prop) && i >= 0 && i < s.length()
+            None => false
+          }
+        if has_prop || use_string {
+          let value =
+            if has_prop {
+              self.get_prop_value(receiver, key)
+            } else {
+              match str_value {
+                Some(s) =>
+                  String(try { s[i:i + 1].to_string() } catch { _ => "" })
+                None => Undefined
+              }
+            }
+          match js_strict_eq(value, target) {
+            Bool(true) => return Number(i.to_double())
+            _ => ()
+          }
+        }
+        if i == 0 {
+          break
+        }
+        i = i - 1
+      }
+      Number(-1.0)
+    }
+    "includes" => {
+      let target = if args.length() > 0 { args[0] } else { Undefined }
+      let mut start_idx = if args.length() > 1 {
+        args[1].to_number().to_int()
+      } else {
+        0
+      }
+      if start_idx < 0 {
+        start_idx = len + start_idx
+        if start_idx < 0 {
+          start_idx = 0
+        }
+      }
+      for i in start_idx..<len {
+        let key = i.to_string()
+        let value =
+          if js_has_prop(receiver, key) {
+            self.get_prop_value(receiver, key)
+          } else {
+            match str_value {
+              Some(s) if i >= 0 && i < s.length() =>
+                String(try { s[i:i + 1].to_string() } catch { _ => "" })
+              _ => Undefined
+            }
+          }
+        if self.same_value_zero(value, target) {
+          return Bool(true)
+        }
+      }
+      Bool(false)
+    }
+    "map" =>
+      if args.length() == 0 {
+        self.set_error_kind("TypeError", "Array.prototype.map requires a callback")
+      } else {
+        let callback = args[0]
+        if not(self.is_callable(callback)) {
+          return self.set_error_kind(
+            "TypeError",
+            "Array.prototype.map requires a callback",
+          )
+        }
+        let this_arg = if args.length() > 1 { args[1] } else { Undefined }
+        let map_len = len
+        let out = js_new_array()
+        match out {
+          Array(out_arr) => {
+            let mut i = 0
+            while i < map_len {
+              let key = i.to_string()
+              let has_prop = js_has_prop(receiver, key)
+              let use_string =
+                match str_value {
+                  Some(s) => not(has_prop) && i >= 0 && i < s.length()
+                  None => false
+                }
+              if has_prop || use_string {
+                let value =
+                  if has_prop {
+                    self.get_prop_value(receiver, key)
+                  } else {
+                    match str_value {
+                      Some(s) =>
+                        String(try { s[i:i + 1].to_string() } catch { _ => "" })
+                      None => Undefined
+                    }
+                  }
+                let args_array = [
+                  value,
+                  Number(i.to_double()),
+                  receiver,
+                ]
+                let mapped = self.call_function(callback, this_arg, args_array)
+                out_arr.items.push(mapped)
+                out_arr.present.push(true)
+              } else {
+                out_arr.items.push(Undefined)
+                out_arr.present.push(false)
+              }
+              i += 1
+            }
+            out_arr.length = map_len
+          }
+          _ => ()
+        }
+        out
+      }
+    "filter" =>
+      if args.length() == 0 {
+        self.set_error_kind("TypeError", "Array.prototype.filter requires a callback")
+      } else {
+        let callback = args[0]
+        if not(self.is_callable(callback)) {
+          return self.set_error_kind(
+            "TypeError",
+            "Array.prototype.filter requires a callback",
+          )
+        }
+        let this_arg = if args.length() > 1 { args[1] } else { Undefined }
+        let result : Array[JSValue] = []
+        let mut i = 0
+        while i < len {
+          let key = i.to_string()
+          let has_prop = js_has_prop(receiver, key)
+          let use_string =
+            match str_value {
+              Some(s) => not(has_prop) && i >= 0 && i < s.length()
+              None => false
+            }
+          if has_prop || use_string {
+            let item =
+              if has_prop {
+                self.get_prop_value(receiver, key)
+              } else {
+                match str_value {
+                  Some(s) =>
+                    String(try { s[i:i + 1].to_string() } catch { _ => "" })
+                  None => Undefined
+                }
+              }
+            let args_array = [
+              item,
+              Number(i.to_double()),
+              receiver,
+            ]
+            let filtered = self.call_function(
+              callback,
+              this_arg,
+              args_array,
+            )
+            if filtered.to_boolean() {
+              result.push(item)
+            }
+          }
+          i += 1
+        }
+        js_array_from(result)
+      }
+    "reduce" =>
+      if args.length() == 0 {
+        self.set_error_kind("TypeError", "Array.prototype.reduce requires a callback")
+      } else {
+        let callback = args[0]
+        if not(self.is_callable(callback)) {
+          return self.set_error_kind(
+            "TypeError",
+            "Array.prototype.reduce requires a callback",
+          )
+        }
+        let has_init = args.length() > 1
+        let mut accumulator = JSValue::Undefined
+        let mut i = 0
+        if has_init {
+          accumulator = args[1]
+        } else {
+          let mut found = false
+          while i < len {
+            let key = i.to_string()
+            let has_prop = js_has_prop(receiver, key)
+            let use_string =
+              match str_value {
+                Some(s) => not(has_prop) && i >= 0 && i < s.length()
+                None => false
+              }
+            if has_prop || use_string {
+              accumulator =
+                if has_prop {
+                  self.get_prop_value(receiver, key)
+                } else {
+                  match str_value {
+                    Some(s) =>
+                      String(try { s[i:i + 1].to_string() } catch { _ => "" })
+                    None => Undefined
+                  }
+                }
+              found = true
+              i += 1
+              break
+            }
+            i += 1
+          }
+          if not(found) {
+            return self.set_error_kind(
+              "TypeError",
+              "Reduce of empty array with no initial value",
+            )
+          }
+        }
+        while i < len {
+          let key = i.to_string()
+          let has_prop = js_has_prop(receiver, key)
+          let use_string =
+            match str_value {
+              Some(s) => not(has_prop) && i >= 0 && i < s.length()
+              None => false
+            }
+          if has_prop || use_string {
+            let value =
+              if has_prop {
+                self.get_prop_value(receiver, key)
+              } else {
+                match str_value {
+                  Some(s) =>
+                    String(try { s[i:i + 1].to_string() } catch { _ => "" })
+                  None => Undefined
+                }
+              }
+            let args_array = [
+              accumulator,
+              value,
+              Number(i.to_double()),
+              receiver,
+            ]
+            accumulator = self.call_function(
+              callback,
+              Undefined,
+              args_array,
+            )
+          }
+          i += 1
+        }
+        accumulator
+      }
+    "reduceRight" =>
+      if args.length() == 0 {
+        self.set_error_kind("TypeError", "Array.prototype.reduceRight requires a callback")
+      } else {
+        let callback = args[0]
+        if not(self.is_callable(callback)) {
+          return self.set_error_kind(
+            "TypeError",
+            "Array.prototype.reduceRight requires a callback",
+          )
+        }
+        let has_init = args.length() > 1
+        let mut accumulator = JSValue::Undefined
+        let mut i = if len > 0 { len - 1 } else { -1 }
+        if has_init {
+          accumulator = args[1]
+        } else {
+          let mut found = false
+          while i >= 0 {
+            let key = i.to_string()
+            let has_prop = js_has_prop(receiver, key)
+            let use_string =
+              match str_value {
+                Some(s) => not(has_prop) && i >= 0 && i < s.length()
+                None => false
+              }
+            if has_prop || use_string {
+              accumulator =
+                if has_prop {
+                  self.get_prop_value(receiver, key)
+                } else {
+                  match str_value {
+                    Some(s) =>
+                      String(try { s[i:i + 1].to_string() } catch { _ => "" })
+                    None => Undefined
+                  }
+                }
+              found = true
+              i = i - 1
+              break
+            }
+            if i == 0 {
+              break
+            }
+            i = i - 1
+          }
+          if not(found) {
+            return self.set_error_kind(
+              "TypeError",
+              "Reduce of empty array with no initial value",
+            )
+          }
+        }
+        while i >= 0 {
+          let key = i.to_string()
+          let has_prop = js_has_prop(receiver, key)
+          let use_string =
+            match str_value {
+              Some(s) => not(has_prop) && i >= 0 && i < s.length()
+              None => false
+            }
+          if has_prop || use_string {
+            let value =
+              if has_prop {
+                self.get_prop_value(receiver, key)
+              } else {
+                match str_value {
+                  Some(s) =>
+                    String(try { s[i:i + 1].to_string() } catch { _ => "" })
+                  None => Undefined
+                }
+              }
+            let args_array = [
+              accumulator,
+              value,
+              Number(i.to_double()),
+              receiver,
+            ]
+            accumulator = self.call_function(
+              callback,
+              Undefined,
+              args_array,
+            )
+          }
+          if i == 0 {
+            break
+          }
+          i = i - 1
+        }
+        accumulator
+      }
+    "forEach" =>
+      if args.length() == 0 {
+        self.set_error_kind("TypeError", "Array.prototype.forEach requires a callback")
+      } else {
+        let callback = args[0]
+        if not(self.is_callable(callback)) {
+          return self.set_error_kind(
+            "TypeError",
+            "Array.prototype.forEach requires a callback",
+          )
+        }
+        let this_arg = if args.length() > 1 { args[1] } else { Undefined }
+        let mut i = 0
+        while i < len {
+          let key = i.to_string()
+          let has_prop = js_has_prop(receiver, key)
+          let use_string =
+            match str_value {
+              Some(s) => not(has_prop) && i >= 0 && i < s.length()
+              None => false
+            }
+          if has_prop || use_string {
+            let value =
+              if has_prop {
+                self.get_prop_value(receiver, key)
+              } else {
+                match str_value {
+                  Some(s) =>
+                    String(try { s[i:i + 1].to_string() } catch { _ => "" })
+                  None => Undefined
+                }
+              }
+            let args_array = [
+              value,
+              Number(i.to_double()),
+              receiver,
+            ]
+            let _ = self.call_function(
+              callback,
+              this_arg,
+              args_array,
+            )
+          }
+          i += 1
+        }
+        Undefined
+      }
+    "every" =>
+      if args.length() == 0 {
+        self.set_error_kind("TypeError", "Array.prototype.every requires a callback")
+      } else {
+        let callback = args[0]
+        if not(self.is_callable(callback)) {
+          return self.set_error_kind(
+            "TypeError",
+            "Array.prototype.every requires a callback",
+          )
+        }
+        let this_arg = if args.length() > 1 { args[1] } else { Undefined }
+        let mut i = 0
+        while i < len {
+          let key = i.to_string()
+          let has_prop = js_has_prop(receiver, key)
+          let use_string =
+            match str_value {
+              Some(s) => not(has_prop) && i >= 0 && i < s.length()
+              None => false
+            }
+          if has_prop || use_string {
+            let value =
+              if has_prop {
+                self.get_prop_value(receiver, key)
+              } else {
+                match str_value {
+                  Some(s) =>
+                    String(try { s[i:i + 1].to_string() } catch { _ => "" })
+                  None => Undefined
+                }
+              }
+            let args_array = [
+              value,
+              Number(i.to_double()),
+              receiver,
+            ]
+            let ok = self.call_function(
+              callback,
+              this_arg,
+              args_array,
+            )
+            if not(ok.to_boolean()) {
+              return Bool(false)
+            }
+          }
+          i += 1
+        }
+        Bool(true)
+      }
+    "some" =>
+      if args.length() == 0 {
+        self.set_error_kind("TypeError", "Array.prototype.some requires a callback")
+      } else {
+        let callback = args[0]
+        if not(self.is_callable(callback)) {
+          return self.set_error_kind(
+            "TypeError",
+            "Array.prototype.some requires a callback",
+          )
+        }
+        let this_arg = if args.length() > 1 { args[1] } else { Undefined }
+        let mut i = 0
+        while i < len {
+          let key = i.to_string()
+          let has_prop = js_has_prop(receiver, key)
+          let use_string =
+            match str_value {
+              Some(s) => not(has_prop) && i >= 0 && i < s.length()
+              None => false
+            }
+          if has_prop || use_string {
+            let value =
+              if has_prop {
+                self.get_prop_value(receiver, key)
+              } else {
+                match str_value {
+                  Some(s) =>
+                    String(try { s[i:i + 1].to_string() } catch { _ => "" })
+                  None => Undefined
+                }
+              }
+            let args_array = [
+              value,
+              Number(i.to_double()),
+              receiver,
+            ]
+            let ok = self.call_function(
+              callback,
+              this_arg,
+              args_array,
+            )
+            if ok.to_boolean() {
+              return Bool(true)
+            }
+          }
+          i += 1
+        }
+        Bool(false)
+      }
+    "find" =>
+      if args.length() > 0 {
+        let callback = args[0]
+        if not(self.is_callable(callback)) {
+          return Undefined
+        }
+        let this_arg = if args.length() > 1 { args[1] } else { Undefined }
+        let mut i = 0
+        while i < len {
+          let key = i.to_string()
+          let has_prop = js_has_prop(receiver, key)
+          let use_string =
+            match str_value {
+              Some(s) => not(has_prop) && i >= 0 && i < s.length()
+              None => false
+            }
+          if has_prop || use_string {
+            let item =
+              if has_prop {
+                self.get_prop_value(receiver, key)
+              } else {
+                match str_value {
+                  Some(s) =>
+                    String(try { s[i:i + 1].to_string() } catch { _ => "" })
+                  None => Undefined
+                }
+              }
+            let args_array = [
+              item,
+              Number(i.to_double()),
+              receiver,
+            ]
+            let found = self.call_function(
+              callback,
+              this_arg,
+              args_array,
+            )
+            match found {
+              Bool(true) => return item
+              _ => ()
+            }
+          }
+          i += 1
+        }
+        Undefined
+      } else {
+        Undefined
+      }
+    "findIndex" =>
+      if args.length() > 0 {
+        let callback = args[0]
+        if not(self.is_callable(callback)) {
+          return Number(-1.0)
+        }
+        let this_arg = if args.length() > 1 { args[1] } else { Undefined }
+        let mut i = 0
+        while i < len {
+          let key = i.to_string()
+          let has_prop = js_has_prop(receiver, key)
+          let use_string =
+            match str_value {
+              Some(s) => not(has_prop) && i >= 0 && i < s.length()
+              None => false
+            }
+          if has_prop || use_string {
+            let item =
+              if has_prop {
+                self.get_prop_value(receiver, key)
+              } else {
+                match str_value {
+                  Some(s) =>
+                    String(try { s[i:i + 1].to_string() } catch { _ => "" })
+                  None => Undefined
+                }
+              }
+            let args_array = [
+              item,
+              Number(i.to_double()),
+              receiver,
+            ]
+            let found = self.call_function(
+              callback,
+              this_arg,
+              args_array,
+            )
+            match found {
+              Bool(true) => return Number(i.to_double())
+              _ => ()
+            }
+          }
+          i += 1
+        }
+        Number(-1.0)
+      } else {
+        Number(-1.0)
+      }
+    "findLast" =>
+      if args.length() > 0 {
+        let callback = args[0]
+        if not(self.is_callable(callback)) {
+          return Undefined
+        }
+        let this_arg = if args.length() > 1 { args[1] } else { Undefined }
+        let mut i = len - 1
+        while i >= 0 {
+          let key = i.to_string()
+          let has_prop = js_has_prop(receiver, key)
+          let use_string =
+            match str_value {
+              Some(s) => not(has_prop) && i >= 0 && i < s.length()
+              None => false
+            }
+          if has_prop || use_string {
+            let item =
+              if has_prop {
+                self.get_prop_value(receiver, key)
+              } else {
+                match str_value {
+                  Some(s) =>
+                    String(try { s[i:i + 1].to_string() } catch { _ => "" })
+                  None => Undefined
+                }
+              }
+            let args_array = [
+              item,
+              Number(i.to_double()),
+              receiver,
+            ]
+            let found = self.call_function(
+              callback,
+              this_arg,
+              args_array,
+            )
+            match found {
+              Bool(true) => return item
+              _ => ()
+            }
+          }
+          if i == 0 {
+            break
+          }
+          i = i - 1
+        }
+        Undefined
+      } else {
+        Undefined
+      }
+    "findLastIndex" =>
+      if args.length() > 0 {
+        let callback = args[0]
+        if not(self.is_callable(callback)) {
+          return Number(-1.0)
+        }
+        let this_arg = if args.length() > 1 { args[1] } else { Undefined }
+        let mut i = len - 1
+        while i >= 0 {
+          let key = i.to_string()
+          let has_prop = js_has_prop(receiver, key)
+          let use_string =
+            match str_value {
+              Some(s) => not(has_prop) && i >= 0 && i < s.length()
+              None => false
+            }
+          if has_prop || use_string {
+            let item =
+              if has_prop {
+                self.get_prop_value(receiver, key)
+              } else {
+                match str_value {
+                  Some(s) =>
+                    String(try { s[i:i + 1].to_string() } catch { _ => "" })
+                  None => Undefined
+                }
+              }
+            let args_array = [
+              item,
+              Number(i.to_double()),
+              receiver,
+            ]
+            let found = self.call_function(
+              callback,
+              this_arg,
+              args_array,
+            )
+            match found {
+              Bool(true) => return Number(i.to_double())
+              _ => ()
+            }
+          }
+          if i == 0 {
+            break
+          }
+          i = i - 1
+        }
+        Number(-1.0)
+      } else {
+        Number(-1.0)
+      }
+    "push" => {
+      let mut n = len
+      for arg in args {
+        self.set_prop_value(receiver, n.to_string(), arg)
+        n += 1
+      }
+      self.set_prop_value(receiver, "length", Number(n.to_double()))
+      Number(n.to_double())
+    }
+    "pop" =>
+      if len <= 0 {
+        self.set_prop_value(receiver, "length", Number(0.0))
+        Undefined
+      } else {
+        let idx = len - 1
+        let key = idx.to_string()
+        let value = self.get_prop_value(receiver, key)
+        let _ = js_delete_prop(receiver, key)
+        self.set_prop_value(receiver, "length", Number(idx.to_double()))
+        value
+      }
+    "shift" =>
+      if len <= 0 {
+        self.set_prop_value(receiver, "length", Number(0.0))
+        Undefined
+      } else {
+        let first_key = "0"
+        let first = self.get_prop_value(receiver, first_key)
+        let mut k = 1
+        while k < len {
+          let from_key = k.to_string()
+          let to_key = (k - 1).to_string()
+          if js_has_prop(receiver, from_key) {
+            let value = self.get_prop_value(receiver, from_key)
+            self.set_prop_value(receiver, to_key, value)
+          } else {
+            let _ = js_delete_prop(receiver, to_key)
+          }
+          k += 1
+        }
+        let last_key = (len - 1).to_string()
+        let _ = js_delete_prop(receiver, last_key)
+        self.set_prop_value(receiver, "length", Number((len - 1).to_double()))
+        first
+      }
+    "unshift" => {
+      let insert_count = args.length()
+      if insert_count == 0 {
+        return Number(len.to_double())
+      }
+      let mut k = len - 1
+      while k >= 0 {
+        let from_key = k.to_string()
+        let to_key = (k + insert_count).to_string()
+        if js_has_prop(receiver, from_key) {
+          let value = self.get_prop_value(receiver, from_key)
+          self.set_prop_value(receiver, to_key, value)
+        } else {
+          let _ = js_delete_prop(receiver, to_key)
+        }
+        if k == 0 {
+          break
+        }
+        k = k - 1
+      }
+      for i in 0..<insert_count {
+        self.set_prop_value(receiver, i.to_string(), args[i])
+      }
+      let new_len = len + insert_count
+      self.set_prop_value(receiver, "length", Number(new_len.to_double()))
+      Number(new_len.to_double())
+    }
+    "slice" => {
+      let mut start = if args.length() > 0 { args[0].to_number().to_int() } else { 0 }
+      let mut end = if args.length() > 1 { args[1].to_number().to_int() } else { len }
+      if start < 0 {
+        start = len + start
+        if start < 0 {
+          start = 0
+        }
+      }
+      if end < 0 {
+        end = len + end
+        if end < 0 {
+          end = 0
+        }
+      }
+      if start > len {
+        start = len
+      }
+      if end > len {
+        end = len
+      }
+      if end < start {
+        end = start
+      }
+      let out = js_new_array()
+      match out {
+        Array(out_arr) => {
+          for i in start..<end {
+            let key = i.to_string()
+            let has_prop = js_has_prop(receiver, key)
+            let use_string =
+              match str_value {
+                Some(s) => not(has_prop) && i >= 0 && i < s.length()
+                None => false
+              }
+            if has_prop || use_string {
+              let value =
+                if has_prop {
+                  self.get_prop_value(receiver, key)
+                } else {
+                  match str_value {
+                    Some(s) =>
+                      String(try { s[i:i + 1].to_string() } catch { _ => "" })
+                    None => Undefined
+                  }
+                }
+              out_arr.items.push(value)
+              out_arr.present.push(true)
+            } else {
+              out_arr.items.push(Undefined)
+              out_arr.present.push(false)
+            }
+          }
+          out_arr.length = end - start
+        }
+        _ => ()
+      }
+      out
+    }
+    "concat" => {
+      let result : Array[JSValue] = []
+      let present : Array[Bool] = []
+      result.push(receiver)
+      present.push(true)
+      for arg in args {
+        match arg {
+          Array(other_arr) =>
+            for i, item in other_arr.items {
+              result.push(item)
+              present.push(other_arr.present[i])
+            }
+          _ => {
+            result.push(arg)
+            present.push(true)
+          }
+        }
+      }
+      let out = js_new_array()
+      match out {
+        Array(out_arr) => {
+          for item in result {
+            out_arr.items.push(item)
+          }
+          for flag in present {
+            out_arr.present.push(flag)
+          }
+          out_arr.length = out_arr.items.length()
+        }
+        _ => ()
+      }
+      out
+    }
+    "fill" => {
+      let value = if args.length() > 0 { args[0] } else { Undefined }
+      let mut start = if args.length() > 1 { args[1].to_number().to_int() } else { 0 }
+      let mut end = if args.length() > 2 { args[2].to_number().to_int() } else { len }
+      if start < 0 {
+        start = len + start
+        if start < 0 {
+          start = 0
+        }
+      }
+      if end < 0 {
+        end = len + end
+        if end < 0 {
+          end = 0
+        }
+      }
+      if start > len {
+        start = len
+      }
+      if end > len {
+        end = len
+      }
+      for i in start..<end {
+        self.set_prop_value(receiver, i.to_string(), value)
+      }
+      self.set_prop_value(receiver, "length", Number(len.to_double()))
+      receiver
+    }
+    "flat" => {
+      let depth = if args.length() > 0 { args[0].to_number().to_int() } else { 1 }
+      if len <= 0 {
+        return js_new_array()
+      }
+      let items : Array[JSValue] = []
+      for i in 0..<len {
+        let key = i.to_string()
+        let has_prop = js_has_prop(receiver, key)
+        let use_string =
+          match str_value {
+            Some(s) => not(has_prop) && i >= 0 && i < s.length()
+            None => false
+          }
+        if has_prop || use_string {
+          let value =
+            if has_prop {
+              self.get_prop_value(receiver, key)
+            } else {
+              match str_value {
+                Some(s) =>
+                  String(try { s[i:i + 1].to_string() } catch { _ => "" })
+                None => Undefined
+              }
+            }
+          items.push(value)
+        }
+      }
+      let result : Array[JSValue] = []
+      if depth <= 0 {
+        for item in items {
+          result.push(item)
+        }
+      } else {
+        self.flatten_array_items(items, depth, result)
+      }
+      js_array_from(result)
+    }
+    "at" => {
+      let mut idx = if args.length() > 0 { args[0].to_number().to_int() } else { 0 }
+      if idx < 0 {
+        idx = len + idx
+      }
+      if idx < 0 || idx >= len {
+        Undefined
+      } else {
+        let key = idx.to_string()
+        if js_has_prop(receiver, key) {
+          self.get_prop_value(receiver, key)
+        } else {
+          match str_value {
+            Some(s) if idx >= 0 && idx < s.length() =>
+              String(try { s[idx:idx + 1].to_string() } catch { _ => "" })
+            _ => Undefined
+          }
+        }
+      }
+    }
+    _ => Undefined
+  }
+}
+
+///|
+fn JSInterpreter::eval_script_source(self : JSInterpreter, source : String) -> JSValue {
+  let block = try {
+    @parser.parse_block_from_source(source)
+  } catch {
+    @parser.ParseError::ParseError(msg) => {
+      let _ = self.set_error_kind("SyntaxError", msg)
+      return Undefined
+    }
+  }
+  self.hoist_block(block, self.global_env)
+  match self.exec_block(block, self.global_env) {
+    Some(val) => val
+    None => Undefined
+  }
+}
+
+///|
+///|
+fn JSInterpreter::new_array_iterator(self : JSInterpreter, receiver : JSValue) -> JSValue {
+  let iter = self.new_object()
+  let _ = js_set_prop(iter, "__iter_target", receiver)
+  let _ = js_set_prop(iter, "__iter_index", Number(0.0))
+  let next_fn = self.make_native("ArrayIterator.prototype.next")
+  self.set_function_length(next_fn, 0.0)
+  let _ = js_set_prop(iter, "next", next_fn)
+  let iter_fn = self.make_native("Iterator.prototype[@@iterator]")
+  self.set_function_length(iter_fn, 0.0)
+  let _ = js_set_prop(iter, "@@iterator", iter_fn)
+  iter
+}
+
+///|
+fn JSInterpreter::new_string_iterator(self : JSInterpreter, value : String) -> JSValue {
+  let iter = self.new_object()
+  let _ = js_set_prop(iter, "__iter_string", JSValue::String(value))
+  let _ = js_set_prop(iter, "__iter_index", Number(0.0))
+  let next_fn = self.make_native("StringIterator.prototype.next")
+  self.set_function_length(next_fn, 0.0)
+  let _ = js_set_prop(iter, "next", next_fn)
+  let iter_fn = self.make_native("Iterator.prototype[@@iterator]")
+  self.set_function_length(iter_fn, 0.0)
+  let _ = js_set_prop(iter, "@@iterator", iter_fn)
+  iter
+}
+
+///|
+fn JSInterpreter::own_property_keys(_self : JSInterpreter, obj : JSValue) -> Array[String] {
+  let keys : Array[String] = []
+  match obj {
+    Function(closure) =>
+      for prop in closure.props {
+        keys.push(prop.key)
+      }
+    Object(map) =>
+      for prop in map.props {
+        keys.push(prop.key)
+      }
+    Array(arr) => {
+      let mut i = 0
+      while i < arr.items.length() {
+        if arr.present[i] {
+          keys.push(i.to_string())
+        }
+        i += 1
+      }
+      for prop in arr.props {
+        keys.push(prop.key)
+      }
+      keys.push("length")
+    }
+    String(s) => {
+      let mut i = 0
+      while i < s.length() {
+        keys.push(i.to_string())
+        i += 1
+      }
+      keys.push("length")
+    }
+    _ => ()
+  }
+  keys
+}
+
+///|
+fn JSInterpreter::lookup_own_prop(
+  _self : JSInterpreter,
+  obj : JSValue,
+  key : String,
+) -> JSProp? {
+  match obj {
+    Function(closure) => {
+      for prop in closure.props {
+        if prop.key == key {
+          return Some(prop)
+        }
+      }
+      None
+    }
+    Object(map) => {
+      for prop in map.props {
+        if prop.key == key {
+          return Some(prop)
+        }
+      }
+      None
+    }
+    Array(arr) =>
+      if key == "length" {
+        Some({
+          key,
+          value: Number(arr.length.to_double()),
+          writable: true,
+          enumerable: false,
+          configurable: false,
+          get: None,
+          set: None,
+        })
+      } else {
+        let idx = @strconv.parse_int(key) catch { _ => -1 }
+        if idx >= 0 && idx < arr.items.length() && arr.present[idx] {
+          Some({
+            key,
+            value: arr.items[idx],
+            writable: true,
+            enumerable: true,
+            configurable: true,
+            get: None,
+            set: None,
+          })
+        } else {
+          for prop in arr.props {
+            if prop.key == key {
+              return Some(prop)
+            }
+          }
+          None
+        }
+      }
+    String(s) =>
+      if key == "length" {
+        Some({
+          key,
+          value: Number(s.length().to_double()),
+          writable: false,
+          enumerable: false,
+          configurable: false,
+          get: None,
+          set: None,
+        })
+      } else {
+        let idx = @strconv.parse_int(key) catch { _ => -1 }
+        if idx >= 0 && idx < s.length() {
+          let ch = JSValue::String(try { s[idx:idx + 1].to_string() } catch { _ => "" })
+          Some({
+            key,
+            value: ch,
+            writable: false,
+            enumerable: true,
+            configurable: false,
+            get: None,
+            set: None,
+          })
+        } else {
+          None
+        }
+      }
+    _ => None
+  }
+}
+
+///|
+fn JSInterpreter::define_property(
+  self : JSInterpreter,
+  target : JSValue,
+  key : String,
+  desc : JSValue,
+) -> JSValue {
+  let is_obj = match desc {
+    Object(_) | Function(_) => true
+    _ => false
+  }
+  if not(is_obj) {
+    return self.set_error_kind(
+      "TypeError",
+      "Property description must be an object",
+    )
+  }
+  let has_get = self.has_own_prop(desc, "get")
+  let has_set = self.has_own_prop(desc, "set")
+  let has_value = self.has_own_prop(desc, "value")
+  let has_writable = self.has_own_prop(desc, "writable")
+  if (has_get || has_set) && (has_value || has_writable) {
+    return self.set_error_kind(
+      "TypeError",
+      "Invalid property descriptor",
+    )
+  }
+  let current = self.lookup_own_prop(target, key)
+  let enumerable = if self.has_own_prop(desc, "enumerable") {
+    self.get_prop_value(desc, "enumerable").to_boolean()
+  } else {
+    match current {
+      Some(prop) => prop.enumerable
+      None => false
+    }
+  }
+  let configurable = if self.has_own_prop(desc, "configurable") {
+    self.get_prop_value(desc, "configurable").to_boolean()
+  } else {
+    match current {
+      Some(prop) => prop.configurable
+      None => false
+    }
+  }
+  if has_get || has_set {
+    let get_val =
+      if has_get {
+        self.get_prop_value(desc, "get")
+      } else {
+        match current {
+          Some(prop) => match prop.get {
+            Some(g) => g
+            None => Undefined
+          }
+          None => Undefined
+        }
+      }
+    let set_val =
+      if has_set {
+        self.get_prop_value(desc, "set")
+      } else {
+        match current {
+          Some(prop) => match prop.set {
+            Some(s) => s
+            None => Undefined
+          }
+          None => Undefined
+        }
+      }
+    if not(get_val.is_undefined()) && not(self.is_callable(get_val)) {
+      return self.set_error_kind("TypeError", "Getter must be callable")
+    }
+    if not(set_val.is_undefined()) && not(self.is_callable(set_val)) {
+      return self.set_error_kind("TypeError", "Setter must be callable")
+    }
+    let getter = match get_val {
+      Undefined => None
+      _ => Some(get_val)
+    }
+    let setter = match set_val {
+      Undefined => None
+      _ => Some(set_val)
+    }
+    let _ =
+      js_define_accessor_prop(
+        target,
+        key,
+        getter,
+        setter,
+        enumerable,
+        configurable,
+      )
+    target
+  } else {
+    let value =
+      if has_value {
+        self.get_prop_value(desc, "value")
+      } else {
+        match current {
+          Some(prop) => prop.value
+          None => Undefined
+        }
+      }
+    let writable = if has_writable {
+      self.get_prop_value(desc, "writable").to_boolean()
+    } else {
+      match current {
+        Some(prop) => prop.writable
+        None => false
+      }
+    }
+    let _ =
+      js_define_data_prop(target, key, value, writable, enumerable, configurable)
+    target
+  }
+}
+
+///|
 fn JSInterpreter::call_native(
   self : JSInterpreter,
   name : String,
   this_arg : JSValue,
   args : Array[JSValue],
 ) -> JSValue {
-  if name.has_prefix("Array.prototype.") {
-    let method_name = (try { name[16:] } catch { _ => "" }).to_string()
-    match this_arg {
+  if name.has_prefix("Array.prototype") {
+    let mut method_name = (try { name[15:] } catch { _ => "" }).to_string()
+    if method_name.has_prefix(".") {
+      method_name = (try { method_name[1:] } catch { _ => "" }).to_string()
+    }
+    if method_name == "[@@iterator]" {
+      method_name = "@@iterator"
+    }
+    let receiver = match this_arg {
+      Undefined | Null =>
+        return self.set_error_kind(
+          "TypeError",
+          "Array.prototype." + method_name + " called on null or undefined",
+        )
+      Bool(_) | Number(_) | String(_) => self.wrap_primitive(self.global_env, this_arg)
+      _ => this_arg
+    }
+    if method_name == "@@iterator" {
+      return self.new_array_iterator(receiver)
+    }
+    match receiver {
       Array(arr) => return self.array_method(arr, method_name, args)
-      _ =>
-        if method_name == "map" {
-          let callback = if args.length() > 0 { args[0] } else { Undefined }
-          let len_value = self.get_prop_value(this_arg, "length")
-          match self.peek_error() {
-            Some(err) => return err
-            None => ()
-          }
-          let mut len_num = self.to_number_value(len_value)
-          match self.peek_error() {
-            Some(err) => return err
-            None => ()
-          }
-          if len_num.is_nan() {
-            len_num = 0.0
-          }
-          if len_num.is_inf() || len_num < 0.0 {
-            return self.set_error_kind("RangeError", "Invalid array length")
-          }
-          let len = len_num.to_int()
-          if len > 1_000_000 {
-            return self.set_error_kind("RangeError", "Invalid array length")
-          }
-          if not(self.is_callable(callback)) {
-            return self.set_error_kind(
-              "TypeError",
-              "Array.prototype.map requires a callback",
-            )
-          }
-          let callback_this = if args.length() > 1 { args[1] } else { Undefined }
-          let result : Array[JSValue] = []
-          let mut i = 0
-          while i < len {
-            let key = i.to_string()
-            if js_has_prop(this_arg, key) {
-              let value = self.get_prop_value(this_arg, key)
-              let mapped = self.call_function(
-                callback,
-                callback_this,
-                [value, JSValue::Number(i.to_double()), this_arg],
-              )
-              result.push(mapped)
-            } else {
-              result.push(Undefined)
-            }
-            i += 1
-          }
-          return js_array_from(result)
-        } else {
-          return self.set_error_kind(
-            "TypeError",
-            "Array.prototype." + method_name + " called on non-array",
-            )
-        }
+      _ => return self.array_like_method(receiver, method_name, args)
     }
   }
-  if name.has_prefix("String.prototype.") {
-    let method_name = (try { name[17:] } catch { _ => "" }).to_string()
+  if name.has_prefix("String.prototype") {
+    let mut method_name = (try { name[16:] } catch { _ => "" }).to_string()
+    if method_name.has_prefix(".") {
+      method_name = (try { method_name[1:] } catch { _ => "" }).to_string()
+    }
+    if method_name == "[@@iterator]" {
+      method_name = "@@iterator"
+    }
     match this_arg {
       Undefined | Null =>
         return self.set_error_kind(
@@ -569,7 +1900,22 @@ fn JSInterpreter::call_native(
           "String.prototype." + method_name + " called on null or undefined",
         )
       _ => {
-        let s = self.to_string_value(this_arg)
+        let s =
+          match this_arg {
+            String(value) => value
+            Object(_) | Array(_) | Function(_) =>
+              match js_get_prop(this_arg, "value") {
+                String(value) => value
+                Number(n) => n.to_string()
+                Bool(true) => "true"
+                Bool(false) => "false"
+                _ => self.to_string_value(this_arg)
+              }
+            _ => this_arg.to_js_string()
+          }
+        if method_name == "@@iterator" {
+          return self.new_string_iterator(s)
+        }
         return self.string_method(s, method_name, args)
       }
     }
@@ -673,7 +2019,7 @@ fn JSInterpreter::call_native(
             )
           } else {
             let idx = @strconv.parse_int(key) catch { _ => -1 }
-            if idx >= 0 && idx < arr.items.length() {
+            if idx >= 0 && idx < arr.items.length() && arr.present[idx] {
               self.make_data_descriptor(arr.items[idx], true, true, true)
             } else {
               for prop in arr.props {
@@ -707,58 +2053,123 @@ fn JSInterpreter::call_native(
               false,
             )
           } else {
-            Undefined
+            let idx = @strconv.parse_int(key) catch { _ => -1 }
+            if idx >= 0 && idx < s.length() {
+              let ch = JSValue::String(try { s[idx:idx + 1].to_string() } catch { _ => "" })
+              self.make_data_descriptor(ch, false, true, false)
+            } else {
+              Undefined
+            }
           }
         _ => Undefined
+      }
+    }
+    "Object.defineProperties" => {
+      let target = if args.length() > 0 { args[0] } else { Undefined }
+      let props = if args.length() > 1 { args[1] } else { Undefined }
+      let receiver = match target {
+        Undefined | Null =>
+          return self.set_error_kind(
+            "TypeError",
+            "Object.defineProperties called on null or undefined",
+          )
+        Object(_) | Function(_) | Array(_) => target
+        _ =>
+          return self.set_error_kind(
+            "TypeError",
+            "Object.defineProperties called on non-object",
+          )
+      }
+      match props {
+        Object(_) | Function(_) | Array(_) => {
+          let keys = self.own_property_keys(props)
+          for key in keys {
+            let desc = self.get_prop_value(props, key)
+            match self.peek_error() {
+              Some(err) => return err
+              None => ()
+            }
+            let _ = self.define_property(receiver, key, desc)
+            match self.peek_error() {
+              Some(err) => return err
+              None => ()
+            }
+          }
+          receiver
+        }
+        _ => receiver
       }
     }
     "Object.defineProperty" => {
       let target = if args.length() > 0 { args[0] } else { Undefined }
       let key = if args.length() > 1 { args[1].to_js_string() } else { "" }
       let desc = if args.length() > 2 { args[2] } else { Undefined }
-      let is_obj = match desc {
-        Object(_) | Function(_) => true
-        _ => false
+      let receiver = match target {
+        Undefined | Null =>
+          return self.set_error_kind(
+            "TypeError",
+            "Object.defineProperty called on null or undefined",
+          )
+        Object(_) | Function(_) | Array(_) => target
+        _ =>
+          return self.set_error_kind(
+            "TypeError",
+            "Object.defineProperty called on non-object",
+          )
       }
-      if not(is_obj) {
-        return target
-      }
-      let has_get = self.has_own_prop(desc, "get")
-      let has_set = self.has_own_prop(desc, "set")
-      let enumerable = if self.has_own_prop(desc, "enumerable") {
-        js_get_prop(desc, "enumerable").to_boolean()
-      } else {
-        false
-      }
-      let configurable = if self.has_own_prop(desc, "configurable") {
-        js_get_prop(desc, "configurable").to_boolean()
-      } else {
-        false
-      }
-      if has_get || has_set {
-        let get_val = if has_get { js_get_prop(desc, "get") } else { Undefined }
-        let set_val = if has_set { js_get_prop(desc, "set") } else { Undefined }
-        let getter = match get_val {
-          Undefined => None
-          _ => Some(get_val)
-        }
-        let setter = match set_val {
-          Undefined => None
-          _ => Some(set_val)
-        }
-        let _ = js_define_accessor_prop(target, key, getter, setter, enumerable, configurable)
-        target
-      } else {
-        let value = if self.has_own_prop(desc, "value") { js_get_prop(desc, "value") } else { Undefined }
-        let writable = if self.has_own_prop(desc, "writable") {
-          js_get_prop(desc, "writable").to_boolean()
-        } else {
-          false
-        }
-        let _ = js_define_data_prop(target, key, value, writable, enumerable, configurable)
-        target
+      let _ = self.define_property(receiver, key, desc)
+      match self.peek_error() {
+        Some(err) => err
+        None => receiver
       }
     }
+    "Iterator.prototype[@@iterator]" => this_arg
+    "ArrayIterator.prototype.next" => {
+      let target = js_get_prop(this_arg, "__iter_target")
+      let idx_val = js_get_prop(this_arg, "__iter_index")
+      let idx = idx_val.to_number().to_int()
+      let len = self.array_like_length(target)
+      if idx >= len {
+        let _ = js_set_prop(this_arg, "__iter_index", Number(len.to_double()))
+        self.make_iter_result(Undefined, true)
+      } else {
+        let value = self.get_prop_value(target, idx.to_string())
+        let _ = js_set_prop(this_arg, "__iter_index", Number((idx + 1).to_double()))
+        self.make_iter_result(value, false)
+      }
+    }
+    "StringIterator.prototype.next" => {
+      let str_val = js_get_prop(this_arg, "__iter_string")
+      let s = match str_val {
+        String(value) => value
+        _ => ""
+      }
+      let idx_val = js_get_prop(this_arg, "__iter_index")
+      let idx = idx_val.to_number().to_int()
+      if idx >= s.length() {
+        let _ = js_set_prop(this_arg, "__iter_index", Number(s.length().to_double()))
+        self.make_iter_result(Undefined, true)
+      } else {
+        let cu1 = s[idx]
+        let (next_idx, chunk) =
+          if cu1.is_leading_surrogate() && idx + 1 < s.length() {
+            let cu2 = s[idx + 1]
+            if cu2.is_trailing_surrogate() {
+              let str = try { s[idx:idx + 2].to_string() } catch { _ => "" }
+              (idx + 2, str)
+            } else {
+              let str = try { s[idx:idx + 1].to_string() } catch { _ => "" }
+              (idx + 1, str)
+            }
+          } else {
+            let str = try { s[idx:idx + 1].to_string() } catch { _ => "" }
+            (idx + 1, str)
+          }
+        let _ = js_set_prop(this_arg, "__iter_index", Number(next_idx.to_double()))
+        self.make_iter_result(JSValue::String(chunk), false)
+      }
+    }
+    "IsHTMLDDA" => Null
     "Object.hasOwnProperty" => {
       let key = if args.length() > 0 { args[0].to_js_string() } else { "" }
       match this_arg {
@@ -1115,9 +2526,32 @@ fn JSInterpreter::call_native(
     }
     "Generator.prototype.next" => {
       match self.get_generator_id(this_arg) {
-        Some(gen_id) => self.generator_next(gen_id)
+        Some(gen_id) => {
+          let sent = if args.length() > 0 { args[0] } else { Undefined }
+          self.generator_next(gen_id, sent)
+        }
         None =>
           self.set_error_kind("TypeError", "Generator.prototype.next called on non-generator")
+      }
+    }
+    "Generator.prototype.return" => {
+      match self.get_generator_id(this_arg) {
+        Some(gen_id) => {
+          let sent = if args.length() > 0 { args[0] } else { Undefined }
+          self.generator_return(gen_id, sent)
+        }
+        None =>
+          self.set_error_kind("TypeError", "Generator.prototype.return called on non-generator")
+      }
+    }
+    "Generator.prototype.throw" => {
+      match self.get_generator_id(this_arg) {
+        Some(gen_id) => {
+          let sent = if args.length() > 0 { args[0] } else { Undefined }
+          self.generator_throw(gen_id, sent)
+        }
+        None =>
+          self.set_error_kind("TypeError", "Generator.prototype.throw called on non-generator")
       }
     }
     "Array" => {
@@ -1402,18 +2836,7 @@ fn JSInterpreter::call_native(
     }
     "eval" => {
       let src = if args.length() > 0 { args[0].to_js_string() } else { "" }
-      let wrapped = "function main() {\n" + src + "\n}"
-      let result = try {
-        let parser = @parser.Parser::from_source(wrapped)
-        let module_ = parser.parse_module()
-        self.run_module(module_)
-      } catch {
-        @parser.ParseError::ParseError(msg) => {
-          let _ = self.set_error_kind("SyntaxError", msg)
-          Undefined
-        }
-      }
-      result
+      self.eval_script_source(src)
     }
     "Reflect.construct" => {
       if args.length() == 0 {
@@ -1674,17 +3097,7 @@ fn JSInterpreter::call_native(
     "$262.evalScript" =>
       if args.length() > 0 {
         let code = args[0].to_js_string()
-        self.run(code) catch {
-          _ => {
-            let wrapped = "function main() {\n" + code + "\n}"
-            self.run(wrapped) catch {
-              e2 => {
-                let _ = self.set_error("$262.evalScript parse error: \{e2}")
-                Undefined
-              }
-            }
-          }
-        }
+        self.eval_script_source(code)
       } else {
         Undefined
       }

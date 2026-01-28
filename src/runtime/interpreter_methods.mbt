@@ -755,7 +755,7 @@ fn JSInterpreter::array_method(
         if not(js_has_prop(arr_val, key)) {
           continue
         }
-        let value = js_get_prop(arr_val, key)
+        let value = self.get_prop_value(arr_val, key)
         match js_strict_eq(value, target) {
           JSValue::Bool(true) => return JSValue::Number(i.to_double())
           _ => ()
@@ -783,7 +783,7 @@ fn JSInterpreter::array_method(
       while i >= 0 {
         let key = i.to_string()
         if js_has_prop(arr_val, key) {
-          let value = js_get_prop(arr_val, key)
+          let value = self.get_prop_value(arr_val, key)
           match js_strict_eq(value, target) {
             JSValue::Bool(true) => return JSValue::Number(i.to_double())
             _ => ()
@@ -810,7 +810,7 @@ fn JSInterpreter::array_method(
         }
       }
       for i in start_idx..<len {
-        let value = js_get_prop(arr_val, i.to_string())
+        let value = self.get_prop_value(arr_val, i.to_string())
         if self.same_value_zero(value, target) {
           return Bool(true)
         }
@@ -859,248 +859,257 @@ fn JSInterpreter::array_method(
         out
       }
     "filter" =>
-      if args.length() > 0 {
-        match args[0] {
-          JSValue::Function(closure) => {
-            let this_arg = if args.length() > 1 { args[1] } else { Undefined }
-            let result : Array[JSValue] = []
-            let mut i = 0
-            while i < len {
-              let key = i.to_string()
-              if js_has_prop(arr_val, key) {
-                let item = js_get_prop(arr_val, key)
-                let args_array = [
-                  item,
-                  JSValue::Number(i.to_double()),
-                  arr_val,
-                ]
-                let filtered = self.call_function(
-                  JSValue::Function(closure),
-                  this_arg,
-                  args_array,
-                )
-                match filtered {
-                  Bool(true) => result.push(item)
-                  _ => ()
-                }
-              }
-              i += 1
-            }
-            js_array_from(result)
-          }
-          _ => js_new_array()
-        }
+      if args.length() == 0 {
+        self.set_error_kind("TypeError", "Array.prototype.filter requires a callback")
       } else {
-        js_new_array()
+        let callback = args[0]
+        if not(self.is_callable(callback)) {
+          return self.set_error_kind(
+            "TypeError",
+            "Array.prototype.filter requires a callback",
+          )
+        }
+        let this_arg = if args.length() > 1 { args[1] } else { Undefined }
+        let result : Array[JSValue] = []
+        let mut i = 0
+        while i < len {
+          let key = i.to_string()
+          if js_has_prop(arr_val, key) {
+            let item = self.get_prop_value(arr_val, key)
+            let args_array = [
+              item,
+              JSValue::Number(i.to_double()),
+              arr_val,
+            ]
+            let filtered = self.call_function(
+              callback,
+              this_arg,
+              args_array,
+            )
+            if filtered.to_boolean() {
+              result.push(item)
+            }
+          }
+          i += 1
+        }
+        js_array_from(result)
       }
     "reduce" =>
-      if args.length() > 0 {
-        match args[0] {
-          JSValue::Function(closure) => {
-            let has_init = args.length() > 1
-            let mut accumulator = JSValue::Undefined
-            let mut i = 0
-            if has_init {
-              accumulator = args[1]
-            } else {
-              let mut found = false
-              while i < len {
-                let key = i.to_string()
-                if js_has_prop(arr_val, key) {
-                  accumulator = js_get_prop(arr_val, key)
-                  found = true
-                  i += 1
-                  break
-                }
-                i += 1
-              }
-              if not(found) {
-                return self.set_error_kind(
-                  "TypeError",
-                  "Reduce of empty array with no initial value",
-                )
-              }
-            }
-            while i < len {
-              let key = i.to_string()
-              if js_has_prop(arr_val, key) {
-                let value = js_get_prop(arr_val, key)
-                let args_array = [
-                  accumulator,
-                  value,
-                  JSValue::Number(i.to_double()),
-                  arr_val,
-                ]
-                accumulator = self.call_function(
-                  JSValue::Function(closure),
-                  Undefined,
-                  args_array,
-                )
-              }
-              i += 1
-            }
-            accumulator
-          }
-          _ => Undefined
-        }
+      if args.length() == 0 {
+        self.set_error_kind("TypeError", "Array.prototype.reduce requires a callback")
       } else {
-        Undefined
+        let callback = args[0]
+        if not(self.is_callable(callback)) {
+          return self.set_error_kind(
+            "TypeError",
+            "Array.prototype.reduce requires a callback",
+          )
+        }
+        let has_init = args.length() > 1
+        let mut accumulator = JSValue::Undefined
+        let mut i = 0
+        if has_init {
+          accumulator = args[1]
+        } else {
+          let mut found = false
+          while i < len {
+            let key = i.to_string()
+            if js_has_prop(arr_val, key) {
+              accumulator = self.get_prop_value(arr_val, key)
+              found = true
+              i += 1
+              break
+            }
+            i += 1
+          }
+          if not(found) {
+            return self.set_error_kind(
+              "TypeError",
+              "Reduce of empty array with no initial value",
+            )
+          }
+        }
+        while i < len {
+          let key = i.to_string()
+          if js_has_prop(arr_val, key) {
+            let value = self.get_prop_value(arr_val, key)
+            let args_array = [
+              accumulator,
+              value,
+              JSValue::Number(i.to_double()),
+              arr_val,
+            ]
+            accumulator = self.call_function(
+              callback,
+              Undefined,
+              args_array,
+            )
+          }
+          i += 1
+        }
+        accumulator
       }
     "reduceRight" =>
-      if args.length() > 0 {
-        match args[0] {
-          JSValue::Function(closure) => {
-            let has_init = args.length() > 1
-            let mut accumulator = JSValue::Undefined
-            let mut i = if len > 0 { len - 1 } else { -1 }
-            if has_init {
-              accumulator = args[1]
-            } else {
-              let mut found = false
-              while i >= 0 {
-                let key = i.to_string()
-                if js_has_prop(arr_val, key) {
-                  accumulator = js_get_prop(arr_val, key)
-                  found = true
-                  i = i - 1
-                  break
-                }
-                if i == 0 {
-                  break
-                }
-                i = i - 1
-              }
-              if not(found) {
-                return self.set_error_kind(
-                  "TypeError",
-                  "Reduce of empty array with no initial value",
-                )
-              }
-            }
-            while i >= 0 {
-              let key = i.to_string()
-              if js_has_prop(arr_val, key) {
-                let value = js_get_prop(arr_val, key)
-                let args_array = [
-                  accumulator,
-                  value,
-                  JSValue::Number(i.to_double()),
-                  arr_val,
-                ]
-                accumulator = self.call_function(
-                  JSValue::Function(closure),
-                  Undefined,
-                  args_array,
-                )
-              }
-              if i == 0 {
-                break
-              }
-              i = i - 1
-            }
-            accumulator
-          }
-          _ => Undefined
-        }
+      if args.length() == 0 {
+        self.set_error_kind("TypeError", "Array.prototype.reduceRight requires a callback")
       } else {
-        Undefined
+        let callback = args[0]
+        if not(self.is_callable(callback)) {
+          return self.set_error_kind(
+            "TypeError",
+            "Array.prototype.reduceRight requires a callback",
+          )
+        }
+        let has_init = args.length() > 1
+        let mut accumulator = JSValue::Undefined
+        let mut i = if len > 0 { len - 1 } else { -1 }
+        if has_init {
+          accumulator = args[1]
+        } else {
+          let mut found = false
+          while i >= 0 {
+            let key = i.to_string()
+            if js_has_prop(arr_val, key) {
+              accumulator = self.get_prop_value(arr_val, key)
+              found = true
+              i = i - 1
+              break
+            }
+            if i == 0 {
+              break
+            }
+            i = i - 1
+          }
+          if not(found) {
+            return self.set_error_kind(
+              "TypeError",
+              "Reduce of empty array with no initial value",
+            )
+          }
+        }
+        while i >= 0 {
+          let key = i.to_string()
+          if js_has_prop(arr_val, key) {
+            let value = self.get_prop_value(arr_val, key)
+            let args_array = [
+              accumulator,
+              value,
+              JSValue::Number(i.to_double()),
+              arr_val,
+            ]
+            accumulator = self.call_function(
+              callback,
+              Undefined,
+              args_array,
+            )
+          }
+          if i == 0 {
+            break
+          }
+          i = i - 1
+        }
+        accumulator
       }
     "forEach" =>
-      if args.length() > 0 {
-        match args[0] {
-          JSValue::Function(closure) => {
-            let this_arg = if args.length() > 1 { args[1] } else { Undefined }
-            let mut i = 0
-            while i < len {
-              let key = i.to_string()
-              if js_has_prop(arr_val, key) {
-                let value = js_get_prop(arr_val, key)
-                let args_array = [
-                  value,
-                  JSValue::Number(i.to_double()),
-                  arr_val,
-                ]
-                let _ = self.call_function(
-                  JSValue::Function(closure),
-                  this_arg,
-                  args_array,
-                )
-              }
-              i += 1
-            }
-            Undefined
-          }
-          _ => Undefined
-        }
+      if args.length() == 0 {
+        self.set_error_kind("TypeError", "Array.prototype.forEach requires a callback")
       } else {
+        let callback = args[0]
+        if not(self.is_callable(callback)) {
+          return self.set_error_kind(
+            "TypeError",
+            "Array.prototype.forEach requires a callback",
+          )
+        }
+        let this_arg = if args.length() > 1 { args[1] } else { Undefined }
+        let mut i = 0
+        while i < len {
+          let key = i.to_string()
+          if js_has_prop(arr_val, key) {
+            let value = self.get_prop_value(arr_val, key)
+            let args_array = [
+              value,
+              JSValue::Number(i.to_double()),
+              arr_val,
+            ]
+            let _ = self.call_function(
+              callback,
+              this_arg,
+              args_array,
+            )
+          }
+          i += 1
+        }
         Undefined
       }
     "every" =>
-      if args.length() > 0 {
-        match args[0] {
-          JSValue::Function(closure) => {
-            let this_arg = if args.length() > 1 { args[1] } else { Undefined }
-            let mut i = 0
-            while i < len {
-              let key = i.to_string()
-              if js_has_prop(arr_val, key) {
-                let value = js_get_prop(arr_val, key)
-                let args_array = [
-                  value,
-                  JSValue::Number(i.to_double()),
-                  arr_val,
-                ]
-                let ok = self.call_function(
-                  JSValue::Function(closure),
-                  this_arg,
-                  args_array,
-                )
-                match ok {
-                  Bool(true) => ()
-                  _ => return Bool(false)
-                }
-              }
-              i += 1
-            }
-            Bool(true)
-          }
-          _ => Bool(false)
-        }
+      if args.length() == 0 {
+        self.set_error_kind("TypeError", "Array.prototype.every requires a callback")
       } else {
-        Bool(false)
+        let callback = args[0]
+        if not(self.is_callable(callback)) {
+          return self.set_error_kind(
+            "TypeError",
+            "Array.prototype.every requires a callback",
+          )
+        }
+        let this_arg = if args.length() > 1 { args[1] } else { Undefined }
+        let mut i = 0
+        while i < len {
+          let key = i.to_string()
+          if js_has_prop(arr_val, key) {
+            let value = self.get_prop_value(arr_val, key)
+            let args_array = [
+              value,
+              JSValue::Number(i.to_double()),
+              arr_val,
+            ]
+            let ok = self.call_function(
+              callback,
+              this_arg,
+              args_array,
+            )
+            if not(ok.to_boolean()) {
+              return Bool(false)
+            }
+          }
+          i += 1
+        }
+        Bool(true)
       }
     "some" =>
-      if args.length() > 0 {
-        match args[0] {
-          JSValue::Function(closure) => {
-            let this_arg = if args.length() > 1 { args[1] } else { Undefined }
-            let mut i = 0
-            while i < len {
-              let key = i.to_string()
-              if js_has_prop(arr_val, key) {
-                let value = js_get_prop(arr_val, key)
-                let args_array = [
-                  value,
-                  JSValue::Number(i.to_double()),
-                  arr_val,
-                ]
-                let ok = self.call_function(
-                  JSValue::Function(closure),
-                  this_arg,
-                  args_array,
-                )
-                match ok {
-                  Bool(true) => return Bool(true)
-                  _ => ()
-                }
-              }
-              i += 1
-            }
-            Bool(false)
-          }
-          _ => Bool(false)
-        }
+      if args.length() == 0 {
+        self.set_error_kind("TypeError", "Array.prototype.some requires a callback")
       } else {
+        let callback = args[0]
+        if not(self.is_callable(callback)) {
+          return self.set_error_kind(
+            "TypeError",
+            "Array.prototype.some requires a callback",
+          )
+        }
+        let this_arg = if args.length() > 1 { args[1] } else { Undefined }
+        let mut i = 0
+        while i < len {
+          let key = i.to_string()
+          if js_has_prop(arr_val, key) {
+            let value = self.get_prop_value(arr_val, key)
+            let args_array = [
+              value,
+              JSValue::Number(i.to_double()),
+              arr_val,
+            ]
+            let ok = self.call_function(
+              callback,
+              this_arg,
+              args_array,
+            )
+            if ok.to_boolean() {
+              return Bool(true)
+            }
+          }
+          i += 1
+        }
         Bool(false)
       }
     "find" =>
@@ -1634,31 +1643,38 @@ fn JSInterpreter::array_method(
     }
     "flatMap" =>
       if args.length() > 0 {
-        match args[0] {
-          JSValue::Function(closure) => {
-            let this_arg = if args.length() > 1 { args[1] } else { Undefined }
-            let mapped : Array[JSValue] = []
-            let mut i = 0
-            while i < len {
-              let args_array = [
-                arr.items[i],
-                JSValue::Number(i.to_double()),
-                JSValue::Array(arr),
-              ]
-              let value = self.call_function(
-                JSValue::Function(closure),
-                this_arg,
-                args_array,
-              )
-              mapped.push(value)
-              i += 1
-            }
-            let result : Array[JSValue] = []
-            self.flatten_array_items(mapped, 1, result)
-            js_array_from(result)
-          }
-          _ => js_new_array()
+        let callback = args[0]
+        if not(self.is_callable(callback)) {
+          return self.set_error_kind(
+            "TypeError",
+            "Array.prototype.flatMap requires a callback",
+          )
         }
+        let this_arg = if args.length() > 1 { args[1] } else { Undefined }
+        let mapped : Array[JSValue] = []
+        let arr_val = JSValue::Array(arr)
+        let mut i = 0
+        while i < len {
+          let key = i.to_string()
+          if js_has_prop(arr_val, key) {
+            let item = self.get_prop_value(arr_val, key)
+            let args_array = [
+              item,
+              JSValue::Number(i.to_double()),
+              arr_val,
+            ]
+            let value = self.call_function(
+              callback,
+              this_arg,
+              args_array,
+            )
+            mapped.push(value)
+          }
+          i += 1
+        }
+        let result : Array[JSValue] = []
+        self.flatten_array_items(mapped, 1, result)
+        js_array_from(result)
       } else {
         js_new_array()
       }

@@ -183,6 +183,7 @@ fn infer_literal_type(expr : @parser.TsExpr) -> @parser.TsType {
     @parser.TsExpr::BoolLit(_) => @parser.TsType::Boolean
     @parser.TsExpr::StringLit(_) => @parser.TsType::String_
     @parser.TsExpr::NullLit => @parser.TsType::Any // null @parser.TsType::Any
+    @parser.TsExpr::ArrayHole => @parser.TsType::Any
     @parser.TsExpr::ArrayLit(_) => @parser.TsType::Any // elementtype @parser.TsType::Any
     @parser.TsExpr::ObjectLit(_) => @parser.TsType::Any // objectliteral @parser.TsType::Any
     @parser.TsExpr::Var(_) => @parser.TsType::Any // variablestatement
@@ -233,6 +234,7 @@ fn infer_literal_type(expr : @parser.TsExpr) -> @parser.TsType {
     @parser.TsExpr::NewExpr(_, _) => @parser.TsType::Any
     @parser.TsExpr::MethodCall(_, _, _) => @parser.TsType::Any // methodreturn valuetype
     @parser.TsExpr::AssignExpr(_, e) => infer_literal_type(e) // assignmentexpressiontypetype
+    @parser.TsExpr::AssignPattern(_, e) => infer_literal_type(e)
     @parser.TsExpr::ArrowFunc(_, _) => @parser.TsType::Any // function @parser.TsType::Any
     @parser.TsExpr::FuncExpr(_) => @parser.TsType::Any // functionexpression @parser.TsType::Any
   }
@@ -374,6 +376,7 @@ fn infer_type(ctx : CodeGenCtx, expr : @parser.TsExpr) -> @parser.TsType {
     @parser.TsExpr::BoolLit(_) => @parser.TsType::Boolean
     @parser.TsExpr::StringLit(_) => @parser.TsType::String_
     @parser.TsExpr::NullLit => @parser.TsType::Any // null @parser.TsType::Any
+    @parser.TsExpr::ArrayHole => @parser.TsType::Any
     @parser.TsExpr::ObjectLit(_) => @parser.TsType::Any // objectliteral @parser.TsType::Any
     @parser.TsExpr::Seq(_, right) => infer_type(ctx, right)
     @parser.TsExpr::PropAssignExpr(_, _, value) => infer_type(ctx, value)
@@ -465,6 +468,7 @@ fn infer_type(ctx : CodeGenCtx, expr : @parser.TsExpr) -> @parser.TsType {
       }
     }
     @parser.TsExpr::AssignExpr(_, e) => infer_type(ctx, e) // assignmentexpressiontypetype
+    @parser.TsExpr::AssignPattern(_, e) => infer_type(ctx, e)
     @parser.TsExpr::ArrowFunc(_, _) => @parser.TsType::Any // function @parser.TsType::Any
     @parser.TsExpr::FuncExpr(_) => @parser.TsType::Any // functionexpression @parser.TsType::Any
   }
@@ -623,6 +627,7 @@ fn compile_expr(
       compile_method_call(ctx, receiver, method_name, args, expected_type)
     // Wasm(interpreter)
     @parser.TsExpr::NullLit => ctx.emit(I32Const(0U)) // null = 0
+    @parser.TsExpr::ArrayHole => ctx.emit(I32Const(0U))
     @parser.TsExpr::ObjectLit(_) =>
       raise CodeGenError(
         "ObjectLit is not supported in Wasm compiler (use interpreter)",
@@ -635,6 +640,10 @@ fn compile_expr(
         }
         None => raise CodeGenError("Undefined variable: \{name}")
       }
+    @parser.TsExpr::AssignPattern(_, _) =>
+      raise CodeGenError(
+        "Destructuring assignment is not supported in Wasm compiler (use interpreter)",
+      )
     @parser.TsExpr::ArrowFunc(_, _) =>
       raise CodeGenError(
         "ArrowFunc is not supported in Wasm compiler (use interpreter)",
@@ -1949,8 +1958,8 @@ fn compile_stmt(
     @parser.TsStmt::While(cond, body) => compile_while(ctx, cond, body, return_type)
     @parser.TsStmt::For(init, cond, update, body) =>
       compile_for(ctx, init, cond, update, body, return_type)
-    @parser.TsStmt::ForOf(var_name, var_type, iterable, body) =>
-      compile_for_of(ctx, var_name, var_type, iterable, body, return_type)
+    @parser.TsStmt::ForOf(kind, binding, var_type, iterable, body) =>
+      compile_for_of(ctx, kind, binding, var_type, iterable, body, return_type)
     Break =>
       // loop block
       ctx.emit(Br((ctx.loop_depth * 2 - 1).reinterpret_as_uint()))
@@ -2101,12 +2110,17 @@ fn compile_for(
 // / for...of
 fn compile_for_of(
   ctx : CodeGenCtx,
-  var_name : String,
+  kind : @parser.TsForOfKind,
+  binding : @parser.TsBinding,
   _var_type : @parser.TsType,
   iterable : @parser.TsExpr,
   body : @parser.TsBlock,
   return_type : @parser.TsType,
 ) -> Unit raise CodeGenError {
+  let var_name = match binding {
+    @parser.TsBinding::Ident(name) => name
+    _ => raise CodeGenError("for...of destructuring is not supported in Wasm compiler")
+  }
   // arraygetvariablesave
   let arr_type = infer_type(ctx, iterable)
   let elem_type = match arr_type {
@@ -2131,7 +2145,14 @@ fn compile_for_of(
   ctx.emit(LocalSet(idx_local))
 
   // loopvariable
-  let loop_var_idx = ctx.add_local(var_name, elem_type)
+  let loop_var_idx = match kind {
+    @parser.TsForOfKind::Assign =>
+      match ctx.get_local(var_name) {
+        Some(lvar) => lvar.index
+        None => raise CodeGenError("Undefined variable: \{var_name}")
+      }
+    _ => ctx.add_local(var_name, elem_type)
+  }
   ctx.loop_depth += 1
   let loop_instrs : Array[@core.Instr] = []
 

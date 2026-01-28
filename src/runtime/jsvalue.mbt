@@ -92,9 +92,18 @@ pub fn js_set_default_array_proto(proto : JSValue) -> Unit {
 
 ///|
 // /
+pub struct JSBinding {
+  name : String
+  mut value : JSValue
+  mut is_const : Bool
+  mut is_uninitialized : Bool
+} derive(Show)
+
+///|
+// /
 pub struct JSEnv {
   parent : JSEnv?
-  bindings : Array[(String, JSValue)]
+  bindings : Array[JSBinding]
 } derive(Show)
 
 ///|
@@ -1161,30 +1170,10 @@ pub fn js_define_accessor_prop(
       }
       let idx = @strconv.parse_int(key) catch { _ => -1 }
       if idx >= 0 {
-        if idx < MAX_DENSE_ARRAY_LENGTH {
-          while arr.items.length() <= idx {
-            arr.items.push(Undefined)
-          }
-          arr.items[idx] = Undefined
-        } else {
-          let mut replaced = false
-          for i, prop in arr.props {
-            if prop.key == key {
-              arr.props[i] = {
-                key,
-                value: Undefined,
-                writable: false,
-                enumerable,
-                configurable,
-                get,
-                set,
-              }
-              replaced = true
-              break
-            }
-          }
-          if not(replaced) {
-            arr.props.push({
+        let mut replaced = false
+        for i, prop in arr.props {
+          if prop.key == key {
+            arr.props[i] = {
               key,
               value: Undefined,
               writable: false,
@@ -1192,8 +1181,21 @@ pub fn js_define_accessor_prop(
               configurable,
               get,
               set,
-            })
+            }
+            replaced = true
+            break
           }
+        }
+        if not(replaced) {
+          arr.props.push({
+            key,
+            value: Undefined,
+            writable: false,
+            enumerable,
+            configurable,
+            get,
+            set,
+          })
         }
         let new_len = idx + 1
         if new_len > arr.length {
@@ -1299,7 +1301,62 @@ pub fn js_new_env(parent : JSEnv?) -> JSEnv {
 ///|
 // / variabledefine
 pub fn JSEnv::define_var(self : JSEnv, name : String, value : JSValue) -> Unit {
-  self.bindings.push((name, value))
+  self.bindings.push({
+    name,
+    value,
+    is_const: false,
+    is_uninitialized: false,
+  })
+}
+
+///|
+pub fn JSEnv::define_const(self : JSEnv, name : String, value : JSValue) -> Unit {
+  self.bindings.push({
+    name,
+    value,
+    is_const: true,
+    is_uninitialized: false,
+  })
+}
+
+///|
+pub fn JSEnv::define_uninitialized(
+  self : JSEnv,
+  name : String,
+  is_const : Bool,
+) -> Unit {
+  self.bindings.push({
+    name,
+    value: Undefined,
+    is_const,
+    is_uninitialized: true,
+  })
+}
+
+///|
+pub fn JSEnv::initialize(
+  self : JSEnv,
+  name : String,
+  value : JSValue,
+  is_const : Bool,
+) -> Unit {
+  let len = self.bindings.length()
+  let mut i = len - 1
+  while i >= 0 {
+    if self.bindings[i].name == name {
+      self.bindings[i].value = value
+      self.bindings[i].is_const = is_const
+      self.bindings[i].is_uninitialized = false
+      return
+    }
+    i -= 1
+  }
+  self.bindings.push({
+    name,
+    value,
+    is_const,
+    is_uninitialized: false,
+  })
 }
 
 ///|
@@ -1309,9 +1366,9 @@ pub fn JSEnv::get(self : JSEnv, name : String) -> JSValue {
   let len = self.bindings.length()
   let mut i = len - 1
   while i >= 0 {
-    let (n, v) = self.bindings[i]
-    if n == name {
-      return v
+    let binding = self.bindings[i]
+    if binding.name == name {
+      return binding.value
     }
     i -= 1
   }
@@ -1328,8 +1385,7 @@ pub fn JSEnv::has(self : JSEnv, name : String) -> Bool {
   let len = self.bindings.length()
   let mut i = len - 1
   while i >= 0 {
-    let (n, _) = self.bindings[i]
-    if n == name {
+    if self.bindings[i].name == name {
       return true
     }
     i -= 1
@@ -1347,9 +1403,12 @@ pub fn JSEnv::set(self : JSEnv, name : String, value : JSValue) -> Bool {
   let len = self.bindings.length()
   let mut i = len - 1
   while i >= 0 {
-    let (n, _) = self.bindings[i]
-    if n == name {
-      self.bindings[i] = (name, value)
+    if self.bindings[i].name == name {
+      if self.bindings[i].is_const {
+        return false
+      }
+      self.bindings[i].value = value
+      self.bindings[i].is_uninitialized = false
       return true
     }
     i -= 1
@@ -1357,6 +1416,38 @@ pub fn JSEnv::set(self : JSEnv, name : String, value : JSValue) -> Bool {
   // lookup
   match self.parent {
     Some(parent) => parent.set(name, value)
+    None => false
+  }
+}
+
+///|
+pub fn JSEnv::is_const(self : JSEnv, name : String) -> Bool {
+  let len = self.bindings.length()
+  let mut i = len - 1
+  while i >= 0 {
+    if self.bindings[i].name == name {
+      return self.bindings[i].is_const
+    }
+    i -= 1
+  }
+  match self.parent {
+    Some(parent) => parent.is_const(name)
+    None => false
+  }
+}
+
+///|
+pub fn JSEnv::is_uninitialized(self : JSEnv, name : String) -> Bool {
+  let len = self.bindings.length()
+  let mut i = len - 1
+  while i >= 0 {
+    if self.bindings[i].name == name {
+      return self.bindings[i].is_uninitialized
+    }
+    i -= 1
+  }
+  match self.parent {
+    Some(parent) => parent.is_uninitialized(name)
     None => false
   }
 }

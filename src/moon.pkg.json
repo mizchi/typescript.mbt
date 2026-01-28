@@ -4,6 +4,7 @@
     "moonbitlang/async",
     "moonbitlang/async/fs",
     "moonbitlang/core/env",
+    "moonbitlang/core/encoding/utf8",
     {
       "path": "moonbitlang/typescript/runtime",
       "alias": "runtime"

@@ -266,6 +266,7 @@ fn Parser::binding_first_name(self : Parser, binding : TsBinding) -> String {
         None => "<destruct>"
       }
     }
+    TsBinding::Target(_) => "<destruct>"
   }
 }
 
@@ -285,27 +286,27 @@ fn Parser::parse_binding_array(self : Parser) -> TsBinding raise ParseError {
   let _ = self.expect(LBracket)
   let items : Array[TsBindingElem?] = []
   let mut rest : TsBinding? = None
-  if not(self.check(RBracket)) {
-    while true {
+  while not(self.check(RBracket)) {
+    if self.match_(Ellipsis) {
+      let rest_binding = self.parse_binding_pattern()
+      rest = Some(rest_binding)
       if self.match_(Comma) {
-        items.push(None)
-      } else if self.match_(Ellipsis) {
-        let rest_binding = self.parse_binding_pattern()
-        rest = Some(rest_binding)
-        if self.match_(Comma) {
-          // trailing comma after rest
-        }
-        break
-      } else {
-        items.push(Some(self.parse_binding_element()))
+        // trailing comma after rest
       }
+      break
+    }
+    if self.match_(Comma) {
+      items.push(None)
+      continue
+    }
+    items.push(Some(self.parse_binding_element()))
+    if self.match_(Comma) {
       if self.check(RBracket) {
         break
       }
-      let _ = self.expect(Comma)
-      if self.check(RBracket) {
-        break
-      }
+      continue
+    } else {
+      break
     }
   }
   let _ = self.expect(RBracket)
@@ -320,6 +321,38 @@ fn Parser::parse_object_binding_key(self : Parser) -> String raise ParseError {
     Str(s) => s
     Number(n) => "\{n}"
     Int(n) => "\{n}"
+    Return => "return"
+    If => "if"
+    Else => "else"
+    For => "for"
+    While => "while"
+    Break => "break"
+    Continue => "continue"
+    Function => "function"
+    Let => "let"
+    Const => "const"
+    Var => "var"
+    New => "new"
+    Typeof => "typeof"
+    Of => "of"
+    In => "in"
+    Do => "do"
+    Try => "try"
+    Catch => "catch"
+    Finally => "finally"
+    Throw => "throw"
+    Delete => "delete"
+    Declare => "declare"
+    Interface => "interface"
+    Class => "class"
+    Instanceof => "instanceof"
+    NumberType => "number"
+    BooleanType => "boolean"
+    StringType => "string"
+    VoidType => "void"
+    IntType => "int"
+    Type => "type"
+    Extends => "extends"
     k => raise ParseError("Expected object binding key, got \{k}")
   }
 }
@@ -339,20 +372,38 @@ fn Parser::parse_binding_object(self : Parser) -> TsBinding raise ParseError {
         }
         break
       }
-      let key = self.parse_object_binding_key()
+      let (key, key_expr) =
+        if self.match_(LBracket) {
+          let expr = self.parse_assignment()
+          let _ = self.expect(RBracket)
+          ("<computed>", Some(expr))
+        } else {
+          (self.parse_object_binding_key(), None)
+        }
       if self.match_(Colon) {
         let elem = self.parse_binding_element()
-        props.push({ key, binding: elem.binding, default: elem.default })
-      } else {
-        let mut default : TsExpr? = None
-        if self.match_(Eq) {
-          default = Some(self.parse_assignment())
-        }
         props.push({
           key,
-          binding: TsBinding::Ident(key),
-          default,
+          key_expr,
+          binding: elem.binding,
+          default: elem.default,
         })
+      } else {
+        match key_expr {
+          Some(_) => raise ParseError("Expected Colon, got \{self.peek().kind}")
+          None => {
+            let mut default : TsExpr? = None
+            if self.match_(Eq) {
+              default = Some(self.parse_assignment())
+            }
+            props.push({
+              key,
+              key_expr: None,
+              binding: TsBinding::Ident(key),
+              default,
+            })
+          }
+        }
       }
       if self.check(RBrace) {
         break
@@ -375,6 +426,150 @@ fn Parser::parse_binding_pattern(self : Parser) -> TsBinding raise ParseError {
     _ => {
       let name = self.parse_binding_ident()
       TsBinding::Ident(name)
+    }
+  }
+}
+
+///|
+fn Parser::parse_assignment_target_expr(self : Parser) -> TsExpr raise ParseError {
+  let expr = self.parse_ternary()
+  match expr {
+    Var(_) | PropAccess(_, _) | IndexAccess(_, _) => expr
+    _ => raise ParseError("Invalid assignment target")
+  }
+}
+
+///|
+fn Parser::parse_assignment_binding_element(self : Parser) -> TsBindingElem raise ParseError {
+  let binding = self.parse_assignment_binding_pattern()
+  let default : TsExpr? = if self.match_(Eq) {
+    Some(self.parse_assignment())
+  } else {
+    None
+  }
+  { binding, default }
+}
+
+///|
+fn Parser::parse_assignment_binding_array(self : Parser) -> TsBinding raise ParseError {
+  let _ = self.expect(LBracket)
+  let items : Array[TsBindingElem?] = []
+  let mut rest : TsBinding? = None
+  while not(self.check(RBracket)) {
+    if self.match_(Ellipsis) {
+      let rest_binding = self.parse_assignment_binding_pattern()
+      rest = Some(rest_binding)
+      if self.match_(Comma) {
+        // trailing comma after rest
+      }
+      break
+    }
+    if self.match_(Comma) {
+      items.push(None)
+      continue
+    }
+    items.push(Some(self.parse_assignment_binding_element()))
+    if self.match_(Comma) {
+      if self.check(RBracket) {
+        break
+      }
+      continue
+    } else {
+      break
+    }
+  }
+  let _ = self.expect(RBracket)
+  TsBinding::Array({ items, rest })
+}
+
+///|
+fn Parser::parse_assignment_binding_object(self : Parser) -> TsBinding raise ParseError {
+  let _ = self.expect(LBrace)
+  let props : Array[TsObjectBindingProp] = []
+  let mut rest : String? = None
+  if not(self.check(RBrace)) {
+    while true {
+      if self.match_(Ellipsis) {
+        let name = self.parse_binding_ident()
+        rest = Some(name)
+        if self.match_(Comma) {
+          // trailing comma
+        }
+        break
+      }
+      let (key, key_expr) =
+        if self.match_(LBracket) {
+          let expr = self.parse_assignment()
+          let _ = self.expect(RBracket)
+          ("<computed>", Some(expr))
+        } else {
+          (self.parse_object_binding_key(), None)
+        }
+      if self.match_(Colon) {
+        let elem = self.parse_assignment_binding_element()
+        props.push({
+          key,
+          key_expr,
+          binding: elem.binding,
+          default: elem.default,
+        })
+      } else {
+        match key_expr {
+          Some(_) => raise ParseError("Expected Colon, got \{self.peek().kind}")
+          None => {
+            let mut default : TsExpr? = None
+            if self.match_(Eq) {
+              default = Some(self.parse_assignment())
+            }
+            props.push({
+              key,
+              key_expr: None,
+              binding: TsBinding::Ident(key),
+              default,
+            })
+          }
+        }
+      }
+      if self.check(RBrace) {
+        break
+      }
+      let _ = self.expect(Comma)
+      if self.check(RBrace) {
+        break
+      }
+    }
+  }
+  let _ = self.expect(RBrace)
+  TsBinding::Object({ props, rest })
+}
+
+///|
+fn Parser::parse_assignment_binding_pattern(self : Parser) -> TsBinding raise ParseError {
+  let saved_pos = self.pos
+  let saved_gen = self.in_generator
+  let target =
+    try {
+      Some(self.parse_assignment_target_expr())
+    } catch {
+      _ => None
+    }
+  match target {
+    Some(expr) =>
+      match expr {
+        Var(name) => TsBinding::Ident(name)
+        _ => TsBinding::Target(expr)
+      }
+    None => {
+      self.pos = saved_pos
+      self.in_generator = saved_gen
+      match self.peek().kind {
+        LBracket => self.parse_assignment_binding_array()
+        LBrace => self.parse_assignment_binding_object()
+        _ => {
+          let name = self.parse_binding_ident()
+          TsBinding::Ident(name)
+        }
+      }
     }
   }
 }
@@ -435,6 +630,13 @@ fn Parser::parse_comma(self : Parser) -> TsExpr raise ParseError {
 ///|
 // / assignmentexpression
 fn Parser::parse_assignment(self : Parser) -> TsExpr raise ParseError {
+  if (self.check(LBracket) || self.check(LBrace)) &&
+    self.is_destructuring_assignment_start() {
+    let pattern = self.parse_assignment_binding_pattern()
+    let _ = self.expect(Eq)
+    let right = self.parse_assignment()
+    return AssignPattern(pattern, right)
+  }
   let left = self.parse_ternary()
   if self.check(Eq) {
     match left {
@@ -554,6 +756,22 @@ fn Parser::parse_assignment(self : Parser) -> TsExpr raise ParseError {
   } else {
     left
   }
+}
+
+///|
+fn Parser::is_destructuring_assignment_start(self : Parser) -> Bool {
+  let saved_pos = self.pos
+  let saved_gen = self.in_generator
+  let mut ok = false
+  try {
+    let _ = self.parse_assignment_binding_pattern()
+    ok = self.check(Eq)
+  } catch {
+    _ => ok = false
+  }
+  self.pos = saved_pos
+  self.in_generator = saved_gen
+  ok
 }
 
 ///|
@@ -858,11 +1076,13 @@ fn Parser::parse_call(self : Parser) -> TsExpr raise ParseError {
         Break => "break"
         Continue => "continue"
         Function => "function"
+        Do => "do"
         Try => "try"
         Catch => "catch"
         Finally => "finally"
         Throw => "throw"
         Delete => "delete"
+        Yield => "yield"
         Let => "let"
         Const => "const"
         Var => "var"
@@ -871,6 +1091,9 @@ fn Parser::parse_call(self : Parser) -> TsExpr raise ParseError {
         Of => "of"
         In => "in"
         Class => "class"
+        Declare => "declare"
+        Interface => "interface"
+        Instanceof => "instanceof"
         NumberType => "number"
         BooleanType => "boolean"
         StringType => "string"
@@ -1034,7 +1257,7 @@ fn Parser::parse_primary(self : Parser) -> TsExpr raise ParseError {
         }
         if self.check(Comma) {
           let _ = self.advance()
-          elements.push(NullLit)
+          elements.push(ArrayHole)
           continue
         }
         elements.push(self.parse_assignment())
@@ -1204,13 +1427,7 @@ fn Parser::parse_primary(self : Parser) -> TsExpr raise ParseError {
         let key = if self.match_(LBracket) {
           let key_expr = self.parse_assignment()
           let _ = self.expect(RBracket)
-          match key_expr {
-            StringLit(s) => s
-            IntLit(i) => i.to_string()
-            NumberLit(n) => n.to_string()
-            Var(name) => name
-            _ => "<computed>"
-          }
+          self.computed_key_name(key_expr)
         } else {
           match self.advance().kind {
             Ident(n) => {
@@ -1220,6 +1437,7 @@ fn Parser::parse_primary(self : Parser) -> TsExpr raise ParseError {
             Str(s) => s
             Int(i) => i.to_string()
             Number(n) => n.to_string()
+            Yield => "yield"
             Return => "return"
             If => "if"
             Else => "else"
@@ -1228,6 +1446,12 @@ fn Parser::parse_primary(self : Parser) -> TsExpr raise ParseError {
             Break => "break"
             Continue => "continue"
             Function => "function"
+            Do => "do"
+            Try => "try"
+            Catch => "catch"
+            Finally => "finally"
+            Throw => "throw"
+            Delete => "delete"
             Let => "let"
             Const => "const"
             Var => "var"
@@ -1235,6 +1459,10 @@ fn Parser::parse_primary(self : Parser) -> TsExpr raise ParseError {
             Typeof => "typeof"
             Of => "of"
             In => "in"
+            Declare => "declare"
+            Interface => "interface"
+            Class => "class"
+            Instanceof => "instanceof"
             NumberType => "number"
             BooleanType => "boolean"
             StringType => "string"
@@ -1256,19 +1484,14 @@ fn Parser::parse_primary(self : Parser) -> TsExpr raise ParseError {
             let acc_key = if self.match_(LBracket) {
               let key_expr = self.parse_assignment()
               let _ = self.expect(RBracket)
-              match key_expr {
-                StringLit(s) => s
-                IntLit(i) => i.to_string()
-                NumberLit(n) => n.to_string()
-                Var(name) => name
-                _ => "<computed>"
-              }
+              self.computed_key_name(key_expr)
             } else {
               match self.advance().kind {
                 Ident(n) => n
                 Str(s) => s
                 Int(i) => i.to_string()
                 Number(n) => n.to_string()
+                Yield => "yield"
                 Return => "return"
                 If => "if"
                 Else => "else"
@@ -1277,6 +1500,12 @@ fn Parser::parse_primary(self : Parser) -> TsExpr raise ParseError {
                 Break => "break"
                 Continue => "continue"
                 Function => "function"
+                Do => "do"
+                Try => "try"
+                Catch => "catch"
+                Finally => "finally"
+                Throw => "throw"
+                Delete => "delete"
                 Let => "let"
                 Const => "const"
                 Var => "var"
@@ -1284,6 +1513,10 @@ fn Parser::parse_primary(self : Parser) -> TsExpr raise ParseError {
                 Typeof => "typeof"
                 Of => "of"
                 In => "in"
+                Declare => "declare"
+                Interface => "interface"
+                Class => "class"
+                Instanceof => "instanceof"
                 NumberType => "number"
                 BooleanType => "boolean"
                 StringType => "string"
@@ -1294,7 +1527,14 @@ fn Parser::parse_primary(self : Parser) -> TsExpr raise ParseError {
                 k => raise ParseError("Expected property name, got \{k}")
               }
             }
-            prop_key = acc_key
+            let is_getter = prop_key == "get"
+            let func_name = acc_key
+            prop_key =
+              if is_getter {
+                "@@get:" + acc_key
+              } else {
+                "@@set:" + acc_key
+              }
             let _ = self.expect(LParen)
             let params = self.parse_params()
             let _ = self.expect(RParen)
@@ -1306,7 +1546,7 @@ fn Parser::parse_primary(self : Parser) -> TsExpr raise ParseError {
             }
             let body = self.parse_block()
             FuncExpr({
-              name: prop_key,
+              name: func_name,
               params,
               return_type,
               body,
@@ -1355,13 +1595,7 @@ fn Parser::parse_primary(self : Parser) -> TsExpr raise ParseError {
           let key = if self.match_(LBracket) {
             let key_expr = self.parse_assignment()
             let _ = self.expect(RBracket)
-            match key_expr {
-              StringLit(s) => s
-              IntLit(i) => i.to_string()
-              NumberLit(n) => n.to_string()
-              Var(name) => name
-              _ => "<computed>"
-            }
+            self.computed_key_name(key_expr)
           } else {
             match self.advance().kind {
               Ident(n) => {
@@ -1407,13 +1641,7 @@ fn Parser::parse_primary(self : Parser) -> TsExpr raise ParseError {
               let acc_key = if self.match_(LBracket) {
                 let key_expr = self.parse_assignment()
                 let _ = self.expect(RBracket)
-                match key_expr {
-                  StringLit(s) => s
-                  IntLit(i) => i.to_string()
-                  NumberLit(n) => n.to_string()
-                  Var(name) => name
-                  _ => "<computed>"
-                }
+                self.computed_key_name(key_expr)
               } else {
                 match self.advance().kind {
                   Ident(n) => n
@@ -1445,24 +1673,31 @@ fn Parser::parse_primary(self : Parser) -> TsExpr raise ParseError {
                   k => raise ParseError("Expected property name, got \{k}")
                 }
               }
-              prop_key = acc_key
-              let _ = self.expect(LParen)
-              let params = self.parse_params()
-              let _ = self.expect(RParen)
+            let is_getter = prop_key == "get"
+            let func_name = acc_key
+            prop_key =
+              if is_getter {
+                "@@get:" + acc_key
+              } else {
+                "@@set:" + acc_key
+              }
+            let _ = self.expect(LParen)
+            let params = self.parse_params()
+            let _ = self.expect(RParen)
               let return_type = if self.check(Colon) {
                 let _ = self.advance()
                 self.parse_type()
               } else {
                 Any
               }
-              let body = self.parse_block()
-              FuncExpr({
-                name: prop_key,
-                params,
-                return_type,
-                body,
-                is_generator: false,
-              })
+            let body = self.parse_block()
+            FuncExpr({
+              name: func_name,
+              params,
+              return_type,
+              body,
+              is_generator: false,
+            })
             } else if self.match_(Colon) {
               self.parse_assignment()
             } else if is_ident_key && self.match_(Eq) {
@@ -1595,6 +1830,10 @@ fn Parser::parse_let_like(self : Parser, is_const : Bool) -> TsStmt raise ParseE
           Ident(n) => n
           _ => "<destruct>"
         }
+        Yield => {
+          let _ = self.advance()
+          "yield"
+        }
         NumberType => {
           let _ = self.advance()
           "number"
@@ -1637,7 +1876,11 @@ fn Parser::parse_let_like(self : Parser, is_const : Bool) -> TsStmt raise ParseE
       if self.match_(Eq) {
         self.parse_assignment()
       } else {
-        NullLit
+        if is_const {
+          raise ParseError("const declaration requires an initializer")
+        } else {
+          Var("undefined")
+        }
       }
     let stmt =
       if is_const {
@@ -1760,6 +2003,42 @@ fn Parser::parse_do_while(self : Parser) -> TsStmt raise ParseError {
 }
 
 ///|
+fn Parser::is_for_of_head(self : Parser) -> Bool {
+  let mut i = 0
+  let mut paren = 0
+  let mut brace = 0
+  let mut bracket = 0
+  while i < 4096 {
+    let tok = self.peek_at(i)
+    match tok.kind {
+      Eof => return false
+      Semicolon =>
+        if paren == 0 && brace == 0 && bracket == 0 {
+          return false
+        }
+      RParen =>
+        if paren == 0 && brace == 0 && bracket == 0 {
+          return false
+        } else if paren > 0 {
+          paren -= 1
+        }
+      LParen => paren += 1
+      LBrace => brace += 1
+      RBrace => if brace > 0 { brace -= 1 }
+      LBracket => bracket += 1
+      RBracket => if bracket > 0 { bracket -= 1 }
+      Of | In =>
+        if paren == 0 && brace == 0 && bracket == 0 {
+          return true
+        }
+      _ => ()
+    }
+    i += 1
+  }
+  false
+}
+
+///|
 // / for statement (regularforfor...of)
 fn Parser::parse_for(self : Parser) -> TsStmt raise ParseError {
   let _ = self.expect(For)
@@ -1767,44 +2046,13 @@ fn Parser::parse_for(self : Parser) -> TsStmt raise ParseError {
 
   // for...of check: for (var/let/const x of arr)
   if self.check(Let) || self.check(Const) || self.check(Var) {
-    let _ = self.advance() // let/const
-    let var_name =
-      match self.peek().kind {
-        Ident(_) => match self.advance().kind {
-          Ident(n) => n
-          _ => "<destruct>"
-        }
-        NumberType => {
-          let _ = self.advance()
-          "number"
-        }
-        BooleanType => {
-          let _ = self.advance()
-          "boolean"
-        }
-        StringType => {
-          let _ = self.advance()
-          "string"
-        }
-        VoidType => {
-          let _ = self.advance()
-          "void"
-        }
-        IntType => {
-          let _ = self.advance()
-          "int"
-        }
-        Type => {
-          let _ = self.advance()
-          "type"
-        }
-        Let => {
-          let _ = self.advance()
-          "let"
-        }
-        LBracket | LBrace => self.consume_binding_name()
-        k => raise ParseError("Expected variable name, got \{k}")
-      }
+    let kind = match self.advance().kind {
+      Let => TsForOfKind::Let
+      Const => TsForOfKind::Const
+      Var => TsForOfKind::Var
+      _ => TsForOfKind::Var
+    }
+    let binding = self.parse_binding_pattern()
     // for...of / for...in check
     if self.check(Of) || self.check(In) {
       let _ = self.advance() // of/in
@@ -1812,9 +2060,10 @@ fn Parser::parse_for(self : Parser) -> TsStmt raise ParseError {
       let _ = self.expect(RParen)
       let body = self.parse_block_or_stmt()
       // arrayelementtype ( Number)
-      return ForOf(var_name, Number, iterable, body)
+      return ForOf(kind, binding, Number, iterable, body)
     }
     // regular for (let x: type = init; ...) or for (let x = init; ...)
+    let var_name = self.binding_first_name(binding)
     let var_type = if self.check(Colon) {
       let _ = self.advance()
       self.parse_type()
@@ -1824,7 +2073,12 @@ fn Parser::parse_for(self : Parser) -> TsStmt raise ParseError {
     let _ = self.expect(Eq)
     let init_expr = self.parse_expr()
     let _ = self.expect(Semicolon)
-    let init : TsStmt? = Some(Let(var_name, var_type, init_expr))
+    let init : TsStmt? = Some(
+      match kind {
+        TsForOfKind::Const => TsStmt::Const(var_name, var_type, init_expr)
+        _ => TsStmt::Let(var_name, var_type, init_expr)
+      },
+    )
     return self.parse_for_rest(init)
   }
 
@@ -1833,28 +2087,17 @@ fn Parser::parse_for(self : Parser) -> TsStmt raise ParseError {
     let _ = self.advance()
     None
   } else {
-    let expr = self.parse_expr()
-    if self.check(Of) {
-      let _ = self.advance()
-      let iterable = self.parse_expr()
-      let _ = self.expect(RParen)
-      let body = self.parse_block_or_stmt()
-      let name = match expr {
-        Var(n) => n
-        _ => "<iter>"
+    if self.is_for_of_head() {
+      let binding = self.parse_assignment_binding_pattern()
+      if self.check(Of) || self.check(In) {
+        let _ = self.advance()
+        let iterable = self.parse_expr()
+        let _ = self.expect(RParen)
+        let body = self.parse_block_or_stmt()
+        return ForOf(TsForOfKind::Assign, binding, Number, iterable, body)
       }
-      return ForOf(name, Number, iterable, body)
-    } else if self.check(In) {
-      let _ = self.advance()
-      let iterable = self.parse_expr()
-      let _ = self.expect(RParen)
-      let body = self.parse_block_or_stmt()
-      let name = match expr {
-        Var(n) => n
-        _ => "<iter>"
-      }
-      return ForOf(name, Number, iterable, body)
     }
+    let expr = self.parse_expr()
     let stmt : TsStmt =
       if self.match_(Eq) {
         let value = self.parse_expr()
@@ -2197,25 +2440,57 @@ fn Parser::skip_until_class_body(self : Parser) -> Unit {
 }
 
 ///|
-fn Parser::skip_class_body(self : Parser) -> Unit raise ParseError {
+///|
+fn Parser::scan_class_body_has_static_name(self : Parser) -> Bool raise ParseError {
   if not(self.match_(LBrace)) {
     raise ParseError("Expected LBrace, got \{self.peek().kind}")
   }
   let mut depth = 1
+  let mut has_static_name = false
+  let mut saw_static = false
   while depth > 0 && not(self.check(Eof)) {
-    match self.advance().kind {
-      LBrace => depth += 1
-      RBrace => depth -= 1
-      _ => ()
+    let tok = self.advance().kind
+    match tok {
+      LBrace => {
+        depth += 1
+        if depth == 1 {
+          saw_static = false
+        }
+      }
+      RBrace => {
+        depth -= 1
+        saw_static = false
+      }
+      Ident(n) =>
+        if depth == 1 {
+          if saw_static {
+            if n == "name" {
+              has_static_name = true
+            }
+            saw_static = false
+          } else {
+            saw_static = n == "static"
+          }
+        }
+      _ =>
+        if depth == 1 {
+          saw_static = false
+        }
     }
   }
   if depth > 0 {
     raise ParseError("Expected RBrace, got Eof")
   }
+  has_static_name
 }
 
 ///|
 fn Parser::parse_class_method_name(self : Parser) -> String raise ParseError {
+  if self.match_(LBracket) {
+    let key_expr = self.parse_assignment()
+    let _ = self.expect(RBracket)
+    return self.computed_key_name(key_expr)
+  }
   match self.advance().kind {
     Ident(n) => n
     Str(s) => s
@@ -2245,15 +2520,49 @@ fn Parser::parse_class_method_name(self : Parser) -> String raise ParseError {
 }
 
 ///|
+fn Parser::computed_key_name(
+  _self : Parser,
+  key_expr : TsExpr,
+) -> String {
+  match key_expr {
+    StringLit(s) => s
+    IntLit(i) => i.to_string()
+    NumberLit(n) => n.to_string()
+    Var(name) => name
+    PropAccess(Var("Symbol"), prop) => "@@" + prop
+    _ => "<computed>"
+  }
+}
+
+///|
 fn Parser::parse_class_body(
   self : Parser,
-) -> (TsFunc?, Array[(String, TsFunc)]) raise ParseError {
+) -> (TsFunc?, Array[(Bool, String, TsFunc)]) raise ParseError {
   let _ = self.expect(LBrace)
   let mut ctor : TsFunc? = None
-  let methods : Array[(String, TsFunc)] = []
+  let methods : Array[(Bool, String, TsFunc)] = []
   while not(self.check(RBrace)) && not(self.check(Eof)) {
     if self.match_(Semicolon) {
       continue
+    }
+    let mut is_static = false
+    let mut has_modifier = true
+    while has_modifier {
+      has_modifier = false
+      match self.peek().kind {
+        Ident(n) if n == "static" =>
+          if self.peek_at(1).kind != LParen {
+            let _ = self.advance()
+            is_static = true
+            has_modifier = true
+          }
+        Ident(n) if n == "async" =>
+          if self.peek_at(1).kind != LParen {
+            let _ = self.advance()
+            has_modifier = true
+          }
+        _ => ()
+      }
     }
     let is_generator = self.match_(Star)
     let name = self.parse_class_method_name()
@@ -2268,10 +2577,10 @@ fn Parser::parse_class_body(
     }
     let body = self.parse_block()
     let func : TsFunc = { name, params, return_type, body, is_generator }
-    if name == "constructor" {
+    if name == "constructor" && not(is_static) {
       ctor = Some(func)
     } else {
-      methods.push((name, func))
+      methods.push((is_static, name, func))
     }
   }
   let _ = self.expect(RBrace)
@@ -2281,16 +2590,22 @@ fn Parser::parse_class_body(
 ///|
 fn Parser::parse_class_stub(self : Parser) -> TsExpr raise ParseError {
   let _ = self.expect(Class)
+  let mut class_name = ""
   let _ =
     match self.peek().kind {
-      Ident(_) => self.advance()
+      Ident(n) => {
+        class_name = n
+        self.advance()
+      }
       _ => { kind: Eof, pos: 0 }
     }
   if self.match_(Extends) {
     self.skip_until_class_body()
   }
-  self.skip_class_body()
+  let has_static_name = self.scan_class_body_has_static_name()
   let fields : Array[(String, TsExpr)] = []
+  fields.push(("__class_name", StringLit(class_name)))
+  fields.push(("__class_has_name_prop", BoolLit(has_static_name)))
   let proto = ObjectLit([])
   fields.push(("prototype", proto))
   ObjectLit(fields)
@@ -2340,15 +2655,19 @@ fn Parser::parse_class_decl(self : Parser) -> TsStmt raise ParseError {
   }
 
   for item in methods {
-    let (method_name, func) = item
-    stmts.push(PropAssign(proto_expr, method_name, FuncExpr(func)))
-    match base {
-      Some(base_name) => {
-        let base_proto = PropAccess(Var(base_name), "prototype")
-        let method_ref = PropAccess(proto_expr, method_name)
-        stmts.push(PropAssign(method_ref, "__super_proto", base_proto))
+    let (is_static, method_name, func) = item
+    if is_static {
+      stmts.push(PropAssign(Var(name), method_name, FuncExpr(func)))
+    } else {
+      stmts.push(PropAssign(proto_expr, method_name, FuncExpr(func)))
+      match base {
+        Some(base_name) => {
+          let base_proto = PropAccess(Var(base_name), "prototype")
+          let method_ref = PropAccess(proto_expr, method_name)
+          stmts.push(PropAssign(method_ref, "__super_proto", base_proto))
+        }
+        None => ()
       }
-      None => ()
     }
   }
 

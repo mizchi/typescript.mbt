@@ -118,6 +118,15 @@ pub struct Token {
 } derive(Show)
 
 ///|
+fn write_codepoint(buf : StringBuilder, code : Int) -> Unit {
+  if code < 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff) {
+    buf.write_char('\ufffd')
+  } else {
+    buf.write_char(code.unsafe_to_char())
+  }
+}
+
+///|
 // /
 pub struct Lexer {
   src : String
@@ -597,7 +606,7 @@ fn Lexer::scan_number(self : Lexer) -> TokenKind {
 ///|
 // / /
 fn Lexer::scan_ident(self : Lexer) -> TokenKind {
-  let start = self.pos
+  let buf = StringBuilder::new()
   while true {
     match self.peek() {
       Some(c) =>
@@ -607,14 +616,69 @@ fn Lexer::scan_ident(self : Lexer) -> TokenKind {
           c == '_' ||
           c == '$' {
           let _ = self.advance()
-
+          buf.write_char(c)
+        } else if c == '\\' {
+          let _ = self.advance()
+          match self.peek() {
+            Some('u') => {
+              let _ = self.advance()
+              let mut code = 0
+              let mut ok = true
+              let mut digits = 0
+              if self.peek() == Some('{') {
+                let _ = self.advance()
+                while true {
+                  match self.peek() {
+                    Some('}') => {
+                      let _ = self.advance()
+                      break
+                    }
+                    Some(_) =>
+                      match self.read_hex_digit() {
+                        Some(d) => {
+                          code = code * 16 + d
+                          digits = digits + 1
+                        }
+                        None => {
+                          ok = false
+                          break
+                        }
+                      }
+                    None => {
+                      ok = false
+                      break
+                    }
+                  }
+                }
+              } else {
+                for _ in 0..<4 {
+                  match self.read_hex_digit() {
+                    Some(d) => {
+                      code = code * 16 + d
+                      digits = digits + 1
+                    }
+                    None => {
+                      ok = false
+                      break
+                    }
+                  }
+                }
+              }
+              if ok && digits > 0 {
+                write_codepoint(buf, code)
+              } else {
+                buf.write_char('u')
+              }
+            }
+            _ => break
+          }
         } else {
           break
         }
       None => break
     }
   }
-  let s = try { self.src[start:self.pos].to_string() } catch { _ => "" }
+  let s = buf.to_string()
   if s == "function" {
     Function
   } else if s == "class" {
@@ -749,7 +813,7 @@ fn Lexer::scan_string(self : Lexer, quote : Char) -> TokenKind {
                 }
               }
               if ok {
-                buf.write_char(code.unsafe_to_char())
+                write_codepoint(buf, code)
               } else {
                 buf.write_char('x')
               }
@@ -768,7 +832,7 @@ fn Lexer::scan_string(self : Lexer, quote : Char) -> TokenKind {
                 }
               }
               if ok {
-                buf.write_char(code.unsafe_to_char())
+                write_codepoint(buf, code)
               } else {
                 buf.write_char('u')
               }
@@ -860,7 +924,7 @@ fn Lexer::scan_template(self : Lexer) -> TokenKind {
                 }
               }
               if ok {
-                buf.write_char(code.unsafe_to_char())
+                write_codepoint(buf, code)
               } else {
                 buf.write_char('x')
               }
@@ -879,7 +943,7 @@ fn Lexer::scan_template(self : Lexer) -> TokenKind {
                 }
               }
               if ok {
-                buf.write_char(code.unsafe_to_char())
+                write_codepoint(buf, code)
               } else {
                 buf.write_char('u')
               }
@@ -1090,6 +1154,18 @@ pub fn Lexer::next_token(self : Lexer) -> Token {
           self.pos -= 1
           self.scan_ident()
         }
+        '\\' =>
+          match self.peek() {
+            Some('u') => {
+              self.pos -= 1
+              self.scan_ident()
+            }
+            _ => {
+              // invalid start, treat as identifier fallback
+              self.pos -= 1
+              self.scan_ident()
+            }
+          }
         // operator
         '+' =>
           match self.peek() {

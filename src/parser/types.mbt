@@ -28,6 +28,7 @@ pub(all) enum TsExpr {
   BoolLit(Bool)
   StringLit(String)
   NullLit // null literal
+  ArrayHole // array elision
 
   // variable
   Var(String)
@@ -70,6 +71,9 @@ pub(all) enum TsExpr {
 
   // assignmentexpression (expression)
   AssignExpr(String, TsExpr)
+
+  // destructuring assignment expression
+  AssignPattern(TsBinding, TsExpr)
 
   // compoundassignmentexpression (expression)
   CompoundAssignExpr(TsExpr, TsCompoundOp, TsExpr)
@@ -168,6 +172,15 @@ pub(all) enum TsCompoundOp {
 } derive(Eq, Show)
 
 ///|
+// / for...of binding kind
+pub(all) enum TsForOfKind {
+  Var
+  Let
+  Const
+  Assign
+} derive(Eq, Show)
+
+///|
 // / statement
 pub(all) enum TsStmt {
   // variable
@@ -203,7 +216,7 @@ pub(all) enum TsStmt {
   If(TsExpr, TsBlock, TsBlock?)
   While(TsExpr, TsBlock)
   For(TsStmt?, TsExpr?, TsStmt?, TsBlock) // init, cond, update, body
-  ForOf(String, TsType, TsExpr, TsBlock) // varName, varType, iterable, body
+  ForOf(TsForOfKind, TsBinding, TsType, TsExpr, TsBlock) // kind, binding, varType, iterable, body
   Block(TsBlock)
 
   // break/continue
@@ -233,6 +246,7 @@ pub(all) enum TsBinding {
   Ident(String)
   Array(TsArrayBinding)
   Object(TsObjectBinding)
+  Target(TsExpr)
 } derive(Show)
 
 ///|
@@ -250,6 +264,7 @@ pub(all) struct TsArrayBinding {
 ///|
 pub(all) struct TsObjectBindingProp {
   key : String
+  key_expr : TsExpr?
   binding : TsBinding
   default : TsExpr?
 } derive(Show)

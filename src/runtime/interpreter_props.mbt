@@ -16,6 +16,67 @@ fn JSInterpreter::get_prop_value(self : JSInterpreter, obj : JSValue, key : Stri
 }
 
 ///|
+fn JSInterpreter::set_prop_value(
+  self : JSInterpreter,
+  obj : JSValue,
+  key : String,
+  value : JSValue,
+) -> Unit {
+  match obj {
+    Function(closure) => {
+      for prop in closure.props {
+        if prop.key == key {
+          match prop.set {
+            Some(setter) => {
+              let _ = self.call_function(setter, obj, [value])
+              return
+            }
+            None => {
+              let _ = js_set_prop(obj, key, value)
+              return
+            }
+          }
+        }
+      }
+    }
+    Object(map) => {
+      for prop in map.props {
+        if prop.key == key {
+          match prop.set {
+            Some(setter) => {
+              let _ = self.call_function(setter, obj, [value])
+              return
+            }
+            None => {
+              let _ = js_set_prop(obj, key, value)
+              return
+            }
+          }
+        }
+      }
+    }
+    Array(arr) => {
+      for prop in arr.props {
+        if prop.key == key {
+          match prop.set {
+            Some(setter) => {
+              let _ = self.call_function(setter, obj, [value])
+              return
+            }
+            None => {
+              let _ = js_set_prop(obj, key, value)
+              return
+            }
+          }
+        }
+      }
+    }
+    _ => ()
+  }
+  let _ = js_set_prop(obj, key, value)
+}
+
+///|
 // / propertyget
 fn JSInterpreter::get_prop_value_with_receiver(
   self : JSInterpreter,
@@ -23,6 +84,16 @@ fn JSInterpreter::get_prop_value_with_receiver(
   receiver : JSValue,
   key : String,
 ) -> JSValue {
+  match target {
+    Undefined | Null => {
+      let _ = self.set_error_kind(
+        "TypeError",
+        "Cannot read properties of null or undefined",
+      )
+      return Undefined
+    }
+    _ => ()
+  }
   match target {
     Function(closure) => {
       for prop in closure.props {
@@ -438,6 +509,11 @@ fn JSInterpreter::json_stringify_value(
   depth : Int,
   in_array : Bool,
 ) -> String? {
+  self.tick()
+  match self.peek_error() {
+    Some(_) => return None
+    None => ()
+  }
   if depth > 5 {
     return Some("null")
   }
@@ -468,6 +544,11 @@ fn JSInterpreter::json_stringify_value(
       let arr_val = JSValue::Array(arr)
       let len = arr.length
       for i in 0..<len {
+        self.tick()
+        match self.peek_error() {
+          Some(_) => return None
+          None => ()
+        }
         let key = i.to_string()
         let elem =
           if js_has_prop(arr_val, key) {
@@ -484,20 +565,28 @@ fn JSInterpreter::json_stringify_value(
       Some("[" + parts.join(",") + "]")
     }
     Object(map) => {
-      let parts : Array[String] = []
+      let keys : Array[String] = []
       for prop in map.props {
-        if not(prop.enumerable) {
-          continue
+        if prop.enumerable {
+          keys.push(prop.key)
+        }
+      }
+      let parts : Array[String] = []
+      for key in keys {
+        self.tick()
+        match self.peek_error() {
+          Some(_) => return None
+          None => ()
         }
         let value_str = self.json_stringify_value(
-          self.eval_prop_value(JSValue::Object(map), prop),
+          self.get_prop_value(JSValue::Object(map), key),
           depth + 1,
           false,
         )
         match value_str {
           Some(s) => {
-            let key = "\"" + self.json_escape(prop.key) + "\""
-            parts.push(key + ":" + s)
+            let key_str = "\"" + self.json_escape(key) + "\""
+            parts.push(key_str + ":" + s)
           }
           None => ()
         }

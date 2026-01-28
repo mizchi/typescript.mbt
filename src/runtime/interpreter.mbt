@@ -11,6 +11,7 @@ pub struct JSInterpreter {
   object_proto : JSValue
   function_proto : JSValue
   generators : Array[JSGeneratorState]
+  mut current_gen_id : Int?
 }
 
 ///|
@@ -19,12 +20,15 @@ pub(all) struct JSGeneratorState {
   env : JSEnv
   mut index : Int
   mut done : Bool
+  mut cont : ((JSValue) -> GenSignal)?
+  mut active_iterators : Array[JSValue]
 }
 
 ///|
-priv enum GenSignal {
+pub(all) enum GenSignal {
   Continue
   Yield(JSValue)
+  Suspend(JSValue, (JSValue) -> GenSignal)
   Return(JSValue)
 }
 
@@ -52,6 +56,7 @@ pub fn JSInterpreter::new() -> JSInterpreter {
     object_proto,
     function_proto,
     generators: [],
+    current_gen_id: None,
   }
   interp.install_builtins()
   interp
