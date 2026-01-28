@@ -1,5 +1,7 @@
 # typescript.mbt
 
+Status: Experimental Impl.
+
 Experimental TypeScript/JavaScript subset parser, interpreter, and Wasm codegen.
 The goal is to run as much of TypeScript (and test262) as possible, with a
 fallback to the interpreter when codegen is too limited.

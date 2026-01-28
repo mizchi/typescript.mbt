@@ -419,21 +419,6 @@ fn JSInterpreter::perform_promise_then(
 }
 
 ///|
-// / promise finally
-fn JSInterpreter::promise_finally(
-  self : JSInterpreter,
-  promise : JSValue,
-  on_finally : JSValue,
-) -> JSValue {
-  if not(self.is_callable(on_finally)) {
-    return self.promise_then(promise, Undefined, Undefined)
-  }
-  let fulfill_handler = self.make_bound_native("Promise.__finally_fulfill__", [on_finally])
-  let reject_handler = self.make_bound_native("Promise.__finally_reject__", [on_finally])
-  self.promise_then(promise, fulfill_handler, reject_handler)
-}
-
-///|
 // / promise construct
 fn JSInterpreter::promise_construct(self : JSInterpreter, args : Array[JSValue]) -> JSValue {
   let executor = if args.length() > 0 { args[0] } else { Undefined }
@@ -477,12 +462,6 @@ fn JSInterpreter::promise_construct_with_instance(
     None => ()
   }
   promise
-}
-
-///|
-// / promise static resolve
-fn JSInterpreter::promise_static_resolve(self : JSInterpreter, value : JSValue) -> JSValue {
-  self.promise_static_resolve_with_ctor(self.global_env.get("Promise"), value)
 }
 
 ///|

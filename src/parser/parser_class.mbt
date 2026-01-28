@@ -1,64 +1,4 @@
 ///|
-fn Parser::skip_until_class_body(self : Parser) -> Unit {
-  let mut paren = 0
-  let mut bracket = 0
-  while not(self.check(LBrace)) && not(self.check(Eof)) {
-    match self.advance().kind {
-      LParen => paren += 1
-      RParen => if paren > 0 { paren -= 1 }
-      LBracket => bracket += 1
-      RBracket => if bracket > 0 { bracket -= 1 }
-      _ => ()
-    }
-  }
-}
-
-///|
-///|
-fn Parser::scan_class_body_has_static_name(self : Parser) -> Bool raise ParseError {
-  if not(self.match_(LBrace)) {
-    raise ParseError("Expected LBrace, got \{self.peek().kind}")
-  }
-  let mut depth = 1
-  let mut has_static_name = false
-  let mut saw_static = false
-  while depth > 0 && not(self.check(Eof)) {
-    let tok = self.advance().kind
-    match tok {
-      LBrace => {
-        depth += 1
-        if depth == 1 {
-          saw_static = false
-        }
-      }
-      RBrace => {
-        depth -= 1
-        saw_static = false
-      }
-      Ident(n) =>
-        if depth == 1 {
-          if saw_static {
-            if n == "name" {
-              has_static_name = true
-            }
-            saw_static = false
-          } else {
-            saw_static = n == "static"
-          }
-        }
-      _ =>
-        if depth == 1 {
-          saw_static = false
-        }
-    }
-  }
-  if depth > 0 {
-    raise ParseError("Expected RBrace, got Eof")
-  }
-  has_static_name
-}
-
-///|
 fn Parser::parse_class_method_name(self : Parser) -> String raise ParseError {
   if self.match_(LBracket) {
     let key_expr = self.parse_assignment()
@@ -109,7 +49,7 @@ fn Parser::computed_key_name(
 }
 
 ///|
-fn Parser::is_super_call_stmt(self : Parser, stmt : TsStmt) -> Bool {
+fn Parser::is_super_call_stmt(_self : Parser, stmt : TsStmt) -> Bool {
   match stmt {
     Expr(Call("super", _)) => true
     Expr(CallExpr(Var("super"), _)) => true
@@ -119,7 +59,7 @@ fn Parser::is_super_call_stmt(self : Parser, stmt : TsStmt) -> Bool {
 
 ///|
 fn Parser::make_field_assign_stmt(
-  self : Parser,
+  _self : Parser,
   field_name : String,
   init_opt : TsExpr?,
 ) -> TsStmt {
@@ -149,7 +89,7 @@ fn Parser::inject_instance_fields(
   }
   let mut new_stmts : Array[TsStmt] = []
   let mut inserted = false
-  if base.is_some() {
+  if base is Some(_) {
     for stmt in func.body.stmts {
       new_stmts.push(stmt)
       if not(inserted) && self.is_super_call_stmt(stmt) {
