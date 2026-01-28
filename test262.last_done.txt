@@ -1,1 +1,1 @@
-test262/test/built-ins/RegExpStringIteratorPrototype/ancestry.js
+test262/test/built-ins/Function/StrictFunction_restricted-properties.js

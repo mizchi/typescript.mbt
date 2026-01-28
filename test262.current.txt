@@ -1,1 +1,1 @@
-test262/test/built-ins/AsyncFromSyncIteratorPrototype/return/iterator-result-unwrap-promise.js
+test262/test/built-ins/Function/StrictFunction_restricted-properties.js

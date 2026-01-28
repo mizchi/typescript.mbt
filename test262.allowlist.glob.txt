@@ -69,6 +69,9 @@ test262/test/language/statements/do-while/**
 test262/test/language/statements/switch/**
 test262/test/language/statements/try/**
 test262/test/language/statements/function/**
+test262/test/language/import/**
+test262/test/language/export/**
+test262/test/language/module-code/**
 test262/test/language/identifiers/**
 test262/test/language/comments/**
 test262/test/language/line-terminators/**
@@ -79,5 +82,4 @@ test262/test/staging/sm/Iterator/**
 # Exclusions (heavy runtime / unsupported)
 !**/Temporal/**
 !**/intl402/**
-!**/module/**
 !**/async/**
