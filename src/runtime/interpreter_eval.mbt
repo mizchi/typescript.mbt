@@ -2527,6 +2527,7 @@ fn JSInterpreter::hoist_stmt(self : JSInterpreter, stmt : @ast.TsStmt, env : JSE
       }
     }
     @ast.TsStmt::While(_, body) => self.hoist_block(body, env)
+    @ast.TsStmt::DoWhile(_, body) => self.hoist_block(body, env)
     @ast.TsStmt::For(init, _, _, body) => {
       match init {
         Some(s) => self.hoist_stmt(s, env)
