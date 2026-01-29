@@ -116,3 +116,62 @@ test "bench runtime run large" (b : @bench.T) {
     count=1,
   )
 }
+
+///|
+/// TypeScript d.ts parsing benchmark
+let ts_dts_src : String =
+  #|interface Array<T> {
+  #|    readonly length: number;
+  #|    toString(): string;
+  #|    toLocaleString(): string;
+  #|    pop(): T | undefined;
+  #|    push(...items: T[]): number;
+  #|    concat(...items: ConcatArray<T>[]): T[];
+  #|    concat(...items: (T | ConcatArray<T>)[]): T[];
+  #|    join(separator?: string): string;
+  #|    reverse(): T[];
+  #|    shift(): T | undefined;
+  #|    slice(start?: number, end?: number): T[];
+  #|    sort(compareFn?: (a: T, b: T) => number): this;
+  #|    splice(start: number, deleteCount?: number): T[];
+  #|    splice(start: number, deleteCount: number, ...items: T[]): T[];
+  #|    unshift(...items: T[]): number;
+  #|    indexOf(searchElement: T, fromIndex?: number): number;
+  #|    lastIndexOf(searchElement: T, fromIndex?: number): number;
+  #|    every<S extends T>(predicate: (value: T, index: number, array: T[]) => value is S, thisArg?: any): this is S[];
+  #|    every(predicate: (value: T, index: number, array: T[]) => unknown, thisArg?: any): boolean;
+  #|    some(predicate: (value: T, index: number, array: T[]) => unknown, thisArg?: any): boolean;
+  #|    forEach(callbackfn: (value: T, index: number, array: T[]) => void, thisArg?: any): void;
+  #|    map<U>(callbackfn: (value: T, index: number, array: T[]) => U, thisArg?: any): U[];
+  #|    filter<S extends T>(predicate: (value: T, index: number, array: T[]) => value is S, thisArg?: any): S[];
+  #|    filter(predicate: (value: T, index: number, array: T[]) => unknown, thisArg?: any): T[];
+  #|    reduce(callbackfn: (previousValue: T, currentValue: T, currentIndex: number, array: T[]) => T): T;
+  #|    reduce(callbackfn: (previousValue: T, currentValue: T, currentIndex: number, array: T[]) => T, initialValue: T): T;
+  #|    reduce<U>(callbackfn: (previousValue: U, currentValue: T, currentIndex: number, array: T[]) => U, initialValue: U): U;
+  #|    reduceRight(callbackfn: (previousValue: T, currentValue: T, currentIndex: number, array: T[]) => T): T;
+  #|    reduceRight(callbackfn: (previousValue: T, currentValue: T, currentIndex: number, array: T[]) => T, initialValue: T): T;
+  #|    reduceRight<U>(callbackfn: (previousValue: U, currentValue: T, currentIndex: number, array: T[]) => U, initialValue: U): U;
+  #|    readonly [n: number]: T;
+  #|}
+  #|
+  #|type Partial<T> = {
+  #|    [P in keyof T]?: T[P];
+  #|};
+  #|
+  #|type Required<T> = {
+  #|    [P in keyof T]-?: T[P];
+  #|};
+  #|
+  #|type Omit<T, K extends keyof any> = Pick<T, Exclude<keyof T, K>>;
+
+///|
+test "bench parser typescript dts" (b : @bench.T) {
+  b.bench(
+    () => {
+      let parser = @parser.Parser::from_source(ts_dts_src)
+      let _ = try! parser.parse_module()
+    },
+    name="parser.typescript.dts",
+    count=5,
+  )
+}
