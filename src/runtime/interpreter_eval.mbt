@@ -1000,7 +1000,11 @@ fn JSInterpreter::exec_eval_block(
   for stmt in block.stmts {
     match self.exec_stmt_for_eval(stmt, env) {
       (Some(val), _) => return val // Control flow (return, break, throw)
-      (None, completion) => last = completion
+      (None, completion) =>
+        // UpdateEmpty: only update last if completion is not empty
+        if is_not_empty(completion) {
+          last = completion
+        }
     }
   }
   last
@@ -1047,14 +1051,21 @@ fn JSInterpreter::exec_stmt_for_eval(
         Some(err) => return (Some(err), Undefined)
         None => ()
       }
-      if cond_val.to_boolean() {
+      let (control, completion) = if cond_val.to_boolean() {
         self.exec_block_for_eval(then_block, env)
       } else {
         match else_block {
           Some(block) => self.exec_block_for_eval(block, env)
-          None => (None, Undefined) // if (false) {} -> undefined
+          None => (None, Empty) // if (false) {} -> empty (UpdateEmpty makes it undefined)
         }
       }
+      // ES spec: if statement returns UpdateEmpty(stmtCompletion, undefined)
+      let final_completion = if is_not_empty(completion) {
+        completion
+      } else {
+        Undefined
+      }
+      (control, final_completion)
     }
     @ast.TsStmt::While(cond, body) => self.exec_while_for_eval(cond, body, env)
     @ast.TsStmt::DoWhile(cond, body) =>
@@ -1092,6 +1103,14 @@ fn JSInterpreter::exec_stmt_for_eval(
         }
       }
     }
+    @ast.TsStmt::Try(try_block, catch_binding, catch_block, finally_block) =>
+      self.exec_try_for_eval(
+        try_block,
+        catch_binding,
+        catch_block,
+        finally_block,
+        env,
+      )
     _ => {
       // For other statements, fall back to regular exec_stmt
       match self.exec_stmt(stmt, env) {
@@ -1103,12 +1122,85 @@ fn JSInterpreter::exec_stmt_for_eval(
 }
 
 ///|
+fn JSInterpreter::exec_try_for_eval(
+  self : JSInterpreter,
+  try_block : @ast.TsBlock,
+  catch_binding : @ast.TsBinding?,
+  catch_block : @ast.TsBlock?,
+  finally_block : @ast.TsBlock?,
+  env : JSEnv,
+) -> (JSValue?, JSValue) {
+  // Execute try block
+  let try_result = self.exec_block_for_eval(try_block, env)
+  let (try_control, try_completion) = try_result
+
+  // Check if try block threw an error
+  let caught_error = match try_control {
+    Some(err) =>
+      match err {
+        Object(_) =>
+          match js_get_prop(err, "error") {
+            String(_) => Some(err)
+            _ => None
+          }
+        _ => None
+      }
+    None => None
+  }
+
+  let (after_catch_control, after_catch_completion) = match caught_error {
+    Some(err) => {
+      // Clear the error since we're catching it
+      self.last_error = None
+      match (catch_binding, catch_block) {
+        (Some(binding), Some(block)) => {
+          let catch_env = js_new_env(Some(env))
+          self.init_pattern(binding, err, catch_env, false)
+          self.exec_block_for_eval(block, catch_env)
+        }
+        (None, Some(block)) => {
+          // Optional catch binding (catch without parameter)
+          let catch_env = js_new_env(Some(env))
+          self.exec_block_for_eval(block, catch_env)
+        }
+        _ => (None, Undefined)
+      }
+    }
+    None => (try_control, try_completion)
+  }
+
+  // Execute finally block if present
+  match finally_block {
+    Some(block) => {
+      let (finally_control, finally_completion) = self.exec_block_for_eval(
+        block,
+        env,
+      )
+      // Finally can override control flow but completion follows UpdateEmpty
+      match finally_control {
+        Some(_) => (finally_control, finally_completion)
+        None => {
+          // Finally completed normally, use after_catch result with UpdateEmpty
+          let final_completion = if is_not_empty(finally_completion) {
+            finally_completion
+          } else {
+            after_catch_completion
+          }
+          (after_catch_control, final_completion)
+        }
+      }
+    }
+    None => (after_catch_control, after_catch_completion)
+  }
+}
+
+///|
 fn JSInterpreter::exec_block_for_eval(
   self : JSInterpreter,
   block : @ast.TsBlock,
   env : JSEnv,
 ) -> (JSValue?, JSValue) {
-  let mut last = JSValue::Undefined // blockValue starts as undefined
+  let mut last = JSValue::Empty // blockValue starts as empty (not undefined)
   for stmt in block.stmts {
     match self.exec_stmt_for_eval(stmt, env) {
       (Some(val), completion) => {
