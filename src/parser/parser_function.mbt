@@ -352,6 +352,16 @@ fn Parser::skip_type_alias(self : Parser) -> Unit {
         angle_depth -= 1
         let _ = self.advance()
       }
+      GtGt => {
+        // >> counts as two >
+        angle_depth -= 2
+        let _ = self.advance()
+      }
+      GtGtGt => {
+        // >>> counts as three >
+        angle_depth -= 3
+        let _ = self.advance()
+      }
       Semicolon => {
         if brace_depth == 0 && angle_depth <= 0 {
           let _ = self.advance()
