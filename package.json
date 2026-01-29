@@ -1,0 +1,11 @@
+{
+  "name": "typescript-mbt-oracle",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "extract": "node scripts/extract-interfaces.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}
