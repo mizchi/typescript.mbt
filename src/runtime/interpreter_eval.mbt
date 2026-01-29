@@ -2347,14 +2347,30 @@ pub fn JSInterpreter::exec_stmt(
             Some(err) => {
               match catch_block {
                 Some(block) => {
-                  let catch_env = js_new_env(Some(env))
+                  // ES spec: catch has TWO scopes:
+                  // 1. catch_param_env - for catch parameter bindings
+                  // 2. catch_block_env - for block's let/const declarations
+                  let catch_param_env = js_new_env(Some(env))
                   match catch_binding {
-                    Some(binding) => self.init_pattern(binding, err, catch_env, false)
+                    Some(binding) => {
+                      // First, define the catch parameter binding in catch_param_env
+                      let names : Array[String] = []
+                      collect_binding_names(binding, names)
+                      for name in names {
+                        catch_param_env.define_uninitialized(name, false)
+                      }
+                      // Initialize with the error value (default expressions see catch_param_env)
+                      self.init_pattern(binding, err, catch_param_env, false)
+                    }
                     None => ()
                   }
+                  // Create catch block environment as child of catch_param_env
+                  let catch_block_env = js_new_env(Some(catch_param_env))
+                  // Hoist var declarations to outer scope (function scope)
+                  self.hoist_block(block, env)
                   // Hoist let/const declarations in the catch block
-                  self.hoist_block_lexical(block, catch_env)
-                  result = self.exec_block(block, catch_env)
+                  self.hoist_block_lexical(block, catch_block_env)
+                  result = self.exec_block(block, catch_block_env)
                 }
                 None => pending_error = Some(err)
               }

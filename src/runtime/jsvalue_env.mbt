@@ -76,11 +76,12 @@ pub fn JSEnv::initialize(
     }
     i -= 1
   }
-  // If not found locally, check if parent has the binding
+  // If not found locally, recursively check parent chain
   // (for var declarations hoisted to outer scope)
   match self.parent {
     Some(parent) => {
-      if parent.has_local(name) {
+      if parent.has(name) {
+        // Recursively initialize in parent (will find the correct scope)
         parent.initialize(name, value, is_const)
         return
       }
