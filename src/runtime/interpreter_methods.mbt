@@ -101,7 +101,7 @@ fn JSInterpreter::function_method(
 ///|
 // / stringmethod
 fn JSInterpreter::string_method(
-  _self : JSInterpreter,
+  self : JSInterpreter,
   s : String,
   method_name : String,
   args : Array[JSValue],
@@ -279,7 +279,11 @@ fn JSInterpreter::string_method(
       }
     }
     "at" => {
-      let mut idx = if args.length() > 0 { args[0].to_number().to_int() } else { 0 }
+      let mut idx = if args.length() > 0 {
+        self.to_number_value(args[0]).to_int()
+      } else {
+        0
+      }
       if idx < 0 {
         idx = s.length() + idx
       }
@@ -290,8 +294,16 @@ fn JSInterpreter::string_method(
       }
     }
     "split" => {
+      let sep_val = if args.length() > 0 { args[0] } else { Undefined }
+      let mut sep_string : String? = None
+      if not(is_regexp(sep_val)) {
+        match sep_val {
+          Undefined => ()
+          _ => sep_string = Some(self.to_string_value(sep_val))
+        }
+      }
       let limit = if args.length() > 1 {
-        let n = args[1].to_number()
+        let n = self.to_number_value(args[1])
         if n.is_nan() || n <= 0.0 {
           0
         } else {
@@ -313,7 +325,6 @@ fn JSInterpreter::string_method(
       if limit == 0 {
         return js_new_array()
       }
-      let sep_val = if args.length() > 0 { args[0] } else { Undefined }
       if is_regexp(sep_val) {
         let pattern = regexp_source(sep_val)
         let flags = regexp_flags(sep_val)
@@ -326,7 +337,10 @@ fn JSInterpreter::string_method(
         }
         _ => ()
       }
-      let sep = sep_val.to_js_string()
+      let sep = match sep_string {
+        Some(value) => value
+        None => ""
+      }
       let result : Array[JSValue] = []
       if sep.length() == 0 {
         if s.length() == 0 {
@@ -417,6 +431,43 @@ fn JSInterpreter::string_method(
     "trim" => String(trim_js_string(s, "both"))
     "trimStart" => String(trim_js_string(s, "start"))
     "trimEnd" => String(trim_js_string(s, "end"))
+    "slice" => {
+      let len = s.length()
+      let start_num = if args.length() > 0 {
+        self.to_number_value(args[0])
+      } else {
+        0.0
+      }
+      let mut start = if start_num.is_nan() { 0 } else { start_num.to_int() }
+      let end_num = if args.length() > 1 {
+        self.to_number_value(args[1])
+      } else {
+        len.to_double()
+      }
+      let mut end = if end_num.is_nan() { 0 } else { end_num.to_int() }
+      if start < 0 {
+        start = len + start
+      }
+      if end < 0 {
+        end = len + end
+      }
+      if start < 0 {
+        start = 0
+      }
+      if end < 0 {
+        end = 0
+      }
+      if start > len {
+        start = len
+      }
+      if end > len {
+        end = len
+      }
+      if end < start {
+        end = start
+      }
+      String(try { s[start:end].to_string() } catch { _ => "" })
+    }
     "substring" => {
       let mut start = if args.length() > 0 {
         args[0].to_number().to_int()
@@ -451,6 +502,27 @@ fn JSInterpreter::string_method(
     "toLowerCase" => String(s.to_lower())
     "toLocaleUpperCase" => String(s.to_upper())
     "toLocaleLowerCase" => String(s.to_lower())
+    "big" => String("<big>" + s + "</big>")
+    "small" => String("<small>" + s + "</small>")
+    "bold" => String("<b>" + s + "</b>")
+    "italics" => String("<i>" + s + "</i>")
+    "strike" => String("<strike>" + s + "</strike>")
+    "sub" => String("<sub>" + s + "</sub>")
+    "sup" => String("<sup>" + s + "</sup>")
+    "fixed" => String("<tt>" + s + "</tt>")
+    "blink" => String("<blink>" + s + "</blink>")
+    "fontcolor" => {
+      let color = if args.length() > 0 { self.to_string_value(args[0]) } else { "" }
+      String("<font color=\"" + color + "\">" + s + "</font>")
+    }
+    "fontsize" => {
+      let size = if args.length() > 0 { self.to_string_value(args[0]) } else { "" }
+      String("<font size=\"" + size + "\">" + s + "</font>")
+    }
+    "link" => {
+      let url = if args.length() > 0 { self.to_string_value(args[0]) } else { "" }
+      String("<a href=\"" + url + "\">" + s + "</a>")
+    }
     "repeat" => {
       let count = if args.length() > 0 { args[0].to_number().to_int() } else { 0 }
       if count <= 0 {
@@ -1686,8 +1758,16 @@ fn JSInterpreter::array_method(
       }
     "fill" => {
       let value = if args.length() > 0 { args[0] } else { Undefined }
-      let mut start = if args.length() > 1 { args[1].to_number().to_int() } else { 0 }
-      let mut end = if args.length() > 2 { args[2].to_number().to_int() } else { len }
+      let mut start = if args.length() > 1 {
+        self.to_number_value(args[1]).to_int()
+      } else {
+        0
+      }
+      let mut end = if args.length() > 2 {
+        self.to_number_value(args[2]).to_int()
+      } else {
+        len
+      }
       if start < 0 {
         start = len + start
         if start < 0 {
@@ -1779,7 +1859,11 @@ fn JSInterpreter::array_method(
       JSValue::Array(arr)
     }
     "at" => {
-      let mut idx = if args.length() > 0 { args[0].to_number().to_int() } else { 0 }
+      let mut idx = if args.length() > 0 {
+        self.to_number_value(args[0]).to_int()
+      } else {
+        0
+      }
       if idx < 0 {
         idx = len + idx
       }
