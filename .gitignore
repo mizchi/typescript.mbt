@@ -15,5 +15,8 @@ Thumbs.db
 # Dependencies (managed by moon)
 .mooncakes/
 
+# Node.js
+node_modules/
+
 # test262 run logs
 test262.compound.run.log
