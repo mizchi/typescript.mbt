@@ -807,3 +807,61 @@ test "interpreter: debugger is no-op" {
     _ => fail("expected Number")
   }
 }
+
+///|
+test "interpreter: eval for completion value - no iteration" {
+  let interp = JSInterpreter::new()
+  let result = interp.run(
+    (
+      #|function main() {
+      #|  return eval('1; for (var run = false; run; ) { }');
+      #|}
+    ),
+  )
+  inspect(result, content="Undefined")
+}
+
+///|
+test "eval: for completion value - iteration with body" {
+  let interp = JSInterpreter::new()
+  let result = interp.run(
+    (
+      #|function main() {
+      #|  return eval('2; for (var runB = true; runB; runB = false) { 3; }');
+      #|}
+    ),
+  )
+  inspect(result, content="Number(3)")
+}
+
+///|
+test "eval: for completion value - iteration without body" {
+  let interp = JSInterpreter::new()
+  let result = interp.run(
+    (
+      #|function main() {
+      #|  return eval('1; for (var runA = true; runA; runA = false) { }');
+      #|}
+    ),
+  )
+  inspect(result, content="Undefined")
+}
+
+///|
+test "interpreter: for loop let scope basic" {
+  let interp = JSInterpreter::new()
+  let result = interp.run(
+    (
+      #|function main() {
+      #|  let x = 'outside';
+      #|  let captured;
+      #|  for (let x = 'inside'; true; ) {
+      #|    captured = function() { return x; };
+      #|    break;
+      #|  }
+      #|  return captured();
+      #|}
+    ),
+  )
+  inspect(result, content="String(\"inside\")")
+}

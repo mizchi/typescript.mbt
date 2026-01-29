@@ -1822,6 +1822,24 @@ fn JSInterpreter::exec_do_while_loop(
 }
 
 ///|
+fn is_lexical_init(init : @ast.TsStmt?) -> Bool {
+  match init {
+    Some(@ast.TsStmt::Let(_, _, _)) | Some(@ast.TsStmt::Const(_, _, _)) => true
+    Some(@ast.TsStmt::Block(block)) => {
+      // Check if the block contains let/const declarations (from comma-separated declarations)
+      for stmt in block.stmts {
+        match stmt {
+          @ast.TsStmt::Let(_, _, _) | @ast.TsStmt::Const(_, _, _) => return true
+          _ => ()
+        }
+      }
+      false
+    }
+    _ => false
+  }
+}
+
+///|
 fn JSInterpreter::exec_for_loop(
   self : JSInterpreter,
   init : @ast.TsStmt?,
@@ -1831,18 +1849,39 @@ fn JSInterpreter::exec_for_loop(
   env : JSEnv,
   loop_label : String?,
 ) -> JSValue? {
+  // Create new environment for let/const bindings (ES6 semantics)
+  let loop_env = if is_lexical_init(init) {
+    js_new_env(Some(env))
+  } else {
+    env
+  }
+
   // initialize
   match init {
-    Some(init_stmt) =>
-      match self.exec_stmt(init_stmt, env) {
-        Some(val) => return Some(val)
-        None => ()
+    Some(init_stmt) => {
+      self.hoist_stmt(init_stmt, loop_env)
+      // If init is a Block (from comma-separated let/const declarations),
+      // execute it directly in loop_env without creating a new scope
+      match init_stmt {
+        @ast.TsStmt::Block(block) => {
+          match self.exec_block(block, loop_env) {
+            Some(val) => return Some(val)
+            None => ()
+          }
+        }
+        _ => {
+          match self.exec_stmt(init_stmt, loop_env) {
+            Some(val) => return Some(val)
+            None => ()
+          }
+        }
       }
+    }
     None => ()
   }
   // loop
   while (match cond {
-          Some(c) => self.eval_expr(c, env).to_boolean()
+          Some(c) => self.eval_expr(c, loop_env).to_boolean()
           None => true
         }) {
     match self.peek_error() {
@@ -1854,7 +1893,7 @@ fn JSInterpreter::exec_for_loop(
       Some(err) => return Some(err)
       None => ()
     }
-    match self.exec_block(body, env) {
+    match self.exec_block(body, loop_env) {
       Some(BreakSignal(label)) =>
         if loop_label_matches(loop_label, label) {
           break
@@ -1865,7 +1904,7 @@ fn JSInterpreter::exec_for_loop(
         if loop_label_matches(loop_label, label) {
           match update {
             Some(u) =>
-              match self.exec_stmt(u, env) {
+              match self.exec_stmt(u, loop_env) {
                 Some(val) => return Some(val)
                 None => ()
               }
@@ -1880,7 +1919,7 @@ fn JSInterpreter::exec_for_loop(
     }
     match update {
       Some(u) =>
-        match self.exec_stmt(u, env) {
+        match self.exec_stmt(u, loop_env) {
           Some(val) => return Some(val)
           None => ()
         }
@@ -2458,6 +2497,7 @@ fn JSInterpreter::hoist_stmt(self : JSInterpreter, stmt : @ast.TsStmt, env : JSE
     }
     @ast.TsStmt::Let(binding, _, _) | @ast.TsStmt::Const(binding, _, _) => {
       // let/const declarations are hoisted with TDZ (uninitialized)
+      // Use has_local to allow shadowing of outer variables
       let names : Array[String] = []
       collect_binding_names(binding, names)
       let is_const = match stmt {
@@ -2465,7 +2505,7 @@ fn JSInterpreter::hoist_stmt(self : JSInterpreter, stmt : @ast.TsStmt, env : JSE
         _ => false
       }
       for name in names {
-        if not(env.has(name)) {
+        if not(env.has_local(name)) {
           env.define_uninitialized(name, is_const)
           match env.parent {
             None => {
