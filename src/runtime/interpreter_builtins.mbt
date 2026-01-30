@@ -147,6 +147,9 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let has_instance = self.make_native("Function.prototype[@@hasInstance]")
   self.set_function_length(has_instance, 1.0)
   let _ = js_set_prop(self.function_proto, "@@hasInstance", has_instance)
+  let fn_to_string = self.make_native("Function.prototype.toString")
+  self.set_function_length(fn_to_string, 0.0)
+  let _ = js_set_prop(self.function_proto, "toString", fn_to_string)
   self.set_function_length(self.function_proto, 0.0)
   self.set_function_name(self.function_proto, "")
   let function_ctor = self.make_native("Function")
@@ -3963,6 +3966,51 @@ fn JSInterpreter::call_native(
         Bool(false)
       } else {
         Bool(self.ordinary_has_instance(this_arg, args[0]))
+      }
+    }
+    "Function.prototype.toString" => {
+      match this_arg {
+        Function(closure) => {
+          let name_prop = js_get_prop(this_arg, "name")
+          let name = match name_prop {
+            String(s) => s
+            _ => ""
+          }
+          match closure.body {
+            Native(_) => {
+              js_string("function \{name}() { [native code] }")
+            }
+            Bound(_, _, _) => {
+              js_string("function \{name}() { [native code] }")
+            }
+            Ast(func) => {
+              let params_arr : Array[String] = []
+              for p in func.params {
+                match p.binding {
+                  Some(@ast.TsBinding::Ident(id)) => params_arr.push(id)
+                  _ => params_arr.push("_")
+                }
+              }
+              let params_str = params_arr.join(", ")
+              if closure.is_arrow {
+                if params_arr.length() == 1 {
+                  js_string("\{params_str} => {}")
+                } else {
+                  js_string("(\{params_str}) => {}")
+                }
+              } else if closure.is_generator {
+                js_string("function* \{name}(\{params_str}) {}")
+              } else if name == "<anon>" || name == "" {
+                js_string("function (\{params_str}) {}")
+              } else {
+                js_string("function \{name}(\{params_str}) {}")
+              }
+            }
+          }
+        }
+        _ => {
+          self.set_error_kind("TypeError", "Function.prototype.toString requires that 'this' be a Function")
+        }
       }
     }
     "Function.call" => {

@@ -249,7 +249,13 @@ pub fn JSValue::to_js_string(self : JSValue) -> String {
     Bool(false) => "false"
     Number(n) => n.to_string()
     String(s) => s
-    Object(_) => "[object Object]"
+    Object(_) => {
+      // Check for special object types
+      match js_get_prop(self, "__gen_id") {
+        Number(_) => "[object Generator]"
+        _ => "[object Object]"
+      }
+    }
     Array(arr) => {
       let parts : Array[String] = []
       for item in arr.items {
@@ -257,7 +263,41 @@ pub fn JSValue::to_js_string(self : JSValue) -> String {
       }
       parts.join(",")
     }
-    Function(_) => "[function]"
+    Function(closure) => {
+      // Get the name from the "name" property if available
+      let name_prop = js_get_prop(self, "name")
+      let name = match name_prop {
+        String(s) => s
+        _ => ""
+      }
+      match closure.body {
+        Native(_) => "function \{name}() { [native code] }"
+        Bound(_, _, _) => "function \{name}() { [native code] }"
+        Ast(func) => {
+          let params_arr : Array[String] = []
+          for p in func.params {
+            match p.binding {
+              Some(@ast.TsBinding::Ident(id)) => params_arr.push(id)
+              _ => params_arr.push("_")
+            }
+          }
+          let params_str = params_arr.join(", ")
+          if closure.is_arrow {
+            if params_arr.length() == 1 {
+              "\{params_str} => {}"
+            } else {
+              "(\{params_str}) => {}"
+            }
+          } else if closure.is_generator {
+            "function* \{name}(\{params_str}) {}"
+          } else if name == "<anon>" || name == "" {
+            "function (\{params_str}) {}"
+          } else {
+            "function \{name}(\{params_str}) {}"
+          }
+        }
+      }
+    }
     BreakSignal(_) | ContinueSignal(_) | Empty => "" // internal
   }
 }
