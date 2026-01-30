@@ -4,12 +4,28 @@
 
 | ステータス | 件数 |
 |-----------|------|
-| Passed | 14,097 |
-| Failed | 5,713 |
+| Passed | 14,169 |
+| Failed | 5,641 |
 | Skipped | 4,066 |
 | **Total** | 23,876 |
 
-### 最新の修正 (private method/accessor エラー処理) - 完了
+### 最新の修正 (strict mode + prototype lookup) - 完了
+- **グローバル定数を non-writable に**
+  - `Infinity`, `NaN`, `undefined` を `writable: false, enumerable: false, configurable: false` に
+  - strict mode で代入すると TypeError
+- **Number 定数追加**
+  - `Number.MAX_VALUE`, `MIN_VALUE`, `EPSILON`, `MIN_SAFE_INTEGER`
+- **delete super.x で ReferenceError**
+  - `delete super.property` や `delete super[key]` で ReferenceError
+- **strict mode で non-configurable プロパティの delete で TypeError**
+- **__proto__ in object literals**
+  - `{ __proto__: obj }` がプロトタイプを設定 (own property として追加しない)
+- **プリミティブのプロパティアクセス**
+  - `(1).foo` が `Number.prototype.foo` を検索
+  - 同様に String, Boolean も対応
+- **Passed: 14,097 → 14,169 (+72)**
+
+### 以前の修正 (private method/accessor エラー処理) - 完了
 - **プライベートメソッドへの代入禁止**
   - `this.#privateMethod += 1` のような compound assignment で TypeError
   - PrivateSet で method kind の場合は常にエラー
@@ -287,5 +303,6 @@
 | async/await | 13,714 | 6,096 | 4,066 | +520 |
 | dynamic import | 13,991 | 5,819 | 4,066 | +277 |
 | private method/accessor | 14,097 | 5,713 | 4,066 | +106 |
+| strict mode + proto | 14,169 | 5,641 | 4,066 | +72 |
 
-**総合改善: +1,857 passed tests**
+**総合改善: +1,929 passed tests**
