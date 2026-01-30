@@ -64,6 +64,21 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let obj_from_entries = self.make_native("Object.fromEntries")
   self.set_function_length(obj_from_entries, 1.0)
   let _ = js_set_prop(object_ctor, "fromEntries", obj_from_entries)
+  let obj_prevent_ext = self.make_native("Object.preventExtensions")
+  self.set_function_length(obj_prevent_ext, 1.0)
+  let _ = js_set_prop(object_ctor, "preventExtensions", obj_prevent_ext)
+  let obj_freeze = self.make_native("Object.freeze")
+  self.set_function_length(obj_freeze, 1.0)
+  let _ = js_set_prop(object_ctor, "freeze", obj_freeze)
+  let obj_seal = self.make_native("Object.seal")
+  self.set_function_length(obj_seal, 1.0)
+  let _ = js_set_prop(object_ctor, "seal", obj_seal)
+  let obj_is_frozen = self.make_native("Object.isFrozen")
+  self.set_function_length(obj_is_frozen, 1.0)
+  let _ = js_set_prop(object_ctor, "isFrozen", obj_is_frozen)
+  let obj_is_sealed = self.make_native("Object.isSealed")
+  self.set_function_length(obj_is_sealed, 1.0)
+  let _ = js_set_prop(object_ctor, "isSealed", obj_is_sealed)
   self.global_env.define_var("Object", object_ctor)
   let _ = js_set_prop(global_obj, "Object", object_ctor)
 
@@ -3765,8 +3780,76 @@ fn JSInterpreter::call_native(
     "Object.isExtensible" => {
       let target = if args.length() > 0 { args[0] } else { Undefined }
       match target {
-        Object(_) | Function(_) | Array(_) => Bool(true)
+        Object(_) | Function(_) | Array(_) => {
+          // Check if object has been marked as non-extensible
+          match js_get_prop(target, "__non_extensible") {
+            Bool(true) => Bool(false)
+            _ => Bool(true)
+          }
+        }
         _ => Bool(false)
+      }
+    }
+    "Object.preventExtensions" => {
+      let target = if args.length() > 0 { args[0] } else { Undefined }
+      match target {
+        Object(_) | Function(_) | Array(_) => {
+          // Mark object as non-extensible (non-enumerable internal property)
+          let _ = js_define_data_prop(target, "__non_extensible", Bool(true), false, false, false)
+          target
+        }
+        _ => target
+      }
+    }
+    "Object.freeze" => {
+      let target = if args.length() > 0 { args[0] } else { Undefined }
+      match target {
+        Object(_) | Function(_) | Array(_) => {
+          // Mark object as frozen (non-enumerable internal properties)
+          let _ = js_define_data_prop(target, "__non_extensible", Bool(true), false, false, false)
+          let _ = js_define_data_prop(target, "__frozen", Bool(true), false, false, false)
+          target
+        }
+        _ => target
+      }
+    }
+    "Object.seal" => {
+      let target = if args.length() > 0 { args[0] } else { Undefined }
+      match target {
+        Object(_) | Function(_) | Array(_) => {
+          // Mark object as sealed (non-enumerable internal properties)
+          let _ = js_define_data_prop(target, "__non_extensible", Bool(true), false, false, false)
+          let _ = js_define_data_prop(target, "__sealed", Bool(true), false, false, false)
+          target
+        }
+        _ => target
+      }
+    }
+    "Object.isFrozen" => {
+      let target = if args.length() > 0 { args[0] } else { Undefined }
+      match target {
+        Object(_) | Function(_) | Array(_) =>
+          match js_get_prop(target, "__frozen") {
+            Bool(true) => Bool(true)
+            _ => Bool(false)
+          }
+        _ => Bool(true) // Non-objects are considered frozen
+      }
+    }
+    "Object.isSealed" => {
+      let target = if args.length() > 0 { args[0] } else { Undefined }
+      match target {
+        Object(_) | Function(_) | Array(_) =>
+          match js_get_prop(target, "__sealed") {
+            Bool(true) => Bool(true)
+            _ =>
+              // Frozen objects are also sealed
+              match js_get_prop(target, "__frozen") {
+                Bool(true) => Bool(true)
+                _ => Bool(false)
+              }
+          }
+        _ => Bool(true) // Non-objects are considered sealed
       }
     }
     "Object.is" => {
