@@ -964,6 +964,72 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let date_get_full_year = self.make_native("Date.prototype.getFullYear")
   self.set_function_length(date_get_full_year, 0.0)
   let _ = js_set_prop(date_proto, "getFullYear", date_get_full_year)
+  let date_get_month = self.make_native("Date.prototype.getMonth")
+  self.set_function_length(date_get_month, 0.0)
+  let _ = js_set_prop(date_proto, "getMonth", date_get_month)
+  let date_get_date = self.make_native("Date.prototype.getDate")
+  self.set_function_length(date_get_date, 0.0)
+  let _ = js_set_prop(date_proto, "getDate", date_get_date)
+  let date_get_day = self.make_native("Date.prototype.getDay")
+  self.set_function_length(date_get_day, 0.0)
+  let _ = js_set_prop(date_proto, "getDay", date_get_day)
+  let date_get_hours = self.make_native("Date.prototype.getHours")
+  self.set_function_length(date_get_hours, 0.0)
+  let _ = js_set_prop(date_proto, "getHours", date_get_hours)
+  let date_get_minutes = self.make_native("Date.prototype.getMinutes")
+  self.set_function_length(date_get_minutes, 0.0)
+  let _ = js_set_prop(date_proto, "getMinutes", date_get_minutes)
+  let date_get_seconds = self.make_native("Date.prototype.getSeconds")
+  self.set_function_length(date_get_seconds, 0.0)
+  let _ = js_set_prop(date_proto, "getSeconds", date_get_seconds)
+  let date_get_milliseconds = self.make_native("Date.prototype.getMilliseconds")
+  self.set_function_length(date_get_milliseconds, 0.0)
+  let _ = js_set_prop(date_proto, "getMilliseconds", date_get_milliseconds)
+  let date_get_utc_full_year = self.make_native("Date.prototype.getUTCFullYear")
+  self.set_function_length(date_get_utc_full_year, 0.0)
+  let _ = js_set_prop(date_proto, "getUTCFullYear", date_get_utc_full_year)
+  let date_get_utc_month = self.make_native("Date.prototype.getUTCMonth")
+  self.set_function_length(date_get_utc_month, 0.0)
+  let _ = js_set_prop(date_proto, "getUTCMonth", date_get_utc_month)
+  let date_get_utc_date = self.make_native("Date.prototype.getUTCDate")
+  self.set_function_length(date_get_utc_date, 0.0)
+  let _ = js_set_prop(date_proto, "getUTCDate", date_get_utc_date)
+  let date_get_utc_day = self.make_native("Date.prototype.getUTCDay")
+  self.set_function_length(date_get_utc_day, 0.0)
+  let _ = js_set_prop(date_proto, "getUTCDay", date_get_utc_day)
+  let date_get_utc_hours = self.make_native("Date.prototype.getUTCHours")
+  self.set_function_length(date_get_utc_hours, 0.0)
+  let _ = js_set_prop(date_proto, "getUTCHours", date_get_utc_hours)
+  let date_get_utc_minutes = self.make_native("Date.prototype.getUTCMinutes")
+  self.set_function_length(date_get_utc_minutes, 0.0)
+  let _ = js_set_prop(date_proto, "getUTCMinutes", date_get_utc_minutes)
+  let date_get_utc_seconds = self.make_native("Date.prototype.getUTCSeconds")
+  self.set_function_length(date_get_utc_seconds, 0.0)
+  let _ = js_set_prop(date_proto, "getUTCSeconds", date_get_utc_seconds)
+  let date_get_utc_milliseconds = self.make_native("Date.prototype.getUTCMilliseconds")
+  self.set_function_length(date_get_utc_milliseconds, 0.0)
+  let _ = js_set_prop(date_proto, "getUTCMilliseconds", date_get_utc_milliseconds)
+  let date_get_timezone_offset = self.make_native("Date.prototype.getTimezoneOffset")
+  self.set_function_length(date_get_timezone_offset, 0.0)
+  let _ = js_set_prop(date_proto, "getTimezoneOffset", date_get_timezone_offset)
+  let date_to_string = self.make_native("Date.prototype.toString")
+  self.set_function_length(date_to_string, 0.0)
+  let _ = js_set_prop(date_proto, "toString", date_to_string)
+  let date_to_date_string = self.make_native("Date.prototype.toDateString")
+  self.set_function_length(date_to_date_string, 0.0)
+  let _ = js_set_prop(date_proto, "toDateString", date_to_date_string)
+  let date_to_time_string = self.make_native("Date.prototype.toTimeString")
+  self.set_function_length(date_to_time_string, 0.0)
+  let _ = js_set_prop(date_proto, "toTimeString", date_to_time_string)
+  let date_to_iso_string = self.make_native("Date.prototype.toISOString")
+  self.set_function_length(date_to_iso_string, 0.0)
+  let _ = js_set_prop(date_proto, "toISOString", date_to_iso_string)
+  let date_to_utc_string = self.make_native("Date.prototype.toUTCString")
+  self.set_function_length(date_to_utc_string, 0.0)
+  let _ = js_set_prop(date_proto, "toUTCString", date_to_utc_string)
+  let date_to_json = self.make_native("Date.prototype.toJSON")
+  self.set_function_length(date_to_json, 1.0)
+  let _ = js_set_prop(date_proto, "toJSON", date_to_json)
   let date_get_time = self.make_native("Date.prototype.getTime")
   self.set_function_length(date_get_time, 0.0)
   let _ = js_set_prop(date_proto, "getTime", date_get_time)
@@ -3784,6 +3850,466 @@ fn JSInterpreter::call_native(
         }
       }
     }
+    "Date.prototype.getMonth" =>
+      match self.date_time_value(this_arg) {
+        Some(t) =>
+          if t.is_nan() {
+            Number(js_nan)
+          } else {
+            let (_, month, _, _, _, _, _) = @lib.break_time(t)
+            Number(month.to_double())
+          }
+        None => self.error_or_undefined()
+      }
+    "Date.prototype.getDate" =>
+      match self.date_time_value(this_arg) {
+        Some(t) =>
+          if t.is_nan() {
+            Number(js_nan)
+          } else {
+            let (_, _, day, _, _, _, _) = @lib.break_time(t)
+            Number(day.to_double())
+          }
+        None => self.error_or_undefined()
+      }
+    "Date.prototype.getDay" =>
+      match self.date_time_value(this_arg) {
+        Some(t) =>
+          if t.is_nan() {
+            Number(js_nan)
+          } else {
+            // Day of week: 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+            // Jan 1, 1970 was Thursday (day 4)
+            let days = (t / 86400000.0).floor().to_int()
+            let day_of_week = ((days % 7) + 4) % 7
+            Number(day_of_week.to_double())
+          }
+        None => self.error_or_undefined()
+      }
+    "Date.prototype.getHours" =>
+      match self.date_time_value(this_arg) {
+        Some(t) =>
+          if t.is_nan() {
+            Number(js_nan)
+          } else {
+            let (_, _, _, hour, _, _, _) = @lib.break_time(t)
+            Number(hour.to_double())
+          }
+        None => self.error_or_undefined()
+      }
+    "Date.prototype.getMinutes" =>
+      match self.date_time_value(this_arg) {
+        Some(t) =>
+          if t.is_nan() {
+            Number(js_nan)
+          } else {
+            let (_, _, _, _, minute, _, _) = @lib.break_time(t)
+            Number(minute.to_double())
+          }
+        None => self.error_or_undefined()
+      }
+    "Date.prototype.getSeconds" =>
+      match self.date_time_value(this_arg) {
+        Some(t) =>
+          if t.is_nan() {
+            Number(js_nan)
+          } else {
+            let (_, _, _, _, _, second, _) = @lib.break_time(t)
+            Number(second.to_double())
+          }
+        None => self.error_or_undefined()
+      }
+    "Date.prototype.getMilliseconds" =>
+      match self.date_time_value(this_arg) {
+        Some(t) =>
+          if t.is_nan() {
+            Number(js_nan)
+          } else {
+            let (_, _, _, _, _, _, milli) = @lib.break_time(t)
+            Number(milli.to_double())
+          }
+        None => self.error_or_undefined()
+      }
+    "Date.prototype.getUTCFullYear" =>
+      match self.date_time_value(this_arg) {
+        Some(t) =>
+          if t.is_nan() {
+            Number(js_nan)
+          } else {
+            let (year, _, _, _, _, _, _) = @lib.break_time(t)
+            Number(year.to_double())
+          }
+        None => self.error_or_undefined()
+      }
+    "Date.prototype.getUTCMonth" =>
+      match self.date_time_value(this_arg) {
+        Some(t) =>
+          if t.is_nan() {
+            Number(js_nan)
+          } else {
+            let (_, month, _, _, _, _, _) = @lib.break_time(t)
+            Number(month.to_double())
+          }
+        None => self.error_or_undefined()
+      }
+    "Date.prototype.getUTCDate" =>
+      match self.date_time_value(this_arg) {
+        Some(t) =>
+          if t.is_nan() {
+            Number(js_nan)
+          } else {
+            let (_, _, day, _, _, _, _) = @lib.break_time(t)
+            Number(day.to_double())
+          }
+        None => self.error_or_undefined()
+      }
+    "Date.prototype.getUTCDay" =>
+      match self.date_time_value(this_arg) {
+        Some(t) =>
+          if t.is_nan() {
+            Number(js_nan)
+          } else {
+            let days = (t / 86400000.0).floor().to_int()
+            let day_of_week = ((days % 7) + 4) % 7
+            Number(day_of_week.to_double())
+          }
+        None => self.error_or_undefined()
+      }
+    "Date.prototype.getUTCHours" =>
+      match self.date_time_value(this_arg) {
+        Some(t) =>
+          if t.is_nan() {
+            Number(js_nan)
+          } else {
+            let (_, _, _, hour, _, _, _) = @lib.break_time(t)
+            Number(hour.to_double())
+          }
+        None => self.error_or_undefined()
+      }
+    "Date.prototype.getUTCMinutes" =>
+      match self.date_time_value(this_arg) {
+        Some(t) =>
+          if t.is_nan() {
+            Number(js_nan)
+          } else {
+            let (_, _, _, _, minute, _, _) = @lib.break_time(t)
+            Number(minute.to_double())
+          }
+        None => self.error_or_undefined()
+      }
+    "Date.prototype.getUTCSeconds" =>
+      match self.date_time_value(this_arg) {
+        Some(t) =>
+          if t.is_nan() {
+            Number(js_nan)
+          } else {
+            let (_, _, _, _, _, second, _) = @lib.break_time(t)
+            Number(second.to_double())
+          }
+        None => self.error_or_undefined()
+      }
+    "Date.prototype.getUTCMilliseconds" =>
+      match self.date_time_value(this_arg) {
+        Some(t) =>
+          if t.is_nan() {
+            Number(js_nan)
+          } else {
+            let (_, _, _, _, _, _, milli) = @lib.break_time(t)
+            Number(milli.to_double())
+          }
+        None => self.error_or_undefined()
+      }
+    "Date.prototype.getTimezoneOffset" =>
+      // Return 0 for UTC (no timezone offset support currently)
+      match self.date_time_value(this_arg) {
+        Some(t) =>
+          if t.is_nan() {
+            Number(js_nan)
+          } else {
+            Number(0.0)
+          }
+        None => self.error_or_undefined()
+      }
+    "Date.prototype.toString" =>
+      match self.date_time_value(this_arg) {
+        Some(t) =>
+          if t.is_nan() {
+            String("Invalid Date")
+          } else {
+            let (year, month, day, hour, minute, second, _) = @lib.break_time(t)
+            let day_names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+            let month_names = [
+              "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct",
+              "Nov", "Dec",
+            ]
+            let days = (t / 86400000.0).floor().to_int()
+            let day_of_week = ((days % 7) + 4) % 7
+            let day_name = day_names[day_of_week]
+            let month_name = month_names[month]
+            let day_str = if day < 10 {
+              "0" + day.to_string()
+            } else {
+              day.to_string()
+            }
+            let hour_str = if hour < 10 {
+              "0" + hour.to_string()
+            } else {
+              hour.to_string()
+            }
+            let min_str = if minute < 10 {
+              "0" + minute.to_string()
+            } else {
+              minute.to_string()
+            }
+            let sec_str = if second < 10 {
+              "0" + second.to_string()
+            } else {
+              second.to_string()
+            }
+            String(
+              day_name +
+              " " +
+              month_name +
+              " " +
+              day_str +
+              " " +
+              year.to_string() +
+              " " +
+              hour_str +
+              ":" +
+              min_str +
+              ":" +
+              sec_str +
+              " GMT+0000 (UTC)",
+            )
+          }
+        None => self.error_or_undefined()
+      }
+    "Date.prototype.toDateString" =>
+      match self.date_time_value(this_arg) {
+        Some(t) =>
+          if t.is_nan() {
+            String("Invalid Date")
+          } else {
+            let (year, month, day, _, _, _, _) = @lib.break_time(t)
+            let day_names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+            let month_names = [
+              "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct",
+              "Nov", "Dec",
+            ]
+            let days = (t / 86400000.0).floor().to_int()
+            let day_of_week = ((days % 7) + 4) % 7
+            let day_name = day_names[day_of_week]
+            let month_name = month_names[month]
+            let day_str = if day < 10 {
+              "0" + day.to_string()
+            } else {
+              day.to_string()
+            }
+            String(
+              day_name + " " + month_name + " " + day_str + " " + year.to_string(),
+            )
+          }
+        None => self.error_or_undefined()
+      }
+    "Date.prototype.toTimeString" =>
+      match self.date_time_value(this_arg) {
+        Some(t) =>
+          if t.is_nan() {
+            String("Invalid Date")
+          } else {
+            let (_, _, _, hour, minute, second, _) = @lib.break_time(t)
+            let hour_str = if hour < 10 {
+              "0" + hour.to_string()
+            } else {
+              hour.to_string()
+            }
+            let min_str = if minute < 10 {
+              "0" + minute.to_string()
+            } else {
+              minute.to_string()
+            }
+            let sec_str = if second < 10 {
+              "0" + second.to_string()
+            } else {
+              second.to_string()
+            }
+            String(hour_str + ":" + min_str + ":" + sec_str + " GMT+0000 (UTC)")
+          }
+        None => self.error_or_undefined()
+      }
+    "Date.prototype.toISOString" =>
+      match self.date_time_value(this_arg) {
+        Some(t) =>
+          if t.is_nan() {
+            self.set_error_kind("RangeError", "Invalid time value")
+          } else {
+            let (year, month, day, hour, minute, second, milli) = @lib.break_time(t)
+            fn pad2(n : Int) -> String {
+              if n < 10 {
+                "0" + n.to_string()
+              } else {
+                n.to_string()
+              }
+            }
+
+            fn pad3(n : Int) -> String {
+              if n < 10 {
+                "00" + n.to_string()
+              } else if n < 100 {
+                "0" + n.to_string()
+              } else {
+                n.to_string()
+              }
+            }
+
+            fn pad4(n : Int) -> String {
+              if n < 0 {
+                "-" + pad4(-n)
+              } else if n < 10 {
+                "000" + n.to_string()
+              } else if n < 100 {
+                "00" + n.to_string()
+              } else if n < 1000 {
+                "0" + n.to_string()
+              } else {
+                n.to_string()
+              }
+            }
+
+            String(
+              pad4(year) +
+              "-" +
+              pad2(month + 1) +
+              "-" +
+              pad2(day) +
+              "T" +
+              pad2(hour) +
+              ":" +
+              pad2(minute) +
+              ":" +
+              pad2(second) +
+              "." +
+              pad3(milli) +
+              "Z",
+            )
+          }
+        None => self.error_or_undefined()
+      }
+    "Date.prototype.toUTCString" =>
+      match self.date_time_value(this_arg) {
+        Some(t) =>
+          if t.is_nan() {
+            String("Invalid Date")
+          } else {
+            let (year, month, day, hour, minute, second, _) = @lib.break_time(t)
+            let day_names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+            let month_names = [
+              "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct",
+              "Nov", "Dec",
+            ]
+            let days = (t / 86400000.0).floor().to_int()
+            let day_of_week = ((days % 7) + 4) % 7
+            let day_name = day_names[day_of_week]
+            let month_name = month_names[month]
+            let day_str = if day < 10 {
+              "0" + day.to_string()
+            } else {
+              day.to_string()
+            }
+            let hour_str = if hour < 10 {
+              "0" + hour.to_string()
+            } else {
+              hour.to_string()
+            }
+            let min_str = if minute < 10 {
+              "0" + minute.to_string()
+            } else {
+              minute.to_string()
+            }
+            let sec_str = if second < 10 {
+              "0" + second.to_string()
+            } else {
+              second.to_string()
+            }
+            String(
+              day_name +
+              ", " +
+              day_str +
+              " " +
+              month_name +
+              " " +
+              year.to_string() +
+              " " +
+              hour_str +
+              ":" +
+              min_str +
+              ":" +
+              sec_str +
+              " GMT",
+            )
+          }
+        None => self.error_or_undefined()
+      }
+    "Date.prototype.toJSON" =>
+      match self.date_time_value(this_arg) {
+        Some(t) =>
+          if t.is_nan() {
+            Null
+          } else {
+            // toJSON returns the ISO string
+            let (year, month, day, hour, minute, second, milli) = @lib.break_time(t)
+            fn pad2_json(n : Int) -> String {
+              if n < 10 {
+                "0" + n.to_string()
+              } else {
+                n.to_string()
+              }
+            }
+
+            fn pad3_json(n : Int) -> String {
+              if n < 10 {
+                "00" + n.to_string()
+              } else if n < 100 {
+                "0" + n.to_string()
+              } else {
+                n.to_string()
+              }
+            }
+
+            fn pad4_json(n : Int) -> String {
+              if n < 0 {
+                "-" + pad4_json(-n)
+              } else if n < 10 {
+                "000" + n.to_string()
+              } else if n < 100 {
+                "00" + n.to_string()
+              } else if n < 1000 {
+                "0" + n.to_string()
+              } else {
+                n.to_string()
+              }
+            }
+
+            String(
+              pad4_json(year) +
+              "-" +
+              pad2_json(month + 1) +
+              "-" +
+              pad2_json(day) +
+              "T" +
+              pad2_json(hour) +
+              ":" +
+              pad2_json(minute) +
+              ":" +
+              pad2_json(second) +
+              "." +
+              pad3_json(milli) +
+              "Z",
+            )
+          }
+        None => self.error_or_undefined()
+      }
     "Symbol" => {
       let id = self.symbol_counter
       self.symbol_counter += 1

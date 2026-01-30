@@ -660,10 +660,17 @@ fn Lexer::scan_number(self : Lexer) -> TokenKind {
       _ => Number(0.0)
     }
   } else {
-    // Int
+    // Int - but use Double for large numbers to avoid overflow
+    // JavaScript numbers are IEEE 754 doubles which can represent integers up to 2^53
+    // MoonBit Int is 32-bit signed, so max is 2147483647
     try {
-      let i = @strconv.parse_int(s)
-      Int(i)
+      let d = @strconv.parse_double(s)
+      // Check if the value fits in 32-bit signed integer
+      if d >= -2147483648.0 && d <= 2147483647.0 && d == d.trunc() {
+        Int(d.to_int())
+      } else {
+        Number(d)
+      }
     } catch {
       _ => Int(0)
     }

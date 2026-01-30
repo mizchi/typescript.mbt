@@ -3,18 +3,31 @@
 ///|
 // / type
 pub(all) enum TsType {
+  // Primitive types
   Number // f64
   Int // i32 ()
   Boolean // i32 (0/1)
   String_ // string ()
   Void
-  // Any (JavaScript - type inferenceresolve)
-  Any
-  // compoundtype (Phase 2)
+  BigInt // bigint
+  Symbol // symbol
+  // Special types
+  Any // unknown/any
+  Never // bottom type (no value)
+  Null // null
+  Undefined // undefined
+  // Literal types
+  Literal(String) // literal type: "hello", 42, true
+  // Compound types
   Array(TsType)
-  Struct(String, Array[(String, TsType)]) // name, fields
+  Tuple(Array[TsType]) // [string, number]
+  Object(Array[(TsType, TsType)]) // { key: value } - key is Literal for property names
+  Struct(String, Array[(String, TsType)]) // name, fields (for codegen)
   Func(Array[TsType], TsType) // params, return
-  // typereference
+  // Type operators
+  Union(Array[TsType]) // A | B
+  Intersection(Array[TsType]) // A & B
+  // Type reference
   Named(String)
 } derive(Eq, Show)
 

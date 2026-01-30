@@ -72,7 +72,9 @@ pub fn trim_string(s : String, mode : String) -> String {
 ///|
 pub fn string_char_at(s : String, idx : Int) -> String {
   if idx >= 0 && idx < s.length() {
-    s[idx:idx + 1].to_string() catch { _ => "" }
+    s[idx:idx + 1].to_string() catch {
+      _ => ""
+    }
   } else {
     ""
   }
@@ -242,7 +244,9 @@ pub fn string_slice(s : String, start : Int, end : Int) -> String {
   if st >= en {
     ""
   } else {
-    s[st:en].to_string() catch { _ => "" }
+    s[st:en].to_string() catch {
+      _ => ""
+    }
   }
 }
 
@@ -268,11 +272,17 @@ pub fn string_substring(s : String, start : Int, end : Int) -> String {
     st = en
     en = tmp
   }
-  s[st:en].to_string() catch { _ => "" }
+  s[st:en].to_string() catch {
+    _ => ""
+  }
 }
 
 ///|
-pub fn string_pad_start(s : String, target_len : Int, pad_str : String) -> String {
+pub fn string_pad_start(
+  s : String,
+  target_len : Int,
+  pad_str : String,
+) -> String {
   let len = s.length()
   if target_len <= len {
     return s
@@ -385,7 +395,7 @@ pub fn string_normalize_newlines(s : String) -> String {
 pub fn string_from_char_code(codes : Array[Int]) -> String {
   let sb = StringBuilder::new()
   for code in codes {
-    let c = code.land(0xFFFF)
+    let c = code & 0xFFFF
     sb.write_char(c.to_uint16().unsafe_to_char())
   }
   sb.to_string()
@@ -403,7 +413,7 @@ pub fn string_from_code_point(codes : Array[Int]) -> String? {
     } else {
       let adjusted = code - 0x10000
       let hi = 0xD800 + (adjusted >> 10)
-      let lo = 0xDC00 + (adjusted.land(0x3FF))
+      let lo = 0xDC00 + (adjusted & 0x3FF)
       sb.write_char(hi.to_uint16().unsafe_to_char())
       sb.write_char(lo.to_uint16().unsafe_to_char())
     }

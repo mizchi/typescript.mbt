@@ -13,10 +13,8 @@ fn JSInterpreter::call_iterator_native(
     "Iterator.prototype.take" => Some(self.iterator_take(this_arg, args))
     "Iterator.prototype.drop" => Some(self.iterator_drop(this_arg, args))
     "Iterator.prototype.flatMap" => Some(self.iterator_flat_map(this_arg, args))
-    "Iterator.prototype.forEach" =>
-      Some(self.iterator_for_each(this_arg, args))
-    "Iterator.prototype.toArray" =>
-      Some(self.iterator_to_array(this_arg, args))
+    "Iterator.prototype.forEach" => Some(self.iterator_for_each(this_arg, args))
+    "Iterator.prototype.toArray" => Some(self.iterator_to_array(this_arg, args))
     "Iterator.prototype.reduce" => Some(self.iterator_reduce(this_arg, args))
     "Iterator.prototype.every" => Some(self.iterator_every(this_arg, args))
     "Iterator.prototype.some" => Some(self.iterator_some(this_arg, args))
@@ -27,10 +25,8 @@ fn JSInterpreter::call_iterator_native(
       Some(self.iterator_helper_return(this_arg, args))
     "IteratorHelper.prototype.throw" =>
       Some(self.iterator_helper_throw(this_arg, args))
-    "ArrayIterator.prototype.next" =>
-      Some(self.array_iterator_next(this_arg))
-    "StringIterator.prototype.next" =>
-      Some(self.string_iterator_next(this_arg))
+    "ArrayIterator.prototype.next" => Some(self.array_iterator_next(this_arg))
+    "StringIterator.prototype.next" => Some(self.string_iterator_next(this_arg))
     "Generator.prototype.next" =>
       Some(self.generator_prototype_next(this_arg, args))
     "Generator.prototype.return" =>
@@ -58,11 +54,7 @@ fn JSInterpreter::array_iterator_next(
     self.make_iter_result(Undefined, true)
   } else {
     let value = self.get_prop_value(target, idx.to_string())
-    let _ = js_set_prop(
-      this_arg,
-      "__iter_index",
-      Number((idx + 1).to_double()),
-    )
+    let _ = js_set_prop(this_arg, "__iter_index", Number((idx + 1).to_double()))
     self.make_iter_result(value, false)
   }
 }
@@ -102,11 +94,7 @@ fn JSInterpreter::string_iterator_next(
       let str = s[idx:idx + 1].to_string() catch { _ => "" }
       (idx + 1, str)
     }
-    let _ = js_set_prop(
-      this_arg,
-      "__iter_index",
-      Number(next_idx.to_double()),
-    )
+    let _ = js_set_prop(this_arg, "__iter_index", Number(next_idx.to_double()))
     self.make_iter_result(JSValue::String(chunk), false)
   }
 }
@@ -132,8 +120,7 @@ fn JSInterpreter::generator_prototype_next(
     }
     None =>
       self.set_error_kind(
-        "TypeError",
-        "Generator.prototype.next called on non-generator",
+        "TypeError", "Generator.prototype.next called on non-generator",
       )
   }
 }
@@ -159,8 +146,7 @@ fn JSInterpreter::generator_prototype_return(
     }
     None =>
       self.set_error_kind(
-        "TypeError",
-        "Generator.prototype.return called on non-generator",
+        "TypeError", "Generator.prototype.return called on non-generator",
       )
   }
 }
@@ -186,8 +172,7 @@ fn JSInterpreter::generator_prototype_throw(
     }
     None =>
       self.set_error_kind(
-        "TypeError",
-        "Generator.prototype.throw called on non-generator",
+        "TypeError", "Generator.prototype.throw called on non-generator",
       )
   }
 }

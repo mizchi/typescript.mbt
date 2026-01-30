@@ -148,9 +148,11 @@ fn JSInterpreter::call_object_native(
             } else {
               let idx = @strconv.parse_int(key) catch { _ => -1 }
               if idx >= 0 && idx < s.length() {
-                let ch = JSValue::String(s[idx:idx + 1].to_string() catch {
-                  _ => ""
-                })
+                let ch = JSValue::String(
+                  s[idx:idx + 1].to_string() catch {
+                    _ => ""
+                  },
+                )
                 self.make_data_descriptor(ch, false, true, false)
               } else {
                 Undefined
@@ -167,16 +169,14 @@ fn JSInterpreter::call_object_native(
         Undefined | Null =>
           return Some(
             self.set_error_kind(
-              "TypeError",
-              "Object.defineProperties called on null or undefined",
+              "TypeError", "Object.defineProperties called on null or undefined",
             ),
           )
         Object(_) | Function(_) | Array(_) => target
         _ =>
           return Some(
             self.set_error_kind(
-              "TypeError",
-              "Object.defineProperties called on non-object",
+              "TypeError", "Object.defineProperties called on non-object",
             ),
           )
       }
@@ -213,16 +213,14 @@ fn JSInterpreter::call_object_native(
         Undefined | Null =>
           return Some(
             self.set_error_kind(
-              "TypeError",
-              "Object.defineProperty called on null or undefined",
+              "TypeError", "Object.defineProperty called on null or undefined",
             ),
           )
         Object(_) | Function(_) | Array(_) => target
         _ =>
           return Some(
             self.set_error_kind(
-              "TypeError",
-              "Object.defineProperty called on non-object",
+              "TypeError", "Object.defineProperty called on non-object",
             ),
           )
       }
@@ -242,8 +240,7 @@ fn JSInterpreter::call_object_native(
         _ =>
           return Some(
             self.set_error_kind(
-              "TypeError",
-              "Object.setPrototypeOf called on non-object",
+              "TypeError", "Object.setPrototypeOf called on non-object",
             ),
           )
       }
@@ -252,8 +249,7 @@ fn JSInterpreter::call_object_native(
         _ =>
           return Some(
             self.set_error_kind(
-              "TypeError",
-              "Object.setPrototypeOf called with invalid prototype",
+              "TypeError", "Object.setPrototypeOf called with invalid prototype",
             ),
           )
       }
@@ -764,8 +760,7 @@ fn JSInterpreter::object_assign(
   match target {
     Undefined | Null =>
       return self.set_error_kind(
-        "TypeError",
-        "Cannot convert undefined or null to object",
+        "TypeError", "Cannot convert undefined or null to object",
       )
     _ => ()
   }

@@ -145,13 +145,13 @@ pub fn math_max(values : Array[Double]) -> Double {
 
 ///|
 pub fn math_clz32(n : Double) -> Int {
-  let x = n.to_int().land(0xFFFFFFFF)
+  let x = n.to_int() & 0xFFFFFFFF
   if x == 0 {
     return 32
   }
   let mut count = 0
   let mut val = x
-  while val.land(0x80000000) == 0 {
+  while (val & 0x80000000) == 0 {
     count = count + 1
     val = val << 1
   }
@@ -160,8 +160,8 @@ pub fn math_clz32(n : Double) -> Int {
 
 ///|
 pub fn math_imul(a : Double, b : Double) -> Int {
-  let x = a.to_int().land(0xFFFFFFFF)
-  let y = b.to_int().land(0xFFFFFFFF)
+  let x = a.to_int() & 0xFFFFFFFF
+  let y = b.to_int() & 0xFFFFFFFF
   x * y
 }
 

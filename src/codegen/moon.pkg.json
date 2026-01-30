@@ -15,6 +15,10 @@
     {
       "path": "moonbitlang/typescript/parser",
       "alias": "parser"
+    },
+    {
+      "path": "moonbitlang/typescript/analysis",
+      "alias": "analysis"
     }
   ],
   "wbtest-import": [

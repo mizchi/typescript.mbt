@@ -81,6 +81,17 @@ fn encode_type(t : @ast.TsType) -> Byte {
     @ast.TsType::Struct(_, _) => b'\x07'
     @ast.TsType::Func(_, _) => b'\x08'
     @ast.TsType::Named(_) => b'\x09'
+    // Extended types (for analysis, not yet used in codegen)
+    @ast.TsType::BigInt => b'\x0A'
+    @ast.TsType::Symbol => b'\x0B'
+    @ast.TsType::Never => b'\x0C'
+    @ast.TsType::Null => b'\x0D'
+    @ast.TsType::Undefined => b'\x0E'
+    @ast.TsType::Literal(_) => b'\x0F'
+    @ast.TsType::Tuple(_) => b'\x10'
+    @ast.TsType::Object(_) => b'\x11'
+    @ast.TsType::Union(_) => b'\x12'
+    @ast.TsType::Intersection(_) => b'\x13'
   }
 }
 
@@ -2568,6 +2579,46 @@ pub fn compile_module(
     imports,
     exports,
     codes,
+  }
+}
+
+///|
+/// Compile a TypedModule to WebAssembly.
+/// This is the preferred entry point as it uses pre-analyzed type information.
+pub fn compile_typed_module(
+  _typed_module : @ast.TypedModule,
+  original_module : @ast.TsModule,
+) -> @core.Module raise CodeGenError {
+  // Use original module structure but with typed function information
+  // For now, delegate to compile_module as the type information is primarily
+  // used for validation and local variable tracking
+  // TODO: Use typed_module.funcs[i].locals for better local variable allocation
+  compile_module(original_module)
+}
+
+///|
+/// Analyze and compile source code in one step.
+pub fn analyze_and_compile(source : String) -> @core.Module raise CodeGenError {
+  let parser = @parser.Parser::from_source(source)
+  let module_ = parser.parse_module() catch {
+    @parser.ParseError(msg) => raise CodeGenError(msg)
+  }
+
+  // Run static analysis
+  let analysis_result = @analysis.analyze(module_, source)
+  match analysis_result {
+    @analysis.AnalysisResult::Err(errors) =>
+      // Format first error as CodeGenError
+      if errors.length() > 0 {
+        let first_error = errors[0]
+        raise CodeGenError(
+          "\{first_error.kind.to_string()}: \{first_error.message}",
+        )
+      } else {
+        raise CodeGenError("Analysis failed with unknown error")
+      }
+    @analysis.AnalysisResult::Ok(typed_module, _) =>
+      compile_typed_module(typed_module, module_)
   }
 }
 
