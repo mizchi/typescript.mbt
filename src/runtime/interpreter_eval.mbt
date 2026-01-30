@@ -1893,18 +1893,45 @@ fn JSInterpreter::exec_try_for_eval(
   let try_result = self.exec_block_for_eval(try_block, env)
   let (try_control, try_completion) = try_result
 
-  // Check if try block threw an error
-  let caught_error = match try_control {
-    Some(err) =>
-      match err {
-        Object(_) =>
-          match js_get_prop(err, "error") {
-            String(_) => Some(err)
-            _ => None
+  // Check if try block threw an error - use last_error for proper error detection
+  // This handles all thrown values including null, undefined, strings, numbers, etc.
+  let caught_error = match self.peek_error() {
+    Some(err) => Some(err)
+    None =>
+      // Also check if try_control is an abrupt completion (return/break/continue don't set last_error)
+      match try_control {
+        Some(val) =>
+          match val {
+            // Only BreakSignal and ContinueSignal are not errors
+            BreakSignal(_) | ContinueSignal(_) => None
+            // Return is also not an error (handled separately)
+            _ =>
+              // Check if it looks like an error object or a thrown value
+              match val {
+                Object(_) =>
+                  match js_get_prop(val, "error") {
+                    String(_) => Some(val)
+                    _ =>
+                      // Also catch thrown objects without "error" property
+                      match js_get_prop(val, "name") {
+                        String(name) =>
+                          if name == "Error" ||
+                            name == "TypeError" ||
+                            name == "ReferenceError" ||
+                            name == "SyntaxError" ||
+                            name == "RangeError" {
+                            Some(val)
+                          } else {
+                            None
+                          }
+                        _ => None
+                      }
+                  }
+                _ => None
+              }
           }
-        _ => None
+        None => None
       }
-    None => None
   }
   let (after_catch_control, after_catch_completion) = match caught_error {
     Some(err) => {
