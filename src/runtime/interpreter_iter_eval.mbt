@@ -17,7 +17,8 @@ fn JSInterpreter::make_generator(
   } else {
     match this_arg {
       Undefined | Null => closure.env.get("globalThis")
-      Bool(_) | Number(_) | String(_) => self.wrap_primitive(closure.env, this_arg)
+      Bool(_) | Number(_) | String(_) =>
+        self.wrap_primitive(closure.env, this_arg)
       _ => this_arg
     }
   }
@@ -33,7 +34,10 @@ fn JSInterpreter::make_generator(
       if has_param_expr {
         let param_names = collect_param_names(func_def.params)
         if param_names.length() > 0 {
-          call_env.define_var("__param_names__", js_array_from(string_array_to_js(param_names)))
+          call_env.define_var(
+            "__param_names__",
+            js_array_from(string_array_to_js(param_names)),
+          )
         }
       }
       self.bind_params(func_def.params, args, call_env)
@@ -55,10 +59,26 @@ fn JSInterpreter::make_generator(
       let obj = self.new_object()
       let _ = js_set_prop(obj, "__class", String("Generator"))
       let _ = js_set_prop(obj, "__gen_id", Number(gen_id.to_double()))
-      let _ = js_set_prop(obj, "next", self.make_native("Generator.prototype.next"))
-      let _ = js_set_prop(obj, "return", self.make_native("Generator.prototype.return"))
-      let _ = js_set_prop(obj, "throw", self.make_native("Generator.prototype.throw"))
-      let _ = js_set_prop(obj, "@@iterator", self.make_native("Iterator.prototype[@@iterator]"))
+      let _ = js_set_prop(
+        obj,
+        "next",
+        self.make_native("Generator.prototype.next"),
+      )
+      let _ = js_set_prop(
+        obj,
+        "return",
+        self.make_native("Generator.prototype.return"),
+      )
+      let _ = js_set_prop(
+        obj,
+        "throw",
+        self.make_native("Generator.prototype.throw"),
+      )
+      let _ = js_set_prop(
+        obj,
+        "@@iterator",
+        self.make_native("Iterator.prototype[@@iterator]"),
+      )
       obj
     }
     _ => Undefined
@@ -85,7 +105,10 @@ fn string_array_to_js(items : Array[String]) -> Array[JSValue] {
 }
 
 ///|
-fn collect_binding_names(binding : @ast.TsBinding, names : Array[String]) -> Unit {
+fn collect_binding_names(
+  binding : @ast.TsBinding,
+  names : Array[String],
+) -> Unit {
   match binding {
     @ast.TsBinding::Ident(name) => names.push(name)
     @ast.TsBinding::Array(arr) => {
@@ -140,7 +163,10 @@ fn has_param_expressions(params : Array[@ast.TsParam]) -> Bool {
 }
 
 ///|
-fn JSInterpreter::array_like_length(self : JSInterpreter, value : JSValue) -> Int {
+fn JSInterpreter::array_like_length(
+  self : JSInterpreter,
+  value : JSValue,
+) -> Int {
   let str_value = self.array_like_string_value(value)
   let mut len_val = JSValue::Undefined
   if js_has_prop(value, "length") {
@@ -174,7 +200,10 @@ fn JSInterpreter::array_like_length(self : JSInterpreter, value : JSValue) -> In
 }
 
 ///|
-fn JSInterpreter::get_iterator(self : JSInterpreter, value : JSValue) -> JSValue? {
+fn JSInterpreter::get_iterator(
+  self : JSInterpreter,
+  value : JSValue,
+) -> JSValue? {
   match value {
     String(s) if s.has_prefix("Symbol(") => {
       let _ = self.set_error_kind("TypeError", "Symbol is not iterable")
@@ -183,7 +212,8 @@ fn JSInterpreter::get_iterator(self : JSInterpreter, value : JSValue) -> JSValue
     _ => ()
   }
   let target = match value {
-    Bool(_) | Number(_) | String(_) => self.wrap_primitive(self.global_env, value)
+    Bool(_) | Number(_) | String(_) =>
+      self.wrap_primitive(self.global_env, value)
     _ => value
   }
   let iter_method = self.get_prop_value(target, "@@iterator")
@@ -201,7 +231,9 @@ fn JSInterpreter::get_iterator(self : JSInterpreter, value : JSValue) -> JSValue
           match iterator {
             Object(_) | Function(_) | Array(_) => ()
             _ => {
-              let _ = self.set_error_kind("TypeError", "Iterator result is not an object")
+              let _ = self.set_error_kind(
+                "TypeError", "Iterator result is not an object",
+              )
               return None
             }
           }
@@ -210,7 +242,9 @@ fn JSInterpreter::get_iterator(self : JSInterpreter, value : JSValue) -> JSValue
             Some(_) => None
             None =>
               if not(self.is_callable(next_method)) {
-                let _ = self.set_error_kind("TypeError", "Iterator next is not callable")
+                let _ = self.set_error_kind(
+                  "TypeError", "Iterator next is not callable",
+                )
                 None
               } else {
                 Some(iterator)
@@ -227,24 +261,22 @@ fn JSInterpreter::collect_spread_values(
   self : JSInterpreter,
   value : JSValue,
 ) -> Array[JSValue]? {
-  let iterator =
-    match self.get_iterator(value) {
-      Some(iter) => iter
+  let iterator = match self.get_iterator(value) {
+    Some(iter) => iter
+    None => {
+      let _ = self.set_error_kind("TypeError", "Spread value is not iterable")
+      return None
+    }
+  }
+  let values : Array[JSValue] = []
+  while true {
+    let result = match self.iterator_next_object(iterator) {
+      Some(res) => res
       None => {
-        let _ = self.set_error_kind("TypeError", "Spread value is not iterable")
+        self.iterator_close_on_error(iterator)
         return None
       }
     }
-  let values : Array[JSValue] = []
-  while true {
-    let result =
-      match self.iterator_next_object(iterator) {
-        Some(res) => res
-        None => {
-          self.iterator_close_on_error(iterator)
-          return None
-        }
-      }
     let done = self.get_prop_value(result, "done").to_boolean()
     match self.peek_error() {
       Some(_) => {
@@ -270,7 +302,10 @@ fn JSInterpreter::collect_spread_values(
 }
 
 ///|
-fn JSInterpreter::iterator_close(self : JSInterpreter, iterator : JSValue) -> Unit {
+fn JSInterpreter::iterator_close(
+  self : JSInterpreter,
+  iterator : JSValue,
+) -> Unit {
   let ret = self.get_prop_value(iterator, "return")
   match ret {
     Undefined | Null => ()
@@ -284,9 +319,9 @@ fn JSInterpreter::iterator_close(self : JSInterpreter, iterator : JSValue) -> Un
         Object(_) => ()
         _ => {
           let _ = self.set_error_kind(
-            "TypeError",
-            "Iterator return is not an object",
+            "TypeError", "Iterator return is not an object",
           )
+
         }
       }
     }
@@ -310,7 +345,10 @@ fn JSInterpreter::iterator_close_on_error(
 }
 
 ///|
-fn JSInterpreter::push_active_iterator(self : JSInterpreter, iterator : JSValue) -> Unit {
+fn JSInterpreter::push_active_iterator(
+  self : JSInterpreter,
+  iterator : JSValue,
+) -> Unit {
   match self.current_gen_id {
     Some(gen_id) => {
       let state = self.generators[gen_id]
@@ -346,7 +384,7 @@ fn gen_bind(value : GenValue, cont : (JSValue) -> GenValue) -> GenValue {
   match value {
     GenValue::Value(v) => cont(v)
     GenValue::Yield(yielded, cont_fn) =>
-      GenValue::Yield(yielded, (sent) => gen_bind(cont_fn(sent), cont))
+      GenValue::Yield(yielded, sent => gen_bind(cont_fn(sent), cont))
   }
 }
 
@@ -355,10 +393,7 @@ fn gen_to_signal(value : GenValue, cont : (JSValue) -> GenSignal) -> GenSignal {
   match value {
     GenValue::Value(v) => cont(v)
     GenValue::Yield(yielded, cont_fn) =>
-      GenSignal::Suspend(
-        yielded,
-        (sent) => gen_to_signal(cont_fn(sent), cont),
-      )
+      GenSignal::Suspend(yielded, sent => gen_to_signal(cont_fn(sent), cont))
   }
 }
 
@@ -388,7 +423,9 @@ fn JSInterpreter::yield_star_next(
   match result {
     Object(_) | Function(_) | Array(_) => ()
     _ => {
-      let err = self.set_error_kind("TypeError", "Iterator result is not an object")
+      let err = self.set_error_kind(
+        "TypeError", "Iterator result is not an object",
+      )
       self.pop_active_iterator()
       return GenValue::Value(err)
     }
@@ -399,10 +436,11 @@ fn JSInterpreter::yield_star_next(
     self.pop_active_iterator()
     return GenValue::Value(value)
   }
-  GenValue::Yield(
-    value,
-    (sent_val) => self.yield_star_next(iterator, Some(sent_val), true),
-  )
+  GenValue::Yield(value, sent_val => self.yield_star_next(
+    iterator,
+    Some(sent_val),
+    true,
+  ))
 }
 
 ///|
@@ -411,19 +449,18 @@ fn JSInterpreter::eval_yield_star(
   expr : @ast.TsExpr,
   env : JSEnv,
 ) -> GenValue {
-  gen_bind(self.eval_expr_gen(expr, env), (iter_val) => {
-    let iterator =
-      match self.get_iterator(iter_val) {
-        Some(it) => it
-        None => {
-          let err =
-            match self.peek_error() {
-              Some(e) => e
-              None => self.set_error_kind("TypeError", "yield* value is not iterable")
-            }
-          return GenValue::Value(err)
+  gen_bind(self.eval_expr_gen(expr, env), iter_val => {
+    let iterator = match self.get_iterator(iter_val) {
+      Some(it) => it
+      None => {
+        let err = match self.peek_error() {
+          Some(e) => e
+          None =>
+            self.set_error_kind("TypeError", "yield* value is not iterable")
         }
+        return GenValue::Value(err)
       }
+    }
     self.push_active_iterator(iterator)
     self.yield_star_next(iterator, None, false)
   })
@@ -450,8 +487,10 @@ fn expr_has_yield(expr : @ast.TsExpr) -> Bool {
       expr_has_yield(left) || expr_has_yield(right)
     @ast.TsExpr::UnaryOp(_, operand) => expr_has_yield(operand)
     @ast.TsExpr::Cond(cond, then_expr, else_expr) =>
-      expr_has_yield(cond) || expr_has_yield(then_expr) || expr_has_yield(else_expr)
-    @ast.TsExpr::CallExpr(callee, args) => {
+      expr_has_yield(cond) ||
+      expr_has_yield(then_expr) ||
+      expr_has_yield(else_expr)
+    @ast.TsExpr::CallExpr(callee, args) =>
       if expr_has_yield(callee) {
         true
       } else {
@@ -461,31 +500,21 @@ fn expr_has_yield(expr : @ast.TsExpr) -> Bool {
               if expr_has_yield(inner) {
                 return true
               }
-            _ =>
-              if expr_has_yield(arg) {
-                return true
-              }
+            _ => if expr_has_yield(arg) { return true }
           }
         }
         false
       }
-    }
     @ast.TsExpr::Call(_, args) => {
       for arg in args {
         match arg {
-          @ast.TsExpr::Spread(inner) =>
-            if expr_has_yield(inner) {
-              return true
-            }
-          _ =>
-            if expr_has_yield(arg) {
-              return true
-            }
+          @ast.TsExpr::Spread(inner) => if expr_has_yield(inner) { return true }
+          _ => if expr_has_yield(arg) { return true }
         }
       }
       false
     }
-    @ast.TsExpr::MethodCall(receiver, _, args) => {
+    @ast.TsExpr::MethodCall(receiver, _, args) =>
       if expr_has_yield(receiver) {
         true
       } else {
@@ -495,34 +524,24 @@ fn expr_has_yield(expr : @ast.TsExpr) -> Bool {
               if expr_has_yield(inner) {
                 return true
               }
-            _ =>
-              if expr_has_yield(arg) {
-                return true
-              }
+            _ => if expr_has_yield(arg) { return true }
           }
         }
         false
       }
-    }
     @ast.TsExpr::IndexAccess(obj, index) =>
       expr_has_yield(obj) || expr_has_yield(index)
     @ast.TsExpr::PropAccess(obj, _) => expr_has_yield(obj)
     @ast.TsExpr::New(_, args) => {
       for arg in args {
         match arg {
-          @ast.TsExpr::Spread(inner) =>
-            if expr_has_yield(inner) {
-              return true
-            }
-          _ =>
-            if expr_has_yield(arg) {
-              return true
-            }
+          @ast.TsExpr::Spread(inner) => if expr_has_yield(inner) { return true }
+          _ => if expr_has_yield(arg) { return true }
         }
       }
       false
     }
-    @ast.TsExpr::NewExpr(expr, args) => {
+    @ast.TsExpr::NewExpr(expr, args) =>
       if expr_has_yield(expr) {
         true
       } else {
@@ -532,26 +551,16 @@ fn expr_has_yield(expr : @ast.TsExpr) -> Bool {
               if expr_has_yield(inner) {
                 return true
               }
-            _ =>
-              if expr_has_yield(arg) {
-                return true
-              }
+            _ => if expr_has_yield(arg) { return true }
           }
         }
         false
       }
-    }
     @ast.TsExpr::ArrayLit(elements) => {
       for elem in elements {
         match elem {
-          @ast.TsExpr::Spread(inner) =>
-            if expr_has_yield(inner) {
-              return true
-            }
-          _ =>
-            if expr_has_yield(elem) {
-              return true
-            }
+          @ast.TsExpr::Spread(inner) => if expr_has_yield(inner) { return true }
+          _ => if expr_has_yield(elem) { return true }
         }
       }
       false
@@ -585,10 +594,7 @@ fn binding_has_yield(binding : @ast.TsBinding) -> Bool {
               return true
             }
             match elem.default {
-              Some(expr) =>
-                if expr_has_yield(expr) {
-                  return true
-                }
+              Some(expr) => if expr_has_yield(expr) { return true }
               None => ()
             }
           }
@@ -605,10 +611,7 @@ fn binding_has_yield(binding : @ast.TsBinding) -> Bool {
           return true
         }
         match prop.default {
-          Some(expr) =>
-            if expr_has_yield(expr) {
-              return true
-            }
+          Some(expr) => if expr_has_yield(expr) { return true }
           None => ()
         }
       }
@@ -630,7 +633,10 @@ fn JSInterpreter::make_iter_result(
 }
 
 ///|
-fn JSInterpreter::get_generator_id(_self : JSInterpreter, value : JSValue) -> Int? {
+fn JSInterpreter::get_generator_id(
+  _self : JSInterpreter,
+  value : JSValue,
+) -> Int? {
   match js_get_prop(value, "__gen_id") {
     Number(n) => Some(n.to_int())
     _ => None
@@ -655,9 +661,7 @@ fn JSInterpreter::generator_next(
     Some(cont_fn) => {
       state.cont = None
       match cont_fn(sent) {
-        GenSignal::Continue => {
-          self.generators[gen_id] = state
-        }
+        GenSignal::Continue => self.generators[gen_id] = state
         GenSignal::Yield(val) => {
           self.generators[gen_id] = state
           self.current_gen_id = None
@@ -790,4 +794,3 @@ fn JSInterpreter::iter_result_value_done(
     _ => (true, Undefined)
   }
 }
-

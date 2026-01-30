@@ -26,7 +26,10 @@ fn JSInterpreter::get_proto(_self : JSInterpreter, value : JSValue) -> JSValue? 
 }
 
 ///|
-fn JSInterpreter::normalize_prop_key(_self : JSInterpreter, key : String) -> String {
+fn JSInterpreter::normalize_prop_key(
+  _self : JSInterpreter,
+  key : String,
+) -> String {
   if key == "Symbol(Symbol.iterator)" {
     "@@iterator"
   } else {
@@ -35,7 +38,10 @@ fn JSInterpreter::normalize_prop_key(_self : JSInterpreter, key : String) -> Str
 }
 
 ///|
-fn JSInterpreter::proxy_key_value(_self : JSInterpreter, key : String) -> JSValue {
+fn JSInterpreter::proxy_key_value(
+  _self : JSInterpreter,
+  key : String,
+) -> JSValue {
   if key == "@@iterator" {
     String("Symbol(Symbol.iterator)")
   } else {
@@ -47,18 +53,25 @@ fn JSInterpreter::proxy_key_value(_self : JSInterpreter, key : String) -> JSValu
 fn JSInterpreter::is_proxy(_self : JSInterpreter, value : JSValue) -> Bool {
   match value {
     Object(_) | Function(_) | Array(_) =>
-      js_has_prop(value, "__proxy_target") && js_has_prop(value, "__proxy_handler")
+      js_has_prop(value, "__proxy_target") &&
+      js_has_prop(value, "__proxy_handler")
     _ => false
   }
 }
 
 ///|
-fn JSInterpreter::proxy_target(_self : JSInterpreter, proxy : JSValue) -> JSValue {
+fn JSInterpreter::proxy_target(
+  _self : JSInterpreter,
+  proxy : JSValue,
+) -> JSValue {
   js_get_prop(proxy, "__proxy_target")
 }
 
 ///|
-fn JSInterpreter::proxy_handler(_self : JSInterpreter, proxy : JSValue) -> JSValue {
+fn JSInterpreter::proxy_handler(
+  _self : JSInterpreter,
+  proxy : JSValue,
+) -> JSValue {
   js_get_prop(proxy, "__proxy_handler")
 }
 
@@ -121,7 +134,9 @@ fn JSInterpreter::proxy_get(
   let handler = self.proxy_handler(proxy)
   match handler {
     Null | Undefined =>
-      return self.set_error_kind("TypeError", "Cannot perform operation on a revoked Proxy")
+      return self.set_error_kind(
+        "TypeError", "Cannot perform operation on a revoked Proxy",
+      )
     _ => ()
   }
   let target = self.proxy_target(proxy)
@@ -144,8 +159,9 @@ fn JSInterpreter::proxy_set(
   let handler = self.proxy_handler(proxy)
   match handler {
     Null | Undefined => {
-      let _ =
-        self.set_error_kind("TypeError", "Cannot perform operation on a revoked Proxy")
+      let _ = self.set_error_kind(
+        "TypeError", "Cannot perform operation on a revoked Proxy",
+      )
       return false
     }
     _ => ()
@@ -155,7 +171,9 @@ fn JSInterpreter::proxy_set(
   let key_val = self.proxy_key_value(norm_key)
   match self.get_proxy_trap(handler, "set") {
     Some(trap) => {
-      let result = self.call_function(trap, handler, [target, key_val, value, receiver])
+      let result = self.call_function(trap, handler, [
+        target, key_val, value, receiver,
+      ])
       match self.peek_error() {
         Some(_) => false
         None => result.to_boolean()
@@ -180,8 +198,9 @@ fn JSInterpreter::proxy_has(
   let handler = self.proxy_handler(proxy)
   match handler {
     Null | Undefined => {
-      let _ =
-        self.set_error_kind("TypeError", "Cannot perform operation on a revoked Proxy")
+      let _ = self.set_error_kind(
+        "TypeError", "Cannot perform operation on a revoked Proxy",
+      )
       return false
     }
     _ => ()
@@ -210,7 +229,9 @@ fn JSInterpreter::proxy_get_own_property_descriptor(
   let handler = self.proxy_handler(proxy)
   match handler {
     Null | Undefined =>
-      return self.set_error_kind("TypeError", "Cannot perform operation on a revoked Proxy")
+      return self.set_error_kind(
+        "TypeError", "Cannot perform operation on a revoked Proxy",
+      )
     _ => ()
   }
   let target = self.proxy_target(proxy)
@@ -219,11 +240,10 @@ fn JSInterpreter::proxy_get_own_property_descriptor(
   match self.get_proxy_trap(handler, "getOwnPropertyDescriptor") {
     Some(trap) => self.call_function(trap, handler, [target, key_val])
     None =>
-      self.call_native(
-        "Object.getOwnPropertyDescriptor",
-        Undefined,
-        [target, String(norm_key)],
-      )
+      self.call_native("Object.getOwnPropertyDescriptor", Undefined, [
+        target,
+        String(norm_key),
+      ])
   }
 }
 
@@ -237,7 +257,9 @@ fn JSInterpreter::proxy_define_property(
   let handler = self.proxy_handler(proxy)
   match handler {
     Null | Undefined =>
-      return self.set_error_kind("TypeError", "Cannot perform operation on a revoked Proxy")
+      return self.set_error_kind(
+        "TypeError", "Cannot perform operation on a revoked Proxy",
+      )
     _ => ()
   }
   let target = self.proxy_target(proxy)
@@ -263,29 +285,33 @@ fn JSInterpreter::proxy_get_prototype_of(
   let handler = self.proxy_handler(proxy)
   match handler {
     Null | Undefined =>
-      return self.set_error_kind("TypeError", "Cannot perform operation on a revoked Proxy")
+      return self.set_error_kind(
+        "TypeError", "Cannot perform operation on a revoked Proxy",
+      )
     _ => ()
   }
   let target = self.proxy_target(proxy)
   match self.get_proxy_trap(handler, "getPrototypeOf") {
     Some(trap) => self.call_function(trap, handler, [target])
     None => {
-      let proto =
-        match target {
-          Object(map) => match map.prototype {
+      let proto = match target {
+        Object(map) =>
+          match map.prototype {
             Some(p) => p
             None => Null
           }
-          Function(closure) => match closure.object_proto {
+        Function(closure) =>
+          match closure.object_proto {
             Some(p) => p
             None => Null
           }
-          Array(arr) => match arr.prototype {
+        Array(arr) =>
+          match arr.prototype {
             Some(p) => p
             None => Null
           }
-          _ => Null
-        }
+        _ => Null
+      }
       proto
     }
   }
@@ -293,7 +319,11 @@ fn JSInterpreter::proxy_get_prototype_of(
 
 ///|
 // / propertyget()
-pub fn JSInterpreter::get_prop_value(self : JSInterpreter, obj : JSValue, key : String) -> JSValue {
+pub fn JSInterpreter::get_prop_value(
+  self : JSInterpreter,
+  obj : JSValue,
+  key : String,
+) -> JSValue {
   self.get_prop_value_with_receiver(obj, obj, key)
 }
 
@@ -310,7 +340,7 @@ fn JSInterpreter::set_prop_value(
     return
   }
   match obj {
-    Function(closure) => {
+    Function(closure) =>
       for prop in closure.props {
         if prop.key == key {
           match prop.set {
@@ -325,8 +355,7 @@ fn JSInterpreter::set_prop_value(
           }
         }
       }
-    }
-    Object(map) => {
+    Object(map) =>
       for prop in map.props {
         if prop.key == key {
           match prop.set {
@@ -341,8 +370,7 @@ fn JSInterpreter::set_prop_value(
           }
         }
       }
-    }
-    Array(arr) => {
+    Array(arr) =>
       for prop in arr.props {
         if prop.key == key {
           match prop.set {
@@ -357,10 +385,10 @@ fn JSInterpreter::set_prop_value(
           }
         }
       }
-    }
     _ => ()
   }
   let _ = js_set_prop(obj, key, value)
+
 }
 
 ///|
@@ -378,8 +406,7 @@ fn JSInterpreter::get_prop_value_with_receiver(
   match target {
     Undefined | Null => {
       let _ = self.set_error_kind(
-        "TypeError",
-        "Cannot read properties of null or undefined",
+        "TypeError", "Cannot read properties of null or undefined",
       )
       return Undefined
     }
@@ -425,7 +452,8 @@ fn JSInterpreter::get_prop_value_with_receiver(
             self.global_env.get("Array")
           } else {
             match arr.prototype {
-              Some(proto) => self.get_prop_value_with_receiver(proto, receiver, key)
+              Some(proto) =>
+                self.get_prop_value_with_receiver(proto, receiver, key)
               None => Undefined
             }
           }
@@ -437,7 +465,7 @@ fn JSInterpreter::get_prop_value_with_receiver(
       } else {
         let idx = @strconv.parse_int(key) catch { _ => -1 }
         if idx >= 0 && idx < s.length() {
-          String(try { s[idx:idx + 1].to_string() } catch { _ => "" })
+          String(s[idx:idx + 1].to_string() catch { _ => "" })
         } else {
           Undefined
         }
@@ -461,7 +489,11 @@ fn JSInterpreter::eval_prop_value(
 
 ///|
 // / own property check
-fn JSInterpreter::has_own_prop(_self : JSInterpreter, obj : JSValue, key : String) -> Bool {
+fn JSInterpreter::has_own_prop(
+  _self : JSInterpreter,
+  obj : JSValue,
+  key : String,
+) -> Bool {
   let key = _self.normalize_prop_key(key)
   if _self.is_proxy(obj) {
     return _self.proxy_has(obj, key)
@@ -514,7 +546,11 @@ fn JSInterpreter::has_own_prop(_self : JSInterpreter, obj : JSValue, key : Strin
 
 ///|
 // / enumerable check
-fn JSInterpreter::is_enumerable(_self : JSInterpreter, obj : JSValue, key : String) -> Bool {
+fn JSInterpreter::is_enumerable(
+  _self : JSInterpreter,
+  obj : JSValue,
+  key : String,
+) -> Bool {
   match obj {
     Function(closure) => {
       for prop in closure.props {
@@ -616,7 +652,9 @@ fn JSInterpreter::construct_with(
         Native(name) if name == "Promise" => {
           let executor = if args.length() > 0 { args[0] } else { Undefined }
           if not(self.is_callable(executor)) {
-            return self.set_error_kind("TypeError", "Promise resolver is not a function")
+            return self.set_error_kind(
+              "TypeError", "Promise resolver is not a function",
+            )
           }
         }
         _ => ()
@@ -670,7 +708,7 @@ fn JSInterpreter::construct_with(
     Object(_) | Function(_) => js_new_object_with_proto(Some(proto))
     _ => self.new_object()
   }
-  let result = self.call_function(ctor, instance, args, new_target=new_target)
+  let result = self.call_function(ctor, instance, args, new_target~)
   match result {
     Object(_) | Array(_) | Function(_) => result
     _ => instance
@@ -679,7 +717,11 @@ fn JSInterpreter::construct_with(
 
 ///|
 // / object
-fn JSInterpreter::wrap_primitive(self : JSInterpreter, env : JSEnv, value : JSValue) -> JSValue {
+fn JSInterpreter::wrap_primitive(
+  self : JSInterpreter,
+  env : JSEnv,
+  value : JSValue,
+) -> JSValue {
   match value {
     Bool(_) => {
       let ctor = env.get("Boolean")
@@ -722,20 +764,23 @@ fn JSInterpreter::to_primitive_for_add(
   value : JSValue,
 ) -> JSValue {
   match value {
-    Object(_) | Array(_) | Function(_) => {
-      String(self.to_string_value(value))
-    }
+    Object(_) | Array(_) | Function(_) => String(self.to_string_value(value))
     _ => value
   }
 }
 
 ///|
 // / JS ToString (Object toString )
-fn JSInterpreter::to_string_value(self : JSInterpreter, value : JSValue) -> String {
+fn JSInterpreter::to_string_value(
+  self : JSInterpreter,
+  value : JSValue,
+) -> String {
   match value {
     String(s) =>
       if s.has_prefix("Symbol(") {
-        let _ = self.set_error_kind("TypeError", "Cannot convert Symbol to string")
+        let _ = self.set_error_kind(
+          "TypeError", "Cannot convert Symbol to string",
+        )
         ""
       } else {
         s
@@ -746,21 +791,17 @@ fn JSInterpreter::to_string_value(self : JSInterpreter, value : JSValue) -> Stri
         let res = self.call_function(to_prim, value, [String("string")])
         match res {
           Object(_) | Array(_) | Function(_) => {
-            let _ =
-              self.set_error_kind(
-                "TypeError",
-                "Cannot convert object to primitive value",
-              )
+            let _ = self.set_error_kind(
+              "TypeError", "Cannot convert object to primitive value",
+            )
             return ""
           }
           _ => return res.to_js_string()
         }
       } else if not(to_prim.is_undefined()) {
-        let _ =
-          self.set_error_kind(
-            "TypeError",
-            "Cannot convert object to primitive value",
-          )
+        let _ = self.set_error_kind(
+          "TypeError", "Cannot convert object to primitive value",
+        )
         return ""
       }
       match js_get_prop(value, "__class") {
@@ -795,11 +836,16 @@ fn JSInterpreter::to_string_value(self : JSInterpreter, value : JSValue) -> Stri
 
 ///|
 // / JS ToNumber (Object valueOf/toString)
-fn JSInterpreter::to_number_value(self : JSInterpreter, value : JSValue) -> Double {
+fn JSInterpreter::to_number_value(
+  self : JSInterpreter,
+  value : JSValue,
+) -> Double {
   match value {
     String(s) =>
       if s.has_prefix("Symbol(") {
-        let _ = self.set_error_kind("TypeError", "Cannot convert Symbol to number")
+        let _ = self.set_error_kind(
+          "TypeError", "Cannot convert Symbol to number",
+        )
         0.0
       } else {
         value.to_number()
@@ -891,18 +937,8 @@ fn JSInterpreter::json_stringify_value(
     return Some("null")
   }
   match value {
-    Undefined =>
-      if in_array {
-        Some("null")
-      } else {
-        None
-      }
-    Function(_) =>
-      if in_array {
-        Some("null")
-      } else {
-        None
-      }
+    Undefined => if in_array { Some("null") } else { None }
+    Function(_) => if in_array { Some("null") } else { None }
     Null => Some("null")
     Bool(b) => Some(if b { "true" } else { "false" })
     Number(n) =>
@@ -923,12 +959,11 @@ fn JSInterpreter::json_stringify_value(
           None => ()
         }
         let key = i.to_string()
-        let elem =
-          if js_has_prop(arr_val, key) {
-            self.get_prop_value(arr_val, key)
-          } else {
-            Undefined
-          }
+        let elem = if js_has_prop(arr_val, key) {
+          self.get_prop_value(arr_val, key)
+        } else {
+          Undefined
+        }
         let elem_str = self.json_stringify_value(elem, depth + 1, true)
         match elem_str {
           Some(s) => parts.push(s)

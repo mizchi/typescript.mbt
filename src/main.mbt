@@ -5,7 +5,6 @@ async fn main_async() -> Unit {
     print_usage()
     return
   }
-
   let command = args[1]
   match command {
     "run" => {
@@ -132,7 +131,7 @@ fn normalize_path(path : String) -> String {
 ///|
 fn dirname(path : String) -> String {
   match path.rev_find("/") {
-    Some(idx) => try { path[:idx].to_string() } catch { _ => "." }
+    Some(idx) => path[:idx].to_string() catch { _ => "." }
     None => "."
   }
 }
@@ -180,12 +179,11 @@ fn module_cache_set(
 
 ///|
 fn resolve_module_path(base_path : String, spec : String) -> String {
-  let candidate =
-    if spec.has_prefix("./") || spec.has_prefix("../") {
-      join_path(dirname(base_path), spec)
-    } else {
-      spec
-    }
+  let candidate = if spec.has_prefix("./") || spec.has_prefix("../") {
+    join_path(dirname(base_path), spec)
+  } else {
+    spec
+  }
   let normalized = normalize_path(candidate)
   if normalized.has_suffix(".js") || normalized.has_suffix(".mjs") {
     return normalized
@@ -212,16 +210,20 @@ fn make_export_getter(
   name : String,
   module_exports? : @runtime.JSValue? = None,
 ) -> @runtime.JSValue {
-  let getter =
-    @runtime.js_new_native_function_with_env(
-      "__export_get__",
-      module_env,
-      Some(interp.function_proto),
-    )
-  let _ = @runtime.js_set_prop(getter, "__export_name", @runtime.js_string(name))
+  let getter = @runtime.js_new_native_function_with_env(
+    "__export_get__",
+    module_env,
+    Some(interp.function_proto),
+  )
+  let _ = @runtime.js_set_prop(
+    getter,
+    "__export_name",
+    @runtime.js_string(name),
+  )
   match module_exports {
     Some(exports) => {
       let _ = @runtime.js_set_prop(getter, "__export_module", exports)
+
     }
     None => ()
   }
@@ -237,15 +239,15 @@ fn define_export_accessors(
 ) -> Unit {
   for spec in specs {
     let getter = make_export_getter(interp, module_env, spec.local_name)
-    let _ =
-      @runtime.js_define_accessor_prop(
-        exports,
-        spec.export_name,
-        Some(getter),
-        None,
-        true,
-        true,
-      )
+    let _ = @runtime.js_define_accessor_prop(
+      exports,
+      spec.export_name,
+      Some(getter),
+      None,
+      true,
+      true,
+    )
+
   }
 }
 
@@ -258,22 +260,21 @@ fn define_reexport_accessor(
   imported : String,
   export_name : String,
 ) -> Unit {
-  let getter =
-    make_export_getter(
-      interp,
-      module_env,
-      imported,
-      module_exports=Some(dep_exports),
-    )
-  let _ =
-    @runtime.js_define_accessor_prop(
-      exports,
-      export_name,
-      Some(getter),
-      None,
-      true,
-      true,
-    )
+  let getter = make_export_getter(
+    interp,
+    module_env,
+    imported,
+    module_exports=Some(dep_exports),
+  )
+  let _ = @runtime.js_define_accessor_prop(
+    exports,
+    export_name,
+    Some(getter),
+    None,
+    true,
+    true,
+  )
+
 }
 
 ///|
@@ -359,12 +360,14 @@ fn refresh_import_bindings(
       Some(name) => {
         let value = interp.get_prop_value(dep_exports, "default")
         let _ = module_env.force_set(name, value)
+
       }
       None => ()
     }
     match decl.namespace_binding {
       Some(name) => {
         let _ = module_env.force_set(name, dep_exports)
+
       }
       None => ()
     }
@@ -372,6 +375,7 @@ fn refresh_import_bindings(
       let (imported, local_name) = item
       let value = interp.get_prop_value(dep_exports, imported)
       let _ = module_env.force_set(local_name, value)
+
     }
   }
 }
@@ -401,7 +405,6 @@ async fn eval_module(
   let undefined_value = interp.global_env.get("undefined")
   module_env.define_const("this", undefined_value)
   module_env.define_const("__strict__", undefined_value)
-
   let resolved_imports : Array[(@ast.TsImportDecl, @runtime.JSValue)] = []
   for decl in module_block.imports {
     let dep_path = resolve_module_path(path, decl.module_spec)
@@ -411,7 +414,6 @@ async fn eval_module(
     }
     resolved_imports.push((decl, dep_exports))
   }
-
   let resolved_reexports : Array[(@ast.TsReExportSpec, @runtime.JSValue)] = []
   for reexport in module_block.reexports {
     let dep_path = resolve_module_path(path, reexport.module_spec)
@@ -421,7 +423,6 @@ async fn eval_module(
     }
     resolved_reexports.push((reexport, dep_exports))
   }
-
   define_export_accessors(interp, exports, module_env, module_block.exports)
   for item in resolved_reexports {
     let (reexport, dep_exports) = item
@@ -430,22 +431,17 @@ async fn eval_module(
         for spec in items {
           let (imported, export_name) = spec
           define_reexport_accessor(
-            interp,
-            exports,
-            module_env,
-            dep_exports,
-            imported,
-            export_name,
+            interp, exports, module_env, dep_exports, imported, export_name,
           )
         }
       @ast.TsReExportKind::All =>
         export_all_accessors(interp, exports, module_env, dep_exports)
       @ast.TsReExportKind::Namespace(name) => {
         let _ = @runtime.js_set_prop(exports, name, dep_exports)
+
       }
     }
   }
-
   define_import_bindings(interp, module_env, resolved_imports)
   interp.hoist_block(module_block.block, module_env)
   refresh_import_bindings(interp, module_env, resolved_imports)
@@ -470,10 +466,7 @@ fn parse_bracket_list(line : String) -> Array[String] {
   let start = line.find("[")
   let end_ = line.rev_find("]")
   match (start, end_) {
-    (Some(s), Some(e)) =>
-      if e <= s {
-        return []
-      }
+    (Some(s), Some(e)) => if e <= s { return [] }
     _ => return []
   }
   let inner = try {
@@ -491,12 +484,15 @@ fn parse_bracket_list(line : String) -> Array[String] {
     if trimmed.length() == 0 {
       continue
     }
-    let stripped =
-      if trimmed.length() >= 2 && trimmed.has_prefix("\"") && trimmed.has_suffix("\"") {
-        try { trimmed[1:trimmed.length() - 1].to_string() } catch { _ => trimmed }
-      } else {
-        trimmed
+    let stripped = if trimmed.length() >= 2 &&
+      trimmed.has_prefix("\"") &&
+      trimmed.has_suffix("\"") {
+      trimmed[1:trimmed.length() - 1].to_string() catch {
+        _ => trimmed
       }
+    } else {
+      trimmed
+    }
     result.push(stripped)
   }
   result
@@ -512,11 +508,9 @@ fn parse_test262_meta(content : String) -> Test262Meta {
   let mut meta_block = ""
   match content.find("/*---") {
     Some(start) => {
-      let rest = try { content[start + 5:].to_string() } catch { _ => "" }
+      let rest = content[start + 5:].to_string() catch { _ => "" }
       match rest.find("---*/") {
-        Some(end_) => {
-          meta_block = try { rest[:end_].to_string() } catch { _ => "" }
-        }
+        Some(end_) => meta_block = rest[:end_].to_string() catch { _ => "" }
         None => ()
       }
     }
@@ -536,18 +530,19 @@ fn parse_test262_meta(content : String) -> Test262Meta {
       if not(trimmed.has_prefix("//")) {
         break
       }
-      let body = try { trimmed[2:].trim().to_string() } catch { _ => "" }
+      let body = trimmed[2:].trim().to_string() catch { _ => "" }
       lines.push(body)
     }
   }
   for raw in lines {
     let line = raw.trim().to_string()
-    let body =
-      if line.has_prefix("*") {
-        try { line[1:].trim().to_string() } catch { _ => line }
-      } else {
-        line
+    let body = if line.has_prefix("*") {
+      line[1:].trim().to_string() catch {
+        _ => line
       }
+    } else {
+      line
+    }
     if body.has_prefix("includes:") {
       for item in parse_bracket_list(body) {
         includes.push(item)
@@ -559,12 +554,12 @@ fn parse_test262_meta(content : String) -> Test262Meta {
     } else if body.has_prefix("negative:") {
       negative = true
     } else if body.has_prefix("phase:") {
-      let value = try { body[6:].trim().to_string() } catch { _ => "" }
+      let value = body[6:].trim().to_string() catch { _ => "" }
       if value.length() > 0 {
         negative_phase = Some(value)
       }
     } else if body.has_prefix("type:") {
-      let value = try { body[5:].trim().to_string() } catch { _ => "" }
+      let value = body[5:].trim().to_string() catch { _ => "" }
       if value.length() > 0 {
         negative_type = Some(value)
       }
@@ -605,11 +600,7 @@ fn build_includes(includes : Array[String]) -> (String, Array[String]) {
   let missing : Array[String] = []
   for inc in includes {
     match include_prelude(inc) {
-      Some(code) => {
-        if code.length() > 0 {
-          prelude = prelude + code + "\n"
-        }
-      }
+      Some(code) => if code.length() > 0 { prelude = prelude + code + "\n" }
       None => missing.push(inc)
     }
   }
@@ -638,18 +629,16 @@ fn should_skip_test(meta : Test262Meta, content : String) -> String? {
 ///|
 fn normalize_negative_phase(phase : String?) -> String? {
   match phase {
-    Some(value) =>
-      if value == "early" {
-        Some("parse")
-      } else {
-        Some(value)
-      }
+    Some(value) => if value == "early" { Some("parse") } else { Some(value) }
     None => None
   }
 }
 
 ///|
-fn negative_phase_matches(expected_phase : String?, actual_phase : String) -> Bool {
+fn negative_phase_matches(
+  expected_phase : String?,
+  actual_phase : String,
+) -> Bool {
   match normalize_negative_phase(expected_phase) {
     Some(value) => value == actual_phase
     None => true
@@ -659,18 +648,16 @@ fn negative_phase_matches(expected_phase : String?, actual_phase : String) -> Bo
 ///|
 fn get_error_name(value : @runtime.JSValue) -> String? {
   match value {
-    @runtime.JSValue::Object(_) => {
+    @runtime.JSValue::Object(_) =>
       match @runtime.js_get_prop(value, "name") {
         @runtime.JSValue::String(name) => Some(name)
         _ => None
       }
-    }
-    @runtime.JSValue::Function(_) => {
+    @runtime.JSValue::Function(_) =>
       match @runtime.js_get_prop(value, "name") {
         @runtime.JSValue::String(name) => Some(name)
         _ => None
       }
-    }
     _ => None
   }
 }
@@ -709,7 +696,9 @@ fn negative_type_matches(
 
 ///|
 async fn collect_test_files(path : String, out : Array[String]) -> Unit {
-  let kind = @fs.kind(path, follow_symlink=false) catch { _ => @fs.FileKind::Unknown }
+  let kind = @fs.kind(path, follow_symlink=false) catch {
+    _ => @fs.FileKind::Unknown
+  }
   match kind {
     @fs.FileKind::Directory => {
       let entries = @fs.readdir(
@@ -717,7 +706,9 @@ async fn collect_test_files(path : String, out : Array[String]) -> Unit {
         include_hidden=false,
         include_special=false,
         sort=true,
-      ) catch { _ => [] }
+      ) catch {
+        _ => []
+      }
       for name in entries {
         if name == "harness" {
           continue
@@ -726,10 +717,7 @@ async fn collect_test_files(path : String, out : Array[String]) -> Unit {
         collect_test_files(child, out)
       }
     }
-    @fs.FileKind::Regular =>
-      if path.has_suffix(".js") {
-        out.push(path)
-      }
+    @fs.FileKind::Regular => if path.has_suffix(".js") { out.push(path) }
     _ => ()
   }
 }
@@ -771,7 +759,7 @@ fn split_patterns(patterns : Array[String]) -> (Array[String], Array[String]) {
   let excludes : Array[String] = []
   for pat in patterns {
     if pat.has_prefix("!") {
-      let sub = try { pat[1:].to_string() } catch { _ => "" }
+      let sub = pat[1:].to_string() catch { _ => "" }
       if sub.length() > 0 {
         excludes.push(sub)
       }
@@ -792,7 +780,12 @@ fn match_segment(pat : String, seg : String) -> Bool {
   for c in seg {
     schars.push(c)
   }
-  fn rec(pchars : Array[Char], schars : Array[Char], pi : Int, si : Int) -> Bool {
+  fn rec(
+    pchars : Array[Char],
+    schars : Array[Char],
+    pi : Int,
+    si : Int,
+  ) -> Bool {
     if pi >= pchars.length() {
       return si >= schars.length()
     }
@@ -818,6 +811,7 @@ fn match_segment(pat : String, seg : String) -> Bool {
     }
     false
   }
+
   rec(pchars, schars, 0, 0)
 }
 
@@ -835,7 +829,12 @@ fn split_path_parts(path : String) -> Array[String] {
 fn glob_match(pattern : String, path : String) -> Bool {
   let pparts = split_path_parts(pattern)
   let sparts = split_path_parts(path)
-  fn rec(pparts : Array[String], sparts : Array[String], pi : Int, si : Int) -> Bool {
+  fn rec(
+    pparts : Array[String],
+    sparts : Array[String],
+    pi : Int,
+    si : Int,
+  ) -> Bool {
     if pi >= pparts.length() {
       return si >= sparts.length()
     }
@@ -861,6 +860,7 @@ fn glob_match(pattern : String, path : String) -> Bool {
     }
     false
   }
+
   rec(pparts, sparts, 0, 0)
 }
 
@@ -881,7 +881,9 @@ fn matches_any(patterns : Array[String], path : String) -> Bool {
 ///|
 async fn run_test262(test_path : String) -> Unit {
   let files : Array[String] = []
-  let kind = @fs.kind(test_path, follow_symlink=false) catch { _ => @fs.FileKind::Unknown }
+  let kind = @fs.kind(test_path, follow_symlink=false) catch {
+    _ => @fs.FileKind::Unknown
+  }
   match kind {
     @fs.FileKind::Directory => collect_test_files(test_path, files)
     @fs.FileKind::Regular =>
@@ -923,21 +925,20 @@ async fn run_test262(test_path : String) -> Unit {
       return
     }
   }
-
   let total_files = files.length()
   let progress_interval = 200
   let per_test_step_limit = 10_000_000
   let mut passed = 0
   let mut failed = 0
   let mut skipped = 0
-
   for i, path in files {
-    let _ =
-      @fs.write_file(
-        "test262.current.txt",
-        @utf8.encode(path),
-        create=0o644,
-      ) catch { _ => () }
+    let _ = @fs.write_file(
+      "test262.current.txt",
+      @utf8.encode(path),
+      create=0o644,
+    ) catch {
+      _ => ()
+    }
     if is_fixture_path(path) {
       skipped += 1
       println("SKIP: \{path} (fixture)")
@@ -955,9 +956,7 @@ async fn run_test262(test_path : String) -> Unit {
     if missing_includes.length() > 0 {
       skipped += 1
       let missing_list = missing_includes.join(", ")
-      println(
-        "SKIP: \{path} (missing includes: \{missing_list})",
-      )
+      println("SKIP: \{path} (missing includes: \{missing_list})")
       continue
     }
     match should_skip_test(meta, content) {
@@ -968,7 +967,6 @@ async fn run_test262(test_path : String) -> Unit {
       }
       None => ()
     }
-
     let interp = @runtime.JSInterpreter::new()
     interp.set_step_limit(per_test_step_limit)
     let undefined_value = interp.global_env.get("undefined")
@@ -988,6 +986,7 @@ async fn run_test262(test_path : String) -> Unit {
             undefined_value
           }
         }
+
       }
       if not(has_error) {
         let module_cache : Array[(String, @runtime.JSValue)] = []
@@ -1011,6 +1010,7 @@ async fn run_test262(test_path : String) -> Unit {
         let parser = @parser.Parser::from_source(source)
         try {
           let _ = parser.parse_module()
+
         } catch {
           e => {
             has_error = true
@@ -1034,8 +1034,11 @@ async fn run_test262(test_path : String) -> Unit {
     if has_error {
       if meta.negative {
         let phase_ok = negative_phase_matches(meta.negative_phase, error_phase)
-        let type_ok =
-          negative_type_matches(meta.negative_type, error_phase, None)
+        let type_ok = negative_type_matches(
+          meta.negative_type,
+          error_phase,
+          None,
+        )
         if phase_ok && type_ok {
           passed += 1
         } else {
@@ -1052,17 +1055,19 @@ async fn run_test262(test_path : String) -> Unit {
       }
       continue
     }
-
     let mut runtime_error : @runtime.JSValue? = None
     if is_error_value(result) {
       runtime_error = Some(result)
     }
-
     if meta.negative {
       match runtime_error {
         Some(err_value) => {
           let phase_ok = negative_phase_matches(meta.negative_phase, "runtime")
-          let type_ok = negative_type_matches(meta.negative_type, "runtime", Some(err_value))
+          let type_ok = negative_type_matches(
+            meta.negative_type,
+            "runtime",
+            Some(err_value),
+          )
           if phase_ok && type_ok {
             passed += 1
           } else {
@@ -1096,12 +1101,13 @@ async fn run_test262(test_path : String) -> Unit {
         None => passed += 1
       }
     }
-    let _ =
-      @fs.write_file(
-        "test262.last_done.txt",
-        @utf8.encode(path),
-        create=0o644,
-      ) catch { _ => () }
+    let _ = @fs.write_file(
+      "test262.last_done.txt",
+      @utf8.encode(path),
+      create=0o644,
+    ) catch {
+      _ => ()
+    }
     let done = i + 1
     if done % progress_interval == 0 || done == total_files {
       println(
@@ -1109,7 +1115,6 @@ async fn run_test262(test_path : String) -> Unit {
       )
     }
   }
-
   println(
     "test262 results: total=\{total_files}, passed=\{passed}, failed=\{failed}, skipped=\{skipped}",
   )

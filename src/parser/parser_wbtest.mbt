@@ -149,15 +149,16 @@ test "parser: parse while stmt" {
 
 ///|
 test "parser: parse for stmt" {
-  let parser =
-    Parser::from_source("for (let i = 0; i < 10; i = i + 1) { i = i + 1; }")
+  let parser = Parser::from_source(
+    "for (let i = 0; i < 10; i = i + 1) { i = i + 1; }",
+  )
   let stmt = parser.parse_stmt()
   match stmt {
     For(
       Some(Let(@ast.TsBinding::Ident("i"), Any, IntLit(0))),
       Some(BinOp(BinLt, Var("i"), IntLit(10))),
       update,
-      body,
+      body
     ) => {
       match update {
         Some(Assign("i", BinOp(Add, Var("i"), IntLit(1))))
@@ -172,15 +173,16 @@ test "parser: parse for stmt" {
 
 ///|
 test "parser: parse for stmt with uninitialized let" {
-  let parser =
-    Parser::from_source("for (let i; i < 10; i = i + 1) { i = i + 1; }")
+  let parser = Parser::from_source(
+    "for (let i; i < 10; i = i + 1) { i = i + 1; }",
+  )
   let stmt = parser.parse_stmt()
   match stmt {
     For(
       Some(Let(@ast.TsBinding::Ident("i"), Any, Var("undefined"))),
       Some(BinOp(BinLt, Var("i"), IntLit(10))),
       _,
-      body,
+      body
     ) => assert_eq(body.stmts.length(), 1)
     _ => fail("unexpected result: \{stmt}")
   }
@@ -233,8 +235,13 @@ test "parser: parse for-of stmt" {
   let parser = Parser::from_source("for (let x of arr) { x; }")
   let stmt = parser.parse_stmt()
   match stmt {
-    ForOf(@ast.TsForOfKind::Let, @ast.TsBinding::Ident("x"), Number, Var("arr"), body) =>
-      assert_eq(body.stmts.length(), 1)
+    ForOf(
+      @ast.TsForOfKind::Let,
+      @ast.TsBinding::Ident("x"),
+      Number,
+      Var("arr"),
+      body
+    ) => assert_eq(body.stmts.length(), 1)
     _ => fail("unexpected result: \{stmt}")
   }
 }
@@ -244,22 +251,26 @@ test "parser: parse for-await-of stmt" {
   let parser = Parser::from_source("for await (var x of []) { x; }")
   let stmt = parser.parse_stmt()
   match stmt {
-    ForOf(@ast.TsForOfKind::Var, @ast.TsBinding::Ident("x"), Number, ArrayLit(_), body) =>
-      assert_eq(body.stmts.length(), 1)
+    ForOf(
+      @ast.TsForOfKind::Var,
+      @ast.TsBinding::Ident("x"),
+      Number,
+      ArrayLit(_),
+      body
+    ) => assert_eq(body.stmts.length(), 1)
     _ => fail("unexpected result: \{stmt}")
   }
 }
 
 ///|
 test "parser: let destructuring requires initializer" {
-  let ok =
-    try {
-      let parser = Parser::from_source("let { a };")
-      let _ = parser.parse_stmt()
-      true
-    } catch {
-      _ => false
-    }
+  let ok = try {
+    let parser = Parser::from_source("let { a };")
+    let _ = parser.parse_stmt()
+    true
+  } catch {
+    _ => false
+  }
   assert_eq(ok, false)
 }
 
@@ -278,8 +289,13 @@ test "parser: parse for-in stmt" {
   let parser = Parser::from_source("for (let k in obj) { k; }")
   let stmt = parser.parse_stmt()
   match stmt {
-    ForIn(@ast.TsForOfKind::Let, @ast.TsBinding::Ident("k"), Number, Var("obj"), body) =>
-      assert_eq(body.stmts.length(), 1)
+    ForIn(
+      @ast.TsForOfKind::Let,
+      @ast.TsBinding::Ident("k"),
+      Number,
+      Var("obj"),
+      body
+    ) => assert_eq(body.stmts.length(), 1)
     _ => fail("unexpected result: \{stmt}")
   }
 }
@@ -289,8 +305,13 @@ test "parser: parse for-in let identifier" {
   let parser = Parser::from_source("for (let in obj) { }")
   let stmt = parser.parse_stmt()
   match stmt {
-    ForIn(@ast.TsForOfKind::Assign, @ast.TsBinding::Ident("let"), Number, Var("obj"), body) =>
-      assert_eq(body.stmts.length(), 0)
+    ForIn(
+      @ast.TsForOfKind::Assign,
+      @ast.TsBinding::Ident("let"),
+      Number,
+      Var("obj"),
+      body
+    ) => assert_eq(body.stmts.length(), 0)
     _ => fail("unexpected result: \{stmt}")
   }
 }
@@ -335,7 +356,12 @@ test "parser: parse try/catch/finally stmt" {
   )
   let stmt = parser.parse_stmt()
   match stmt {
-    Try(try_block, Some(@ast.TsBinding::Ident("e")), Some(catch_block), Some(finally_block)) => {
+    Try(
+      try_block,
+      Some(@ast.TsBinding::Ident("e")),
+      Some(catch_block),
+      Some(finally_block)
+    ) => {
       assert_eq(try_block.stmts.length(), 1)
       assert_eq(catch_block.stmts.length(), 1)
       assert_eq(finally_block.stmts.length(), 1)
@@ -393,14 +419,13 @@ test "parser: parse throw stmt" {
 
 ///|
 test "parser: disallow let in single-statement if" {
-  let ok =
-    try {
-      let parser = Parser::from_source("if (true) let x = 1;")
-      let _ = parser.parse_stmt()
-      true
-    } catch {
-      _ => false
-    }
+  let ok = try {
+    let parser = Parser::from_source("if (true) let x = 1;")
+    let _ = parser.parse_stmt()
+    true
+  } catch {
+    _ => false
+  }
   assert_eq(ok, false)
 }
 

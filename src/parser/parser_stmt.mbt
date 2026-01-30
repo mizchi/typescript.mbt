@@ -34,7 +34,8 @@ pub fn Parser::parse_stmt(self : Parser) -> @ast.TsStmt raise ParseError {
     While => self.parse_while()
     For => self.parse_for()
     Try => self.parse_try()
-    Ident("async") if self.peek_at(1).kind == Function && not(self.has_line_terminator_after()) => {
+    Ident("async") if self.peek_at(1).kind == Function &&
+      not(self.has_line_terminator_after()) => {
       let _ = self.advance()
       let func = self.parse_function()
       Let(@ast.TsBinding::Ident(func.name), Any, FuncExpr(func))
@@ -52,10 +53,11 @@ pub fn Parser::parse_stmt(self : Parser) -> @ast.TsStmt raise ParseError {
         None
       } else {
         match self.peek().kind {
-          Ident(_) => match self.advance().kind {
-            Ident(name) => Some(name)
-            _ => None
-          }
+          Ident(_) =>
+            match self.advance().kind {
+              Ident(name) => Some(name)
+              _ => None
+            }
           _ => None
         }
       }
@@ -81,10 +83,11 @@ pub fn Parser::parse_stmt(self : Parser) -> @ast.TsStmt raise ParseError {
         None
       } else {
         match self.peek().kind {
-          Ident(_) => match self.advance().kind {
-            Ident(name) => Some(name)
-            _ => None
-          }
+          Ident(_) =>
+            match self.advance().kind {
+              Ident(name) => Some(name)
+              _ => None
+            }
           _ => None
         }
       }
@@ -162,7 +165,10 @@ fn Parser::parse_var(self : Parser) -> @ast.TsStmt raise ParseError {
 }
 
 ///|
-fn Parser::parse_var_like(self : Parser, kind : VarKind) -> @ast.TsStmt raise ParseError {
+fn Parser::parse_var_like(
+  self : Parser,
+  kind : VarKind,
+) -> @ast.TsStmt raise ParseError {
   let binding = self.parse_binding_pattern()
   let type_ = self.parse_var_decl_type()
   let stmts = self.parse_var_decl_list_from(binding, type_, kind)
@@ -181,10 +187,13 @@ fn Parser::parse_return(self : Parser) -> @ast.TsStmt raise ParseError {
   // ASI: line terminator after return means return undefined
   // After expect(Return), pos points to the next token
   // Use has_line_terminator_before to check if there was a newline after return
-  if self.check(Semicolon) || self.check(RBrace) || self.check(Eof) ||
+  if self.check(Semicolon) ||
+    self.check(RBrace) ||
+    self.check(Eof) ||
     self.has_line_terminator_before() {
     if self.check(Semicolon) {
       let _ = self.advance()
+
     }
     Return(None)
   } else {
@@ -303,7 +312,9 @@ fn Parser::parse_switch(self : Parser) -> @ast.TsStmt raise ParseError {
     }
     let _ = self.expect(Colon)
     let stmts : Array[@ast.TsStmt] = []
-    while not(self.check(Case)) && not(self.check(Default)) && not(self.check(RBrace)) {
+    while not(self.check(Case)) &&
+          not(self.check(Default)) &&
+          not(self.check(RBrace)) {
       stmts.push(self.parse_stmt())
     }
     cases.push({ test_expr: case_test, body: { stmts, } })
@@ -330,6 +341,7 @@ fn Parser::parse_debugger(self : Parser) -> @ast.TsStmt raise ParseError {
   Debugger
 }
 
+///|
 fn Parser::is_for_of_head(self : Parser) -> Bool {
   let mut i = 0
   let mut paren = 0
@@ -339,10 +351,7 @@ fn Parser::is_for_of_head(self : Parser) -> Bool {
     let tok = self.peek_at(i)
     match tok.kind {
       Eof => return false
-      Semicolon =>
-        if paren == 0 && brace == 0 && bracket == 0 {
-          return false
-        }
+      Semicolon => if paren == 0 && brace == 0 && bracket == 0 { return false }
       RParen =>
         if paren == 0 && brace == 0 && bracket == 0 {
           return false
@@ -354,10 +363,7 @@ fn Parser::is_for_of_head(self : Parser) -> Bool {
       RBrace => if brace > 0 { brace -= 1 }
       LBracket => bracket += 1
       RBracket => if bracket > 0 { bracket -= 1 }
-      Of | In =>
-        if paren == 0 && brace == 0 && bracket == 0 {
-          return true
-        }
+      Of | In => if paren == 0 && brace == 0 && bracket == 0 { return true }
       _ => ()
     }
     i += 1
@@ -440,96 +446,101 @@ fn Parser::parse_for(self : Parser) -> @ast.TsStmt raise ParseError {
         let body = self.parse_block_or_stmt_no_lexical()
         self.in_iteration = prev_iteration
         if is_in {
-          return ForIn(@ast.TsForOfKind::Assign, binding, Number, iterable, body)
+          return ForIn(
+            @ast.TsForOfKind::Assign,
+            binding,
+            Number,
+            iterable,
+            body,
+          )
         }
         return ForOf(@ast.TsForOfKind::Assign, binding, Number, iterable, body)
       }
     }
     let expr = self.parse_expr()
-    let stmt : @ast.TsStmt =
-      if self.match_(Eq) {
-        let value = self.parse_expr()
-        match expr {
-          Var(name) => Assign(name, value)
-          IndexAccess(arr, index) => IndexAssign(arr, index, value)
-          PropAccess(obj, prop) => PropAssign(obj, prop, value)
-          _ => Expr(expr)
-        }
-      } else if self.match_(PlusEq) {
-        let value = self.parse_expr()
-        match expr {
-          Var(name) => CompoundAssign(name, AddAssign, value)
-          _ => Expr(expr)
-        }
-      } else if self.match_(MinusEq) {
-        let value = self.parse_expr()
-        match expr {
-          Var(name) => CompoundAssign(name, SubAssign, value)
-          _ => Expr(expr)
-        }
-      } else if self.match_(StarEq) {
-        let value = self.parse_expr()
-        match expr {
-          Var(name) => CompoundAssign(name, MulAssign, value)
-          _ => Expr(expr)
-        }
-      } else if self.match_(SlashEq) {
-        let value = self.parse_expr()
-        match expr {
-          Var(name) => CompoundAssign(name, DivAssign, value)
-          _ => Expr(expr)
-        }
-      } else if self.match_(PercentEq) {
-        let value = self.parse_expr()
-        match expr {
-          Var(name) => CompoundAssign(name, ModAssign, value)
-          _ => Expr(expr)
-        }
-      } else if self.match_(AmpEq) {
-        let value = self.parse_expr()
-        match expr {
-          Var(name) => CompoundAssign(name, BitAndAssign, value)
-          _ => Expr(expr)
-        }
-      } else if self.match_(PipeEq) {
-        let value = self.parse_expr()
-        match expr {
-          Var(name) => CompoundAssign(name, BitOrAssign, value)
-          _ => Expr(expr)
-        }
-      } else if self.match_(CaretEq) {
-        let value = self.parse_expr()
-        match expr {
-          Var(name) => CompoundAssign(name, BitXorAssign, value)
-          _ => Expr(expr)
-        }
-      } else if self.match_(LtLtEq) {
-        let value = self.parse_expr()
-        match expr {
-          Var(name) => CompoundAssign(name, ShlAssign, value)
-          _ => Expr(expr)
-        }
-      } else if self.match_(GtGtEq) {
-        let value = self.parse_expr()
-        match expr {
-          Var(name) => CompoundAssign(name, ShrAssign, value)
-          _ => Expr(expr)
-        }
-      } else if self.match_(GtGtGtEq) {
-        let value = self.parse_expr()
-        match expr {
-          Var(name) => CompoundAssign(name, UShrAssign, value)
-          _ => Expr(expr)
-        }
-      } else if self.match_(StarStarEq) {
-        let value = self.parse_expr()
-        match expr {
-          Var(name) => CompoundAssign(name, PowAssign, value)
-          _ => Expr(expr)
-        }
-      } else {
-        Expr(expr)
+    let stmt : @ast.TsStmt = if self.match_(Eq) {
+      let value = self.parse_expr()
+      match expr {
+        Var(name) => Assign(name, value)
+        IndexAccess(arr, index) => IndexAssign(arr, index, value)
+        PropAccess(obj, prop) => PropAssign(obj, prop, value)
+        _ => Expr(expr)
       }
+    } else if self.match_(PlusEq) {
+      let value = self.parse_expr()
+      match expr {
+        Var(name) => CompoundAssign(name, AddAssign, value)
+        _ => Expr(expr)
+      }
+    } else if self.match_(MinusEq) {
+      let value = self.parse_expr()
+      match expr {
+        Var(name) => CompoundAssign(name, SubAssign, value)
+        _ => Expr(expr)
+      }
+    } else if self.match_(StarEq) {
+      let value = self.parse_expr()
+      match expr {
+        Var(name) => CompoundAssign(name, MulAssign, value)
+        _ => Expr(expr)
+      }
+    } else if self.match_(SlashEq) {
+      let value = self.parse_expr()
+      match expr {
+        Var(name) => CompoundAssign(name, DivAssign, value)
+        _ => Expr(expr)
+      }
+    } else if self.match_(PercentEq) {
+      let value = self.parse_expr()
+      match expr {
+        Var(name) => CompoundAssign(name, ModAssign, value)
+        _ => Expr(expr)
+      }
+    } else if self.match_(AmpEq) {
+      let value = self.parse_expr()
+      match expr {
+        Var(name) => CompoundAssign(name, BitAndAssign, value)
+        _ => Expr(expr)
+      }
+    } else if self.match_(PipeEq) {
+      let value = self.parse_expr()
+      match expr {
+        Var(name) => CompoundAssign(name, BitOrAssign, value)
+        _ => Expr(expr)
+      }
+    } else if self.match_(CaretEq) {
+      let value = self.parse_expr()
+      match expr {
+        Var(name) => CompoundAssign(name, BitXorAssign, value)
+        _ => Expr(expr)
+      }
+    } else if self.match_(LtLtEq) {
+      let value = self.parse_expr()
+      match expr {
+        Var(name) => CompoundAssign(name, ShlAssign, value)
+        _ => Expr(expr)
+      }
+    } else if self.match_(GtGtEq) {
+      let value = self.parse_expr()
+      match expr {
+        Var(name) => CompoundAssign(name, ShrAssign, value)
+        _ => Expr(expr)
+      }
+    } else if self.match_(GtGtGtEq) {
+      let value = self.parse_expr()
+      match expr {
+        Var(name) => CompoundAssign(name, UShrAssign, value)
+        _ => Expr(expr)
+      }
+    } else if self.match_(StarStarEq) {
+      let value = self.parse_expr()
+      match expr {
+        Var(name) => CompoundAssign(name, PowAssign, value)
+        _ => Expr(expr)
+      }
+    } else {
+      Expr(expr)
+    }
     let _ = self.expect(Semicolon)
     Some(stmt)
   }
@@ -749,18 +760,16 @@ fn Parser::parse_assign_or_expr(self : Parser) -> @ast.TsStmt raise ParseError {
       Var(name) => CompoundAssign(name, PowAssign, value)
       _ => raise ParseError("Invalid compound assignment target")
     }
-  } else {
-    if self.match_(Comma) {
-      let mut last = self.parse_expr()
-      while self.match_(Comma) {
-        last = self.parse_expr()
-      }
-      self.consume_semicolon()
-      Expr(last)
-    } else {
-      self.consume_semicolon()
-      Expr(expr)
+  } else if self.match_(Comma) {
+    let mut last = self.parse_expr()
+    while self.match_(Comma) {
+      last = self.parse_expr()
     }
+    self.consume_semicolon()
+    Expr(last)
+  } else {
+    self.consume_semicolon()
+    Expr(expr)
   }
 }
 
@@ -786,12 +795,15 @@ pub fn Parser::parse_block(self : Parser) -> @ast.TsBlock raise ParseError {
   self.in_strict = prev_strict
   { stmts, }
 }
+
 ///|
-fn Parser::parse_block_or_stmt_no_lexical(self : Parser) -> @ast.TsBlock raise ParseError {
+fn Parser::parse_block_or_stmt_no_lexical(
+  self : Parser,
+) -> @ast.TsBlock raise ParseError {
   if self.check(LBrace) {
     self.parse_block()
   } else {
-    { stmts: [self.parse_stmt_no_lexical(true)], }
+    { stmts: [self.parse_stmt_no_lexical(true)] }
   }
 }
 
@@ -835,13 +847,18 @@ fn Parser::parse_stmt_no_lexical(
   allow_function : Bool,
 ) -> @ast.TsStmt raise ParseError {
   if self.is_disallowed_lexical_stmt_start(allow_function) {
-    raise ParseError("Lexical declaration not allowed in single-statement position")
+    raise ParseError(
+      "Lexical declaration not allowed in single-statement position",
+    )
   }
   self.parse_stmt()
 }
 
 ///|
-fn Parser::is_disallowed_lexical_stmt_start(self : Parser, allow_function : Bool) -> Bool {
+fn Parser::is_disallowed_lexical_stmt_start(
+  self : Parser,
+  allow_function : Bool,
+) -> Bool {
   match self.peek().kind {
     Let => not(self.is_let_identifier_expr_start())
     Const | Class => true
@@ -851,8 +868,8 @@ fn Parser::is_disallowed_lexical_stmt_start(self : Parser, allow_function : Bool
       } else {
         not(allow_function) || self.in_strict
       }
-    Ident("async") if self.peek_at(1).kind == Function && not(self.has_line_terminator_after()) =>
-      true
+    Ident("async") if self.peek_at(1).kind == Function &&
+      not(self.has_line_terminator_after()) => true
     _ => false
   }
 }
@@ -868,7 +885,10 @@ fn Parser::parse_var_decl_type(self : Parser) -> @ast.TsType raise ParseError {
 }
 
 ///|
-fn Parser::merge_decl_stmts(_self : Parser, stmts : Array[@ast.TsStmt]) -> @ast.TsStmt {
+fn Parser::merge_decl_stmts(
+  _self : Parser,
+  stmts : Array[@ast.TsStmt],
+) -> @ast.TsStmt {
   if stmts.length() == 1 {
     stmts[0]
   } else {
@@ -905,19 +925,19 @@ fn Parser::parse_var_decl_item(
   } else {
     None
   }
-  let init =
-    match init_opt {
-      Some(expr) => expr
-      None => {
-        if kind is Const {
-          raise ParseError("const declaration requires an initializer")
-        }
-        match binding {
-          @ast.TsBinding::Ident(_) => @ast.TsExpr::Var("undefined")
-          _ => raise ParseError("Destructuring declaration requires an initializer")
-        }
+  let init = match init_opt {
+    Some(expr) => expr
+    None => {
+      if kind is Const {
+        raise ParseError("const declaration requires an initializer")
+      }
+      match binding {
+        @ast.TsBinding::Ident(_) => @ast.TsExpr::Var("undefined")
+        _ =>
+          raise ParseError("Destructuring declaration requires an initializer")
       }
     }
+  }
   match kind {
     Var => @ast.TsStmt::Var(binding, type_, init)
     Let => @ast.TsStmt::Let(binding, type_, init)

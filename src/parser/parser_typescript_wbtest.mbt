@@ -48,7 +48,9 @@ async fn list_typescript_lib_files() -> Array[String] {
   let roots = ["typescript/lib", "typescript/src/lib"]
   let mut base = ""
   for root in roots {
-    let kind = @fs.kind(root, follow_symlink=false) catch { _ => @fs.FileKind::Unknown }
+    let kind = @fs.kind(root, follow_symlink=false) catch {
+      _ => @fs.FileKind::Unknown
+    }
     if kind is @fs.FileKind::Directory {
       base = root
       break
@@ -57,13 +59,14 @@ async fn list_typescript_lib_files() -> Array[String] {
   if base == "" {
     return []
   }
-
   let entries = @fs.readdir(
-        base,
-        include_hidden=false,
-        include_special=false,
-        sort=true,
-      ) catch { _ => [] }
+    base,
+    include_hidden=false,
+    include_special=false,
+    sort=true,
+  ) catch {
+    _ => []
+  }
   let files : Array[String] = []
   for name in entries {
     if name.has_suffix(".d.ts") {
@@ -77,9 +80,10 @@ async fn list_typescript_lib_files() -> Array[String] {
 async test "parser: parse TypeScript lib d.ts files" {
   let files = list_typescript_lib_files()
   if files.length() == 0 {
-    fail("typescript/lib not found. Ensure the TypeScript submodule is initialized.")
+    fail(
+      "typescript/lib not found. Ensure the TypeScript submodule is initialized.",
+    )
   }
-
   let failures : Array[String] = []
   for path in files {
     let content = @fs.read_file(path).text() catch {
@@ -95,7 +99,6 @@ async test "parser: parse TypeScript lib d.ts files" {
       Err(err) => failures.push(path + ": " + "\{err}")
     }
   }
-
   if failures.length() > 0 {
     println("TypeScript lib parse failures (\{failures.length()}):")
     for item in failures {
@@ -161,7 +164,6 @@ async test "parser: compare heredoc vs file content" {
     }
   }
   let file_section = parts.join("\n")
-
   println("File section:")
   println(file_section)
 
@@ -209,7 +211,6 @@ test "parser: complex type aliases from es5" {
     #|interface ArrayBuffer {
     #|    readonly byteLength: number;
     #|}
-
   let parser = Parser::from_source(src)
   let module_ = parser.parse_module() catch {
     e => {
@@ -217,7 +218,6 @@ test "parser: complex type aliases from es5" {
       return
     }
   }
-
   println("Found \{module_.interfaces.length()} interfaces:")
   for iface in module_.interfaces {
     println("  - \{iface.name}")
@@ -243,7 +243,6 @@ test "parser: type alias with intrinsic" {
     #|interface Bar {
     #|  baz: number;
     #|}
-
   let parser = Parser::from_source(src)
   let module_ = parser.parse_module() catch {
     e => {
@@ -251,7 +250,6 @@ test "parser: type alias with intrinsic" {
       return
     }
   }
-
   println("Found \{module_.interfaces.length()} interfaces")
   for iface in module_.interfaces {
     println("  - \{iface.name}")
@@ -274,7 +272,6 @@ async test "parser: compare interface fields with TypeScript oracle" {
       return
     }
   }
-
   let parser = Parser::from_source(content)
   let module_ = parser.parse_module() catch {
     e => {
@@ -309,7 +306,6 @@ async test "parser: compare es5 interface fields" {
       return
     }
   }
-
   let parser = Parser::from_source(content)
   let module_ = parser.parse_module() catch {
     e => {
@@ -317,7 +313,6 @@ async test "parser: compare es5 interface fields" {
       return
     }
   }
-
   let field_names = extract_field_names(module_)
 
   // Check Array interface fields (from TypeScript oracle)
@@ -325,7 +320,11 @@ async test "parser: compare es5 interface fields" {
   match array_fields {
     Some(fields) => {
       // Oracle: length, toString, toLocaleString, pop, push, concat, join, reverse, shift, slice, sort, splice, unshift, indexOf, lastIndexOf, every, some, forEach, map, filter, reduce, reduceRight
-      let expected = ["length", "toString", "pop", "push", "concat", "join", "reverse", "shift", "slice", "sort", "splice", "unshift", "indexOf", "lastIndexOf", "every", "some", "forEach", "map", "filter", "reduce", "reduceRight"]
+      let expected = [
+        "length", "toString", "pop", "push", "concat", "join", "reverse", "shift",
+        "slice", "sort", "splice", "unshift", "indexOf", "lastIndexOf", "every",
+        "some", "forEach", "map", "filter", "reduce", "reduceRight",
+      ]
       let missing : Array[String] = []
       for name in expected {
         if not(fields.contains(name)) {
@@ -380,7 +379,6 @@ test "parser: type alias with nested generics" {
     #|type Omit<T, K extends keyof any> = Pick<T, Exclude<keyof T, K>>;
     #|
     #|interface After {}
-
   let parser = Parser::from_source(src)
   let module_ = parser.parse_module() catch {
     e => {
@@ -431,7 +429,6 @@ test "parser: es5 type alias section" {
     #|interface ArrayBuffer {
     #|    readonly byteLength: number;
     #|}
-
   let parser = Parser::from_source(src)
   let module_ = parser.parse_module() catch {
     e => {
@@ -444,7 +441,6 @@ test "parser: es5 type alias section" {
   assert_eq(module_.interfaces.length(), 4)
 }
 
-
 ///|
 /// Test multiple files against oracle
 async test "parser: validate interface structure against TypeScript" {
@@ -456,7 +452,6 @@ async test "parser: validate interface structure against TypeScript" {
     ("typescript/src/lib/es2015.symbol.d.ts", 1),
     ("typescript/src/lib/es5.d.ts", 80), // Excludes interfaces inside namespaces
   ]
-
   for test_case in test_cases {
     let (file_path, expected_count) = test_case
     let content = @fs.read_file(file_path).text() catch {
@@ -465,7 +460,6 @@ async test "parser: validate interface structure against TypeScript" {
         continue
       }
     }
-
     let parser = Parser::from_source(content)
     let module_ = parser.parse_module() catch {
       e => {
@@ -473,7 +467,6 @@ async test "parser: validate interface structure against TypeScript" {
         continue
       }
     }
-
     let actual_count = module_.interfaces.length()
     if actual_count != expected_count {
       println(

@@ -24,26 +24,31 @@ pub enum JSFuncBody {
 
 // === ID generator (object/function/array identity) ===
 
+///|
 priv struct IdGen {
   mut object_id : Int
   mut function_id : Int
   mut array_id : Int
 }
 
+///|
 let id_gen : IdGen = { object_id: 1, function_id: 1, array_id: 1 }
 
+///|
 fn fresh_object_id() -> Int {
   let id = id_gen.object_id
   id_gen.object_id = id + 1
   id
 }
 
+///|
 fn fresh_function_id() -> Int {
   let id = id_gen.function_id
   id_gen.function_id = id + 1
   id
 }
 
+///|
 fn fresh_array_id() -> Int {
   let id = id_gen.array_id
   id_gen.array_id = id + 1
@@ -71,4 +76,3 @@ pub fn js_new_native_function_with_env(
     object_proto,
   })
 }
-

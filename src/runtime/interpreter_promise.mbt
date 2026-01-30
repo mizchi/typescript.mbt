@@ -1,12 +1,27 @@
 // Promise and microtask queue support
 
+///|
 const PROMISE_CLASS : String = "Promise"
+
+///|
 const PROMISE_STATE_KEY : String = "__promise_state"
+
+///|
 const PROMISE_RESULT_KEY : String = "__promise_result"
+
+///|
 const PROMISE_FULFILL_REACTIONS_KEY : String = "__promise_fulfill_reactions"
+
+///|
 const PROMISE_REJECT_REACTIONS_KEY : String = "__promise_reject_reactions"
+
+///|
 const PROMISE_REACTION_HANDLER_KEY : String = "__promise_handler"
+
+///|
 const PROMISE_REACTION_PROMISE_KEY : String = "__promise_promise"
+
+///|
 const PROMISE_REACTION_IS_REJECT_KEY : String = "__promise_is_reject"
 
 ///|
@@ -46,21 +61,29 @@ pub fn JSInterpreter::drain_microtasks(self : JSInterpreter) -> Unit {
 
 ///|
 // / microtask run
-fn JSInterpreter::run_microtask_job(self : JSInterpreter, job : MicrotaskJob) -> Unit {
+fn JSInterpreter::run_microtask_job(
+  self : JSInterpreter,
+  job : MicrotaskJob,
+) -> Unit {
   fn get_capability(
     self : JSInterpreter,
     promise : JSValue,
   ) -> (JSValue?, JSValue?) {
     let resolve = js_get_prop(promise, "__promise_cap_resolve__")
     let reject = js_get_prop(promise, "__promise_cap_reject__")
-    let cap_resolve = if self.is_callable(resolve) { Some(resolve) } else { None }
+    let cap_resolve = if self.is_callable(resolve) {
+      Some(resolve)
+    } else {
+      None
+    }
     let cap_reject = if self.is_callable(reject) { Some(reject) } else { None }
     (cap_resolve, cap_reject)
   }
+
   if self.is_callable(job.handler) {
     let result = self.call_function(job.handler, Undefined, [job.argument])
     match self.peek_error() {
-      Some(err) => {
+      Some(err) =>
         match job.promise {
           Some(promise) => {
             self.last_error = None
@@ -68,13 +91,13 @@ fn JSInterpreter::run_microtask_job(self : JSInterpreter, job : MicrotaskJob) ->
             match cap_reject {
               Some(reject) => {
                 let _ = self.call_function(reject, Undefined, [err])
+
               }
               None => self.promise_reject(promise, err)
             }
           }
           None => ()
         }
-      }
       None =>
         match job.promise {
           Some(promise) => {
@@ -82,6 +105,7 @@ fn JSInterpreter::run_microtask_job(self : JSInterpreter, job : MicrotaskJob) ->
             match cap_resolve {
               Some(resolve) => {
                 let _ = self.call_function(resolve, Undefined, [result])
+
               }
               None => self.promise_resolve_value(promise, result)
             }
@@ -97,6 +121,7 @@ fn JSInterpreter::run_microtask_job(self : JSInterpreter, job : MicrotaskJob) ->
           match cap_reject {
             Some(reject) => {
               let _ = self.call_function(reject, Undefined, [job.argument])
+
             }
             None => self.promise_reject(promise, job.argument)
           }
@@ -104,6 +129,7 @@ fn JSInterpreter::run_microtask_job(self : JSInterpreter, job : MicrotaskJob) ->
           match cap_resolve {
             Some(resolve) => {
               let _ = self.call_function(resolve, Undefined, [job.argument])
+
             }
             None => self.promise_resolve_value(promise, job.argument)
           }
@@ -186,7 +212,10 @@ fn JSInterpreter::new_promise(self : JSInterpreter) -> JSValue {
 
 ///|
 // / promise instance init
-fn JSInterpreter::init_promise_instance(_self : JSInterpreter, obj : JSValue) -> JSValue {
+fn JSInterpreter::init_promise_instance(
+  _self : JSInterpreter,
+  obj : JSValue,
+) -> JSValue {
   let _ = js_set_prop(obj, "__class", String(PROMISE_CLASS))
   let _ = js_set_prop(obj, PROMISE_STATE_KEY, String("pending"))
   let _ = js_set_prop(obj, PROMISE_RESULT_KEY, Undefined)
@@ -197,7 +226,10 @@ fn JSInterpreter::init_promise_instance(_self : JSInterpreter, obj : JSValue) ->
 
 ///|
 // / promise state get
-fn JSInterpreter::promise_state(_self : JSInterpreter, promise : JSValue) -> String {
+fn JSInterpreter::promise_state(
+  _self : JSInterpreter,
+  promise : JSValue,
+) -> String {
   match js_get_prop(promise, PROMISE_STATE_KEY) {
     String(state) => state
     _ => "pending"
@@ -206,7 +238,10 @@ fn JSInterpreter::promise_state(_self : JSInterpreter, promise : JSValue) -> Str
 
 ///|
 // / promise result get
-fn JSInterpreter::promise_result(_self : JSInterpreter, promise : JSValue) -> JSValue {
+fn JSInterpreter::promise_result(
+  _self : JSInterpreter,
+  promise : JSValue,
+) -> JSValue {
   js_get_prop(promise, PROMISE_RESULT_KEY)
 }
 
@@ -233,15 +268,21 @@ fn JSInterpreter::push_promise_reaction(
   is_reject : Bool,
   reaction : JSValue,
 ) -> Unit {
-  let key = if is_reject { PROMISE_REJECT_REACTIONS_KEY } else { PROMISE_FULFILL_REACTIONS_KEY }
+  let key = if is_reject {
+    PROMISE_REJECT_REACTIONS_KEY
+  } else {
+    PROMISE_FULFILL_REACTIONS_KEY
+  }
   let list = js_get_prop(promise, key)
   match list {
     Array(_) => {
       let _ = js_array_push(list, reaction)
+
     }
     _ => {
       let arr = js_array_from([reaction])
       let _ = js_set_prop(promise, key, arr)
+
     }
   }
 }
@@ -270,7 +311,11 @@ fn JSInterpreter::trigger_promise_reactions(
   is_reject : Bool,
   argument : JSValue,
 ) -> Unit {
-  let key = if is_reject { PROMISE_REJECT_REACTIONS_KEY } else { PROMISE_FULFILL_REACTIONS_KEY }
+  let key = if is_reject {
+    PROMISE_REJECT_REACTIONS_KEY
+  } else {
+    PROMISE_FULFILL_REACTIONS_KEY
+  }
   let list = js_get_prop(promise, key)
   match list {
     Array(arr) =>
@@ -281,6 +326,7 @@ fn JSInterpreter::trigger_promise_reactions(
   }
   let _ = js_set_prop(promise, PROMISE_FULFILL_REACTIONS_KEY, js_new_array())
   let _ = js_set_prop(promise, PROMISE_REJECT_REACTIONS_KEY, js_new_array())
+
 }
 
 ///|
@@ -294,7 +340,9 @@ fn JSInterpreter::promise_resolve_value(
     return
   }
   if self.same_value(promise, value) {
-    let err = self.make_error_obj("TypeError", "Chaining cycle detected for promise")
+    let err = self.make_error_obj(
+      "TypeError", "Chaining cycle detected for promise",
+    )
     self.promise_reject(promise, err)
     return
   }
@@ -314,10 +362,14 @@ fn JSInterpreter::promise_resolve_value(
           if self.is_callable(then) {
             let once_token = self.new_object()
             let _ = js_set_prop(once_token, "__promise_once", Bool(false))
-            let resolve_once =
-              self.make_bound_native("Promise.__resolve_once__", [once_token, promise])
-            let reject_once =
-              self.make_bound_native("Promise.__reject_once__", [once_token, promise])
+            let resolve_once = self.make_bound_native(
+              "Promise.__resolve_once__",
+              [once_token, promise],
+            )
+            let reject_once = self.make_bound_native(
+              "Promise.__reject_once__",
+              [once_token, promise],
+            )
             let _ = self.call_function(then, value, [resolve_once, reject_once])
             match self.peek_error() {
               Some(err) => {
@@ -395,12 +447,22 @@ fn JSInterpreter::perform_promise_then(
   on_rejected : JSValue,
   result_promise : JSValue,
 ) -> JSValue {
-  let fulfill_handler = if self.is_callable(on_fulfilled) { on_fulfilled } else { Undefined }
-  let reject_handler = if self.is_callable(on_rejected) { on_rejected } else { Undefined }
-  let fulfill_reaction =
-    self.make_promise_reaction(fulfill_handler, result_promise, false)
-  let reject_reaction =
-    self.make_promise_reaction(reject_handler, result_promise, true)
+  let fulfill_handler = if self.is_callable(on_fulfilled) {
+    on_fulfilled
+  } else {
+    Undefined
+  }
+  let reject_handler = if self.is_callable(on_rejected) {
+    on_rejected
+  } else {
+    Undefined
+  }
+  let fulfill_reaction = self.make_promise_reaction(
+    fulfill_handler, result_promise, false,
+  )
+  let reject_reaction = self.make_promise_reaction(
+    reject_handler, result_promise, true,
+  )
   match self.promise_state(promise) {
     "pending" => {
       self.push_promise_reaction(promise, false, fulfill_reaction)
@@ -420,10 +482,15 @@ fn JSInterpreter::perform_promise_then(
 
 ///|
 // / promise construct
-fn JSInterpreter::promise_construct(self : JSInterpreter, args : Array[JSValue]) -> JSValue {
+fn JSInterpreter::promise_construct(
+  self : JSInterpreter,
+  args : Array[JSValue],
+) -> JSValue {
   let executor = if args.length() > 0 { args[0] } else { Undefined }
   if not(self.is_callable(executor)) {
-    return self.set_error_kind("TypeError", "Promise resolver is not a function")
+    return self.set_error_kind(
+      "TypeError", "Promise resolver is not a function",
+    )
   }
   let promise = self.new_promise()
   let resolve_fn = self.make_promise_resolve_handler(promise)
@@ -448,7 +515,9 @@ fn JSInterpreter::promise_construct_with_instance(
 ) -> JSValue {
   let executor = if args.length() > 0 { args[0] } else { Undefined }
   if not(self.is_callable(executor)) {
-    return self.set_error_kind("TypeError", "Promise resolver is not a function")
+    return self.set_error_kind(
+      "TypeError", "Promise resolver is not a function",
+    )
   }
   let promise = self.init_promise_instance(instance)
   let resolve_fn = self.make_promise_resolve_handler(promise)
@@ -466,6 +535,7 @@ fn JSInterpreter::promise_construct_with_instance(
 
 ///|
 // / promise static reject
+
 ///|
 // / promise capability
 fn JSInterpreter::promise_new_capability(
@@ -490,7 +560,9 @@ fn JSInterpreter::promise_new_capability(
   let resolve = js_get_prop(cap, "resolve")
   let reject = js_get_prop(cap, "reject")
   if not(self.is_callable(resolve)) || not(self.is_callable(reject)) {
-    let _ = self.set_error_kind("TypeError", "Promise capability is not callable")
+    let _ = self.set_error_kind(
+      "TypeError", "Promise capability is not callable",
+    )
     return (Undefined, Undefined, Undefined)
   }
   let _ = js_set_prop(promise, "__promise_cap_resolve__", resolve)
@@ -512,7 +584,10 @@ fn JSInterpreter::promise_species_constructor(
   match ctor {
     Undefined => return self.global_env.get("Promise")
     Object(_) | Function(_) => ()
-    _ => return self.set_error_kind("TypeError", "Promise constructor is not an object")
+    _ =>
+      return self.set_error_kind(
+        "TypeError", "Promise constructor is not an object",
+      )
   }
   let species = self.get_prop_value(ctor, "@@species")
   match self.peek_error() {
@@ -588,7 +663,9 @@ fn JSInterpreter::promise_try(
     None => ()
   }
   if not(self.is_callable(callback)) {
-    let err = self.set_error_kind("TypeError", "Promise.try callback is not callable")
+    let err = self.set_error_kind(
+      "TypeError", "Promise.try callback is not callable",
+    )
     self.last_error = None
     let _ = self.call_function(reject, Undefined, [err])
     match self.peek_error() {
@@ -625,10 +702,10 @@ fn JSInterpreter::promise_link(
 ) -> Unit {
   let resolve_handler = self.make_promise_resolve_handler(target)
   let reject_handler = self.make_promise_reject_handler(target)
-  let fulfill_reaction =
-    self.make_promise_reaction(resolve_handler, target, false)
-  let reject_reaction =
-    self.make_promise_reaction(reject_handler, target, true)
+  let fulfill_reaction = self.make_promise_reaction(
+    resolve_handler, target, false,
+  )
+  let reject_reaction = self.make_promise_reaction(reject_handler, target, true)
   match self.promise_state(source) {
     "pending" => {
       self.push_promise_reaction(source, false, fulfill_reaction)
@@ -666,19 +743,17 @@ fn JSInterpreter::promise_all_with_ctor(
   if not(self.is_callable(promise_resolve)) {
     return self.set_error_kind("TypeError", "Promise.resolve is not callable")
   }
-  let iterator =
-    match self.get_iterator(iter) {
-      Some(it) => it
-      None =>
-        match self.peek_error() {
-          Some(err) => return err
-          None =>
-            return self.set_error_kind(
-              "TypeError",
-              "Promise.all argument is not iterable",
-            )
-        }
-    }
+  let iterator = match self.get_iterator(iter) {
+    Some(it) => it
+    None =>
+      match self.peek_error() {
+        Some(err) => return err
+        None =>
+          return self.set_error_kind(
+            "TypeError", "Promise.all argument is not iterable",
+          )
+      }
+  }
   let results = js_new_array()
   let state = self.new_object()
   let _ = js_set_prop(state, "__all_remaining", Number(1.0))
@@ -704,9 +779,14 @@ fn JSInterpreter::promise_all_with_ctor(
         Number(n) => n.to_int() - 1
         _ => 0
       }
-      let _ = js_set_prop(state, "__all_remaining", Number(remaining.to_double()))
+      let _ = js_set_prop(
+        state,
+        "__all_remaining",
+        Number(remaining.to_double()),
+      )
       if remaining == 0 {
         let _ = self.call_function(cap_resolve, ctor, [results])
+
       }
       return promise
     }
@@ -724,35 +804,28 @@ fn JSInterpreter::promise_all_with_ctor(
       _ => 1
     }
     let _ = js_set_prop(state, "__all_remaining", Number(remaining.to_double()))
-
     let already = self.new_object()
     let _ = js_set_prop(already, "__promise_once", Bool(false))
     let idx_val = JSValue::Number(index.to_double())
-    let resolve_element =
-      if all_settled {
-        self.make_bound_native(
-          "Promise.__all_settled_fulfill__",
-          [state, idx_val, already],
-        )
-      } else {
-        self.make_bound_native(
-          "Promise.__all_fulfill__",
-          [state, idx_val, already],
-        )
-      }
-    let reject_element =
-      if all_settled {
-        let handler =
-          self.make_bound_native(
-            "Promise.__all_settled_reject__",
-            [state, idx_val, already],
-          )
-        self.set_function_length(handler, 1.0)
-        self.set_function_name(handler, "reject")
-        handler
-      } else {
-        cap_reject
-      }
+    let resolve_element = if all_settled {
+      self.make_bound_native("Promise.__all_settled_fulfill__", [
+        state, idx_val, already,
+      ])
+    } else {
+      self.make_bound_native("Promise.__all_fulfill__", [
+        state, idx_val, already,
+      ])
+    }
+    let reject_element = if all_settled {
+      let handler = self.make_bound_native("Promise.__all_settled_reject__", [
+        state, idx_val, already,
+      ])
+      self.set_function_length(handler, 1.0)
+      self.set_function_name(handler, "reject")
+      handler
+    } else {
+      cap_reject
+    }
     self.set_function_length(resolve_element, 1.0)
     self.set_function_name(resolve_element, "resolve")
     let next_promise = self.call_function(promise_resolve, ctor, [value])
@@ -772,15 +845,15 @@ fn JSInterpreter::promise_all_with_ctor(
       None => ()
     }
     if not(self.is_callable(then_method)) {
-      let err = self.set_error_kind("TypeError", "Promise resolve is not callable")
+      let err = self.set_error_kind(
+        "TypeError", "Promise resolve is not callable",
+      )
       self.iterator_close_on_error(iterator)
       return err
     }
-    let _ = self.call_function(
-      then_method,
-      next_promise,
-      [resolve_element, reject_element],
-    )
+    let _ = self.call_function(then_method, next_promise, [
+      resolve_element, reject_element,
+    ])
     match self.peek_error() {
       Some(err) => {
         self.iterator_close_on_error(iterator)
@@ -813,19 +886,17 @@ fn JSInterpreter::promise_race_with_ctor(
   if not(self.is_callable(promise_resolve)) {
     return self.set_error_kind("TypeError", "Promise.resolve is not callable")
   }
-  let iterator =
-    match self.get_iterator(iter) {
-      Some(it) => it
-      None =>
-        match self.peek_error() {
-          Some(err) => return err
-          None =>
-            return self.set_error_kind(
-              "TypeError",
-              "Promise.race argument is not iterable",
-            )
-        }
-    }
+  let iterator = match self.get_iterator(iter) {
+    Some(it) => it
+    None =>
+      match self.peek_error() {
+        Some(err) => return err
+        None =>
+          return self.set_error_kind(
+            "TypeError", "Promise.race argument is not iterable",
+          )
+      }
+  }
   while true {
     let next = self.call_method(iterator, "next", [])
     match self.peek_error() {
@@ -866,15 +937,15 @@ fn JSInterpreter::promise_race_with_ctor(
       None => ()
     }
     if not(self.is_callable(then_method)) {
-      let err = self.set_error_kind("TypeError", "Promise resolve is not callable")
+      let err = self.set_error_kind(
+        "TypeError", "Promise resolve is not callable",
+      )
       self.iterator_close_on_error(iterator)
       return err
     }
-    let _ = self.call_function(
-      then_method,
-      next_promise,
-      [cap_resolve, cap_reject],
-    )
+    let _ = self.call_function(then_method, next_promise, [
+      cap_resolve, cap_reject,
+    ])
     match self.peek_error() {
       Some(err) => {
         self.iterator_close_on_error(iterator)
@@ -888,7 +959,10 @@ fn JSInterpreter::promise_race_with_ctor(
 
 ///|
 // / promise withResolvers
-fn JSInterpreter::promise_with_resolvers(self : JSInterpreter, ctor : JSValue) -> JSValue {
+fn JSInterpreter::promise_with_resolvers(
+  self : JSInterpreter,
+  ctor : JSValue,
+) -> JSValue {
   let (promise, resolve, reject) = self.promise_new_capability(ctor)
   match self.peek_error() {
     Some(err) => return err
@@ -923,19 +997,17 @@ fn JSInterpreter::promise_any_with_ctor(
   if not(self.is_callable(promise_resolve)) {
     return self.set_error_kind("TypeError", "Promise.resolve is not callable")
   }
-  let iterator =
-    match self.get_iterator(iter) {
-      Some(it) => it
-      None =>
-        match self.peek_error() {
-          Some(err) => return err
-          None =>
-            return self.set_error_kind(
-              "TypeError",
-              "Promise.any argument is not iterable",
-            )
-        }
-    }
+  let iterator = match self.get_iterator(iter) {
+    Some(it) => it
+    None =>
+      match self.peek_error() {
+        Some(err) => return err
+        None =>
+          return self.set_error_kind(
+            "TypeError", "Promise.any argument is not iterable",
+          )
+      }
+  }
   let errors = js_new_array()
   let state = self.new_object()
   let _ = js_set_prop(state, "__any_remaining", Number(1.0))
@@ -959,10 +1031,15 @@ fn JSInterpreter::promise_any_with_ctor(
         Number(n) => n.to_int() - 1
         _ => 0
       }
-      let _ = js_set_prop(state, "__any_remaining", Number(remaining.to_double()))
+      let _ = js_set_prop(
+        state,
+        "__any_remaining",
+        Number(remaining.to_double()),
+      )
       if remaining == 0 {
         let err = self.make_aggregate_error(errors)
         let _ = self.call_function(cap_reject, Undefined, [err])
+
       }
       return promise
     }
@@ -983,10 +1060,9 @@ fn JSInterpreter::promise_any_with_ctor(
     let idx_val = JSValue::Number(index.to_double())
     let already = self.new_object()
     let _ = js_set_prop(already, "__promise_once", Bool(false))
-    let reject_element = self.make_bound_native(
-      "Promise.__any_reject__",
-      [state, idx_val, already],
-    )
+    let reject_element = self.make_bound_native("Promise.__any_reject__", [
+      state, idx_val, already,
+    ])
     self.set_function_length(reject_element, 1.0)
     self.set_function_name(reject_element, "reject")
     let next_promise = self.call_function(promise_resolve, ctor, [value])
@@ -1006,15 +1082,15 @@ fn JSInterpreter::promise_any_with_ctor(
       None => ()
     }
     if not(self.is_callable(then_method)) {
-      let err = self.set_error_kind("TypeError", "Promise resolve is not callable")
+      let err = self.set_error_kind(
+        "TypeError", "Promise resolve is not callable",
+      )
       self.iterator_close_on_error(iterator)
       return err
     }
-    let _ = self.call_function(
-      then_method,
-      next_promise,
-      [cap_resolve, reject_element],
-    )
+    let _ = self.call_function(then_method, next_promise, [
+      cap_resolve, reject_element,
+    ])
     match self.peek_error() {
       Some(err) => {
         self.iterator_close_on_error(iterator)

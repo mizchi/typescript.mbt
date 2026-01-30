@@ -23,6 +23,7 @@ fn Parser::parse_import_specifiers(self : Parser) -> Unit raise ParseError {
     let _ = self.parse_binding_ident()
     if self.match_(As) || self.match_ident("as") {
       let _ = self.parse_binding_ident()
+
     }
     if self.match_(Comma) {
       if self.check(RBrace) {
@@ -42,16 +43,17 @@ fn Parser::next_temp(self : Parser, prefix : String) -> String {
 }
 
 ///|
-fn Parser::parse_named_imports(self : Parser) -> Array[(String, String)] raise ParseError {
+fn Parser::parse_named_imports(
+  self : Parser,
+) -> Array[(String, String)] raise ParseError {
   let items : Array[(String, String)] = []
   while not(self.check(RBrace)) {
     let imported = self.parse_binding_ident()
-    let local_name =
-      if self.match_(As) || self.match_ident("as") {
-        self.parse_binding_ident()
-      } else {
-        imported
-      }
+    let local_name = if self.match_(As) || self.match_ident("as") {
+      self.parse_binding_ident()
+    } else {
+      imported
+    }
     items.push((imported, local_name))
     if self.match_(Comma) {
       if self.check(RBrace) {
@@ -65,16 +67,17 @@ fn Parser::parse_named_imports(self : Parser) -> Array[(String, String)] raise P
 }
 
 ///|
-fn Parser::parse_named_exports(self : Parser) -> Array[(String, String)] raise ParseError {
+fn Parser::parse_named_exports(
+  self : Parser,
+) -> Array[(String, String)] raise ParseError {
   let items : Array[(String, String)] = []
   while not(self.check(RBrace)) {
     let local_name = self.parse_binding_ident()
-    let export_name =
-      if self.match_(As) || self.match_ident("as") {
-        self.parse_binding_ident()
-      } else {
-        local_name
-      }
+    let export_name = if self.match_(As) || self.match_ident("as") {
+      self.parse_binding_ident()
+    } else {
+      local_name
+    }
     items.push((local_name, export_name))
     if self.match_(Comma) {
       if self.check(RBrace) {
@@ -88,7 +91,10 @@ fn Parser::parse_named_exports(self : Parser) -> Array[(String, String)] raise P
 }
 
 ///|
-fn collect_decl_names_from_stmt(stmt : @ast.TsStmt, names : Array[String]) -> Unit {
+fn collect_decl_names_from_stmt(
+  stmt : @ast.TsStmt,
+  names : Array[String],
+) -> Unit {
   match stmt {
     Let(binding, _, _) | Const(binding, _, _) =>
       match binding {
@@ -104,7 +110,9 @@ fn collect_decl_names_from_stmt(stmt : @ast.TsStmt, names : Array[String]) -> Un
 }
 
 ///|
-fn Parser::parse_import_decl(self : Parser) -> @ast.TsImportDecl raise ParseError {
+fn Parser::parse_import_decl(
+  self : Parser,
+) -> @ast.TsImportDecl raise ParseError {
   let _ = self.expect(Import)
   let mut type_only = false
   if self.match_(Type) || self.match_ident("type") {
@@ -157,6 +165,7 @@ fn Parser::parse_import_decl(self : Parser) -> @ast.TsImportDecl raise ParseErro
       named_bindings.push(item)
     }
     let _ = self.expect(RBrace)
+
   }
   self.expect_from()
   let module_spec = self.expect_str_literal()
@@ -226,19 +235,13 @@ fn Parser::parse_export_decl_for_module(
       let name = self.parse_binding_ident()
       self.expect_from()
       let module_spec = self.expect_str_literal()
-      reexports.push({
-        module_spec,
-        kind: @ast.TsReExportKind::Namespace(name),
-      })
+      reexports.push({ module_spec, kind: @ast.TsReExportKind::Namespace(name) })
       self.consume_semicolon()
       return (stmts, exports, reexports)
     }
     self.expect_from()
     let module_spec = self.expect_str_literal()
-    reexports.push({
-      module_spec,
-      kind: @ast.TsReExportKind::All,
-    })
+    reexports.push({ module_spec, kind: @ast.TsReExportKind::All })
     self.consume_semicolon()
     return (stmts, exports, reexports)
   }
@@ -247,10 +250,7 @@ fn Parser::parse_export_decl_for_module(
     let _ = self.expect(RBrace)
     if self.match_(From) || self.match_ident("from") {
       let module_spec = self.expect_str_literal()
-      reexports.push({
-        module_spec,
-        kind: @ast.TsReExportKind::Named(items),
-      })
+      reexports.push({ module_spec, kind: @ast.TsReExportKind::Named(items) })
     } else {
       for item in items {
         let (local_name, export_name) = item
@@ -326,9 +326,11 @@ fn Parser::parse_import_stmt(self : Parser) -> Unit raise ParseError {
       raise ParseError("Expected 'as' in import namespace")
     }
     let _ = self.parse_binding_ident()
+
   } else if self.match_(LBrace) {
     self.parse_import_specifiers()
     let _ = self.expect(RBrace)
+
   }
   self.expect_from()
   let _ = self.expect_str_literal()
@@ -382,25 +384,21 @@ fn Parser::parse_export_stmt(
         let _ = self.advance() // consume 'function'
         imports.push(self.parse_declare_function())
       }
-      Var | Let | Const => {
-        self.skip_until_semicolon()
-      }
-      Interface => {
-        interfaces.push(self.parse_interface())
-      }
-      Type => {
-        self.skip_type_alias()
-      }
-      Ident(name) => {
-        if name == "namespace" || name == "module" || name == "global" || name == "abstract" || name == "enum" || name == "class" {
+      Var | Let | Const => self.skip_until_semicolon()
+      Interface => interfaces.push(self.parse_interface())
+      Type => self.skip_type_alias()
+      Ident(name) =>
+        if name == "namespace" ||
+          name == "module" ||
+          name == "global" ||
+          name == "abstract" ||
+          name == "enum" ||
+          name == "class" {
           self.skip_declaration_block()
         } else {
           ()
         }
-      }
-      Class => {
-        self.skip_declaration_block()
-      }
+      Class => self.skip_declaration_block()
       _ => ()
     }
     return
@@ -408,6 +406,7 @@ fn Parser::parse_export_stmt(
   if self.match_(Star) {
     if self.match_(As) || self.match_ident("as") {
       let _ = self.parse_binding_ident()
+
     }
     self.expect_from()
     let _ = self.expect_str_literal()
@@ -419,6 +418,7 @@ fn Parser::parse_export_stmt(
     let _ = self.expect(RBrace)
     if self.match_(From) || self.match_ident("from") {
       let _ = self.expect_str_literal()
+
     }
     self.consume_semicolon()
     return
@@ -434,7 +434,9 @@ fn Parser::parse_export_stmt(
   }
   raise ParseError("Unsupported export statement")
 }
+
 ///|
+
 ///|
 // /
 pub fn Parser::parse_module(self : Parser) -> @ast.TsModule raise ParseError {
@@ -453,29 +455,28 @@ pub fn Parser::parse_module(self : Parser) -> @ast.TsModule raise ParseError {
           let _ = self.advance() // consume 'function'
           imports.push(self.parse_declare_function())
         }
-        Var | Let | Const => {
+        Var | Let | Const =>
           // Skip declare var/let/const: just consume until semicolon
           self.skip_until_semicolon()
-        }
-        Interface => {
-          interfaces.push(self.parse_interface())
-        }
-        Type => {
+        Interface => interfaces.push(self.parse_interface())
+        Type =>
           // Skip type alias: consume until semicolon or end of type
           self.skip_type_alias()
-        }
-        Ident(name) => {
-          if name == "namespace" || name == "module" || name == "global" || name == "abstract" || name == "enum" || name == "class" {
+        Ident(name) =>
+          if name == "namespace" ||
+            name == "module" ||
+            name == "global" ||
+            name == "abstract" ||
+            name == "enum" ||
+            name == "class" {
             // Skip namespace/module/global/abstract/enum/class declaration
             self.skip_declaration_block()
           } else {
             raise ParseError("Unexpected identifier after declare: \{name}")
           }
-        }
-        Class => {
+        Class =>
           // Skip declare class
           self.skip_declaration_block()
-        }
         k => raise ParseError("Expected Function, got \{k}")
       }
     } else if self.check(Import) {
@@ -489,7 +490,9 @@ pub fn Parser::parse_module(self : Parser) -> @ast.TsModule raise ParseError {
       // Skip const declarations at top level (e.g., const enum)
       self.skip_until_semicolon()
     } else {
-      raise ParseError("Expected function, interface, declare, import, or export declaration")
+      raise ParseError(
+        "Expected function, interface, declare, import, or export declaration",
+      )
     }
   }
   { funcs, interfaces, imports }
@@ -497,7 +500,9 @@ pub fn Parser::parse_module(self : Parser) -> @ast.TsModule raise ParseError {
 
 ///|
 // / module block (script with import/export)
-pub fn Parser::parse_module_block(self : Parser) -> @ast.TsModuleBlock raise ParseError {
+pub fn Parser::parse_module_block(
+  self : Parser,
+) -> @ast.TsModuleBlock raise ParseError {
   let stmts : Array[@ast.TsStmt] = []
   let imports : Array[@ast.TsImportDecl] = []
   let exports : Array[@ast.TsExportSpec] = []
@@ -508,8 +513,7 @@ pub fn Parser::parse_module_block(self : Parser) -> @ast.TsModuleBlock raise Par
       continue
     }
     if self.check(Export) {
-      let (block_stmts, export_specs, reexport_specs) =
-        self.parse_export_decl_for_module()
+      let (block_stmts, export_specs, reexport_specs) = self.parse_export_decl_for_module()
       for stmt in block_stmts {
         stmts.push(stmt)
       }
@@ -540,12 +544,16 @@ pub fn parse_expr_from_source(source : String) -> @ast.TsExpr? raise ParseError 
 
 ///|
 // / eval : expression with inherited strict mode
-pub fn parse_expr_from_source_strict(source : String, inherit_strict : Bool) -> @ast.TsExpr? raise ParseError {
+pub fn parse_expr_from_source_strict(
+  source : String,
+  inherit_strict : Bool,
+) -> @ast.TsExpr? raise ParseError {
   let lexer = Lexer::new(source)
   let tokens = lexer.tokenize()
   // Check if source itself declares strict mode
   let trimmed = source.trim_start()
-  let source_strict = trimmed.has_prefix("\"use strict\";") || trimmed.has_prefix("'use strict';")
+  let source_strict = trimmed.has_prefix("\"use strict\";") ||
+    trimmed.has_prefix("'use strict';")
   let parser = Parser::new_with_strict(tokens, inherit_strict || source_strict)
   let expr = parser.parse_expr()
   if parser.check(Eof) {
@@ -557,7 +565,9 @@ pub fn parse_expr_from_source_strict(source : String, inherit_strict : Bool) -> 
 
 ///|
 // / eval : statementblock
-pub fn parse_block_from_source(source : String) -> @ast.TsBlock raise ParseError {
+pub fn parse_block_from_source(
+  source : String,
+) -> @ast.TsBlock raise ParseError {
   let parser = Parser::from_source(source)
   let stmts : Array[@ast.TsStmt] = []
   while not(parser.check(Eof)) {
@@ -568,12 +578,16 @@ pub fn parse_block_from_source(source : String) -> @ast.TsBlock raise ParseError
 
 ///|
 // / eval : statementblock with inherited strict mode
-pub fn parse_block_from_source_strict(source : String, inherit_strict : Bool) -> @ast.TsBlock raise ParseError {
+pub fn parse_block_from_source_strict(
+  source : String,
+  inherit_strict : Bool,
+) -> @ast.TsBlock raise ParseError {
   let lexer = Lexer::new(source)
   let tokens = lexer.tokenize()
   // Check if source itself declares strict mode
   let trimmed = source.trim_start()
-  let source_strict = trimmed.has_prefix("\"use strict\";") || trimmed.has_prefix("'use strict';")
+  let source_strict = trimmed.has_prefix("\"use strict\";") ||
+    trimmed.has_prefix("'use strict';")
   let parser = Parser::new_with_strict(tokens, inherit_strict || source_strict)
   let stmts : Array[@ast.TsStmt] = []
   while not(parser.check(Eof)) {
@@ -584,7 +598,9 @@ pub fn parse_block_from_source_strict(source : String, inherit_strict : Bool) ->
 
 ///|
 // / module block from source
-pub fn parse_module_block_from_source(source : String) -> @ast.TsModuleBlock raise ParseError {
+pub fn parse_module_block_from_source(
+  source : String,
+) -> @ast.TsModuleBlock raise ParseError {
   let parser = Parser::from_source(source)
   parser.parse_module_block()
 }

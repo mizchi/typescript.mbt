@@ -1,6 +1,9 @@
 ///|
 // / iterator helpers
-fn JSInterpreter::get_iterator_ctor(self : JSInterpreter, this_arg : JSValue) -> JSValue {
+fn JSInterpreter::get_iterator_ctor(
+  self : JSInterpreter,
+  this_arg : JSValue,
+) -> JSValue {
   if self.is_constructor(this_arg) {
     return this_arg
   }
@@ -8,7 +11,10 @@ fn JSInterpreter::get_iterator_ctor(self : JSInterpreter, this_arg : JSValue) ->
 }
 
 ///|
-fn JSInterpreter::get_iterator_helper_proto(self : JSInterpreter, ctor : JSValue) -> JSValue {
+fn JSInterpreter::get_iterator_helper_proto(
+  self : JSInterpreter,
+  ctor : JSValue,
+) -> JSValue {
   let proto = js_get_prop(ctor, "__helper_proto")
   match proto {
     Object(_) | Function(_) | Array(_) => proto
@@ -32,6 +38,7 @@ fn JSInterpreter::error_or_undefined(self : JSInterpreter) -> JSValue {
 }
 
 ///|
+
 ///|
 fn JSInterpreter::new_iterator_helper(
   self : JSInterpreter,
@@ -56,7 +63,9 @@ fn JSInterpreter::ensure_iterator_object_with_next(
   match value {
     Object(_) | Function(_) | Array(_) => ()
     _ => {
-      let _ = self.set_error_kind("TypeError", "Iterator helper called on non-object")
+      let _ = self.set_error_kind(
+        "TypeError", "Iterator helper called on non-object",
+      )
       return None
     }
   }
@@ -75,13 +84,17 @@ fn JSInterpreter::ensure_iterator_object_with_next(
   }
   match iter_method {
     Undefined | Null => {
-      let _ = self.set_error_kind("TypeError", "Iterator @@iterator is not callable")
+      let _ = self.set_error_kind(
+        "TypeError", "Iterator @@iterator is not callable",
+      )
       return None
     }
     _ => ()
   }
   if not(self.is_callable(iter_method)) {
-    let _ = self.set_error_kind("TypeError", "Iterator @@iterator is not callable")
+    let _ = self.set_error_kind(
+      "TypeError", "Iterator @@iterator is not callable",
+    )
     return None
   }
   let iterator = self.call_function(iter_method, value, [])
@@ -92,7 +105,9 @@ fn JSInterpreter::ensure_iterator_object_with_next(
   match iterator {
     Object(_) | Function(_) | Array(_) => ()
     _ => {
-      let _ = self.set_error_kind("TypeError", "Iterator result is not an object")
+      let _ = self.set_error_kind(
+        "TypeError", "Iterator result is not an object",
+      )
       return None
     }
   }
@@ -109,7 +124,10 @@ fn JSInterpreter::ensure_iterator_object_with_next(
 }
 
 ///|
-fn JSInterpreter::iterator_next_object(self : JSInterpreter, iterator : JSValue) -> JSValue? {
+fn JSInterpreter::iterator_next_object(
+  self : JSInterpreter,
+  iterator : JSValue,
+) -> JSValue? {
   let result = self.call_method(iterator, "next", [])
   match self.peek_error() {
     Some(_) => return None
@@ -118,7 +136,9 @@ fn JSInterpreter::iterator_next_object(self : JSInterpreter, iterator : JSValue)
   match result {
     Object(_) | Function(_) | Array(_) => Some(result)
     _ => {
-      let _ = self.set_error_kind("TypeError", "Iterator result is not an object")
+      let _ = self.set_error_kind(
+        "TypeError", "Iterator result is not an object",
+      )
       None
     }
   }
@@ -138,31 +158,42 @@ fn JSInterpreter::iterator_next_object_with(
   match result {
     Object(_) | Function(_) | Array(_) => Some(result)
     _ => {
-      let _ = self.set_error_kind("TypeError", "Iterator result is not an object")
+      let _ = self.set_error_kind(
+        "TypeError", "Iterator result is not an object",
+      )
       None
     }
   }
 }
 
 ///|
-fn JSInterpreter::to_iterator_limit(self : JSInterpreter, value : JSValue) -> Int? {
+fn JSInterpreter::to_iterator_limit(
+  self : JSInterpreter,
+  value : JSValue,
+) -> Int? {
   match value {
     String(s) =>
       if s.has_prefix("Symbol(") {
-        let _ = self.set_error_kind("TypeError", "Cannot convert Symbol to number")
+        let _ = self.set_error_kind(
+          "TypeError", "Cannot convert Symbol to number",
+        )
         return None
       }
     Object(_) | Function(_) | Array(_) => {
       let class_tag = js_get_prop(value, "__class")
       match class_tag {
         String("BigInt") => {
-          let _ = self.set_error_kind("TypeError", "Cannot convert BigInt to number")
+          let _ = self.set_error_kind(
+            "TypeError", "Cannot convert BigInt to number",
+          )
           return None
         }
         _ => ()
       }
       if js_has_prop(value, "@@toPrimitive") {
-        let _ = self.set_error_kind("TypeError", "Cannot convert object to number")
+        let _ = self.set_error_kind(
+          "TypeError", "Cannot convert object to number",
+        )
         return None
       }
     }
@@ -170,17 +201,16 @@ fn JSInterpreter::to_iterator_limit(self : JSInterpreter, value : JSValue) -> In
   }
   let num = value.to_number()
   if num.is_nan() {
-    let _ = self.set_error_kind("RangeError", "Iterator limit must be a non-negative integer")
+    let _ = self.set_error_kind(
+      "RangeError", "Iterator limit must be a non-negative integer",
+    )
     return None
   }
-  let truncated =
-    if num >= 0.0 {
-      @math.floor(num)
-    } else {
-      @math.ceil(num)
-    }
+  let truncated = if num >= 0.0 { @math.floor(num) } else { @math.ceil(num) }
   if truncated < 0.0 {
-    let _ = self.set_error_kind("RangeError", "Iterator limit must be a non-negative integer")
+    let _ = self.set_error_kind(
+      "RangeError", "Iterator limit must be a non-negative integer",
+    )
     return None
   }
   Some(truncated.to_int())
@@ -195,13 +225,17 @@ pub fn JSInterpreter::iterator_from(
   let input = if args.length() > 0 { args[0] } else { Undefined }
   match input {
     Undefined | Null =>
-      return self.set_error_kind("TypeError", "Iterator.from called on null or undefined")
+      return self.set_error_kind(
+        "TypeError", "Iterator.from called on null or undefined",
+      )
     _ => ()
   }
   match input {
     Object(_) | Function(_) | Array(_) => ()
     _ =>
-      return self.set_error_kind("TypeError", "Iterator.from called on non-object")
+      return self.set_error_kind(
+        "TypeError", "Iterator.from called on non-object",
+      )
   }
   let ctor = self.get_iterator_ctor(this_arg)
   let iter_method = self.get_prop_value(input, "@@iterator")
@@ -214,7 +248,9 @@ pub fn JSInterpreter::iterator_from(
     Undefined | Null => ()
     _ => {
       if not(self.is_callable(iter_method)) {
-        return self.set_error_kind("TypeError", "Iterator.from @@iterator is not callable")
+        return self.set_error_kind(
+          "TypeError", "Iterator.from @@iterator is not callable",
+        )
       }
       iterator = self.call_function(iter_method, input, [])
       match self.peek_error() {
@@ -226,7 +262,9 @@ pub fn JSInterpreter::iterator_from(
   match iterator {
     Object(_) | Function(_) | Array(_) => ()
     _ =>
-      return self.set_error_kind("TypeError", "Iterator.from result is not an object")
+      return self.set_error_kind(
+        "TypeError", "Iterator.from result is not an object",
+      )
   }
   let next_method = self.get_prop_value(iterator, "next")
   match self.peek_error() {
@@ -254,11 +292,11 @@ pub fn JSInterpreter::iterator_map(
   if not(self.is_callable(mapper)) {
     return self.set_error_kind("TypeError", "mapper is not callable")
   }
-  let (iter, next_method) =
-    match self.ensure_iterator_object_with_next(this_arg) {
-      Some(pair) => pair
-      None => return self.error_or_undefined()
-    }
+  let (iter, next_method) = match
+    self.ensure_iterator_object_with_next(this_arg) {
+    Some(pair) => pair
+    None => return self.error_or_undefined()
+  }
   let ctor = self.get_iterator_ctor(Undefined)
   let helper = self.new_iterator_helper(ctor, iter, "map")
   let _ = js_set_prop(helper, "__iter_mapper", mapper)
@@ -277,11 +315,11 @@ pub fn JSInterpreter::iterator_filter(
   if not(self.is_callable(predicate)) {
     return self.set_error_kind("TypeError", "predicate is not callable")
   }
-  let (iter, next_method) =
-    match self.ensure_iterator_object_with_next(this_arg) {
-      Some(pair) => pair
-      None => return self.error_or_undefined()
-    }
+  let (iter, next_method) = match
+    self.ensure_iterator_object_with_next(this_arg) {
+    Some(pair) => pair
+    None => return self.error_or_undefined()
+  }
   let ctor = self.get_iterator_ctor(Undefined)
   let helper = self.new_iterator_helper(ctor, iter, "filter")
   let _ = js_set_prop(helper, "__iter_predicate", predicate)
@@ -297,16 +335,15 @@ pub fn JSInterpreter::iterator_take(
   args : Array[JSValue],
 ) -> JSValue {
   let count_val = if args.length() > 0 { args[0] } else { Number(0.0) }
-  let count =
-    match self.to_iterator_limit(count_val) {
-      Some(n) => n
-      None => return self.error_or_undefined()
-    }
-  let (iter, next_method) =
-    match self.ensure_iterator_object_with_next(this_arg) {
-      Some(pair) => pair
-      None => return self.error_or_undefined()
-    }
+  let count = match self.to_iterator_limit(count_val) {
+    Some(n) => n
+    None => return self.error_or_undefined()
+  }
+  let (iter, next_method) = match
+    self.ensure_iterator_object_with_next(this_arg) {
+    Some(pair) => pair
+    None => return self.error_or_undefined()
+  }
   let ctor = self.get_iterator_ctor(Undefined)
   let helper = self.new_iterator_helper(ctor, iter, "take")
   let _ = js_set_prop(helper, "__iter_limit", Number(count.to_double()))
@@ -322,16 +359,15 @@ pub fn JSInterpreter::iterator_drop(
   args : Array[JSValue],
 ) -> JSValue {
   let count_val = if args.length() > 0 { args[0] } else { Number(0.0) }
-  let count =
-    match self.to_iterator_limit(count_val) {
-      Some(n) => n
-      None => return self.error_or_undefined()
-    }
-  let (iter, next_method) =
-    match self.ensure_iterator_object_with_next(this_arg) {
-      Some(pair) => pair
-      None => return self.error_or_undefined()
-    }
+  let count = match self.to_iterator_limit(count_val) {
+    Some(n) => n
+    None => return self.error_or_undefined()
+  }
+  let (iter, next_method) = match
+    self.ensure_iterator_object_with_next(this_arg) {
+    Some(pair) => pair
+    None => return self.error_or_undefined()
+  }
   let ctor = self.get_iterator_ctor(Undefined)
   let helper = self.new_iterator_helper(ctor, iter, "drop")
   let _ = js_set_prop(helper, "__iter_limit", Number(count.to_double()))
@@ -350,11 +386,11 @@ pub fn JSInterpreter::iterator_flat_map(
   if not(self.is_callable(mapper)) {
     return self.set_error_kind("TypeError", "mapper is not callable")
   }
-  let (iter, next_method) =
-    match self.ensure_iterator_object_with_next(this_arg) {
-      Some(pair) => pair
-      None => return self.error_or_undefined()
-    }
+  let (iter, next_method) = match
+    self.ensure_iterator_object_with_next(this_arg) {
+    Some(pair) => pair
+    None => return self.error_or_undefined()
+  }
   let ctor = self.get_iterator_ctor(Undefined)
   let helper = self.new_iterator_helper(ctor, iter, "flatMap")
   let _ = js_set_prop(helper, "__iter_mapper", mapper)
@@ -375,24 +411,26 @@ pub fn JSInterpreter::iterator_for_each(
     self.iterator_close(this_arg)
     return self.set_error_kind("TypeError", "callback is not callable")
   }
-  let (iter, next_method) =
-    match self.ensure_iterator_object_with_next(this_arg) {
-      Some(pair) => pair
-      None => return self.error_or_undefined()
-    }
+  let (iter, next_method) = match
+    self.ensure_iterator_object_with_next(this_arg) {
+    Some(pair) => pair
+    None => return self.error_or_undefined()
+  }
   let mut idx = 0
   while true {
-    let result =
-        match self.iterator_next_object_with(iter, next_method) {
-          Some(res) => res
-          None => return self.error_or_undefined()
-        }
+    let result = match self.iterator_next_object_with(iter, next_method) {
+      Some(res) => res
+      None => return self.error_or_undefined()
+    }
     let done = self.get_prop_value(result, "done").to_boolean()
     if done {
       return Undefined
     }
     let value = self.get_prop_value(result, "value")
-    let _ = self.call_function(callback, Undefined, [value, Number(idx.to_double())])
+    let _ = self.call_function(callback, Undefined, [
+      value,
+      Number(idx.to_double()),
+    ])
     match self.peek_error() {
       Some(err) => {
         self.iterator_close_on_error(iter)
@@ -411,18 +449,17 @@ pub fn JSInterpreter::iterator_to_array(
   this_arg : JSValue,
   _args : Array[JSValue],
 ) -> JSValue {
-  let (iter, next_method) =
-    match self.ensure_iterator_object_with_next(this_arg) {
-      Some(pair) => pair
-      None => return self.error_or_undefined()
-    }
+  let (iter, next_method) = match
+    self.ensure_iterator_object_with_next(this_arg) {
+    Some(pair) => pair
+    None => return self.error_or_undefined()
+  }
   let items : Array[JSValue] = []
   while true {
-    let result =
-        match self.iterator_next_object_with(iter, next_method) {
-          Some(res) => res
-          None => return self.error_or_undefined()
-        }
+    let result = match self.iterator_next_object_with(iter, next_method) {
+      Some(res) => res
+      None => return self.error_or_undefined()
+    }
     let done = self.get_prop_value(result, "done").to_boolean()
     if done {
       return js_array_from(items)
@@ -444,11 +481,11 @@ pub fn JSInterpreter::iterator_reduce(
     self.iterator_close(this_arg)
     return self.set_error_kind("TypeError", "reducer is not callable")
   }
-  let (iter, next_method) =
-    match self.ensure_iterator_object_with_next(this_arg) {
-      Some(pair) => pair
-      None => return self.error_or_undefined()
-    }
+  let (iter, next_method) = match
+    self.ensure_iterator_object_with_next(this_arg) {
+    Some(pair) => pair
+    None => return self.error_or_undefined()
+  }
   let mut idx = 0
   let mut acc : JSValue = Undefined
   let mut has_acc = args.length() > 1
@@ -456,15 +493,16 @@ pub fn JSInterpreter::iterator_reduce(
     acc = args[1]
   }
   while true {
-    let result =
-        match self.iterator_next_object_with(iter, next_method) {
-          Some(res) => res
-          None => return self.error_or_undefined()
-        }
+    let result = match self.iterator_next_object_with(iter, next_method) {
+      Some(res) => res
+      None => return self.error_or_undefined()
+    }
     let done = self.get_prop_value(result, "done").to_boolean()
     if done {
       if not(has_acc) {
-        return self.set_error_kind("TypeError", "Reduce of empty iterator with no initial value")
+        return self.set_error_kind(
+          "TypeError", "Reduce of empty iterator with no initial value",
+        )
       }
       return acc
     }
@@ -475,7 +513,11 @@ pub fn JSInterpreter::iterator_reduce(
       idx += 1
       continue
     }
-    let next_acc = self.call_function(reducer, Undefined, [acc, value, Number(idx.to_double())])
+    let next_acc = self.call_function(reducer, Undefined, [
+      acc,
+      value,
+      Number(idx.to_double()),
+    ])
     match self.peek_error() {
       Some(err) => {
         self.iterator_close_on_error(iter)
@@ -500,24 +542,26 @@ pub fn JSInterpreter::iterator_every(
     self.iterator_close(this_arg)
     return self.set_error_kind("TypeError", "predicate is not callable")
   }
-  let (iter, next_method) =
-    match self.ensure_iterator_object_with_next(this_arg) {
-      Some(pair) => pair
-      None => return self.error_or_undefined()
-    }
+  let (iter, next_method) = match
+    self.ensure_iterator_object_with_next(this_arg) {
+    Some(pair) => pair
+    None => return self.error_or_undefined()
+  }
   let mut idx = 0
   while true {
-    let result =
-        match self.iterator_next_object_with(iter, next_method) {
-          Some(res) => res
-          None => return self.error_or_undefined()
-        }
+    let result = match self.iterator_next_object_with(iter, next_method) {
+      Some(res) => res
+      None => return self.error_or_undefined()
+    }
     let done = self.get_prop_value(result, "done").to_boolean()
     if done {
       return Bool(true)
     }
     let value = self.get_prop_value(result, "value")
-    let passed = self.call_function(predicate, Undefined, [value, Number(idx.to_double())])
+    let passed = self.call_function(predicate, Undefined, [
+      value,
+      Number(idx.to_double()),
+    ])
     match self.peek_error() {
       Some(err) => {
         self.iterator_close_on_error(iter)
@@ -545,24 +589,26 @@ pub fn JSInterpreter::iterator_some(
     self.iterator_close(this_arg)
     return self.set_error_kind("TypeError", "predicate is not callable")
   }
-  let (iter, next_method) =
-    match self.ensure_iterator_object_with_next(this_arg) {
-      Some(pair) => pair
-      None => return self.error_or_undefined()
-    }
+  let (iter, next_method) = match
+    self.ensure_iterator_object_with_next(this_arg) {
+    Some(pair) => pair
+    None => return self.error_or_undefined()
+  }
   let mut idx = 0
   while true {
-    let result =
-        match self.iterator_next_object_with(iter, next_method) {
-          Some(res) => res
-          None => return self.error_or_undefined()
-        }
+    let result = match self.iterator_next_object_with(iter, next_method) {
+      Some(res) => res
+      None => return self.error_or_undefined()
+    }
     let done = self.get_prop_value(result, "done").to_boolean()
     if done {
       return Bool(false)
     }
     let value = self.get_prop_value(result, "value")
-    let passed = self.call_function(predicate, Undefined, [value, Number(idx.to_double())])
+    let passed = self.call_function(predicate, Undefined, [
+      value,
+      Number(idx.to_double()),
+    ])
     match self.peek_error() {
       Some(err) => {
         self.iterator_close_on_error(iter)
@@ -590,24 +636,26 @@ pub fn JSInterpreter::iterator_find(
     self.iterator_close(this_arg)
     return self.set_error_kind("TypeError", "predicate is not callable")
   }
-  let (iter, next_method) =
-    match self.ensure_iterator_object_with_next(this_arg) {
-      Some(pair) => pair
-      None => return self.error_or_undefined()
-    }
+  let (iter, next_method) = match
+    self.ensure_iterator_object_with_next(this_arg) {
+    Some(pair) => pair
+    None => return self.error_or_undefined()
+  }
   let mut idx = 0
   while true {
-    let result =
-        match self.iterator_next_object_with(iter, next_method) {
-          Some(res) => res
-          None => return self.error_or_undefined()
-        }
+    let result = match self.iterator_next_object_with(iter, next_method) {
+      Some(res) => res
+      None => return self.error_or_undefined()
+    }
     let done = self.get_prop_value(result, "done").to_boolean()
     if done {
       return Undefined
     }
     let value = self.get_prop_value(result, "value")
-    let passed = self.call_function(predicate, Undefined, [value, Number(idx.to_double())])
+    let passed = self.call_function(predicate, Undefined, [
+      value,
+      Number(idx.to_double()),
+    ])
     match self.peek_error() {
       Some(err) => {
         self.iterator_close_on_error(iter)
@@ -631,11 +679,10 @@ fn JSInterpreter::iterator_helper_next_inner(
   source : JSValue,
 ) -> JSValue {
   let kind_val = js_get_prop(this_arg, "__iter_kind")
-  let kind =
-    match kind_val {
-      String(s) => s
-      _ => ""
-    }
+  let kind = match kind_val {
+    String(s) => s
+    _ => ""
+  }
   let cached_next = js_get_prop(this_arg, "__iter_next")
   let use_cached_next = self.is_callable(cached_next)
   match kind {
@@ -659,6 +706,7 @@ fn JSInterpreter::iterator_helper_next_inner(
           let is_done = self.get_prop_value(result, "done").to_boolean()
           if is_done {
             let _ = js_set_prop(this_arg, "__iter_done", Bool(true))
+
           }
         }
         _ => ()
@@ -669,15 +717,15 @@ fn JSInterpreter::iterator_helper_next_inner(
       let mapper = js_get_prop(this_arg, "__iter_mapper")
       let idx_val = js_get_prop(this_arg, "__iter_index")
       let mut idx = idx_val.to_number().to_int()
-      let result =
-        match (if use_cached_next {
-            self.iterator_next_object_with(source, cached_next)
-          } else {
-            self.iterator_next_object(source)
-          }) {
-          Some(res) => res
-          None => return self.error_or_undefined()
-        }
+      let result = match
+        (if use_cached_next {
+          self.iterator_next_object_with(source, cached_next)
+        } else {
+          self.iterator_next_object(source)
+        }) {
+        Some(res) => res
+        None => return self.error_or_undefined()
+      }
       let is_done = self.get_prop_value(result, "done").to_boolean()
       if is_done {
         let _ = js_set_prop(this_arg, "__iter_done", Bool(true))
@@ -688,7 +736,10 @@ fn JSInterpreter::iterator_helper_next_inner(
         Some(err) => return err
         None => ()
       }
-      let mapped = self.call_function(mapper, Undefined, [value, Number(idx.to_double())])
+      let mapped = self.call_function(mapper, Undefined, [
+        value,
+        Number(idx.to_double()),
+      ])
       match self.peek_error() {
         Some(err) => {
           self.iterator_close_on_error(source)
@@ -705,15 +756,15 @@ fn JSInterpreter::iterator_helper_next_inner(
       let idx_val = js_get_prop(this_arg, "__iter_index")
       let mut idx = idx_val.to_number().to_int()
       while true {
-        let result =
-          match (if use_cached_next {
-              self.iterator_next_object_with(source, cached_next)
-            } else {
-              self.iterator_next_object(source)
-            }) {
-            Some(res) => res
-            None => return self.error_or_undefined()
-          }
+        let result = match
+          (if use_cached_next {
+            self.iterator_next_object_with(source, cached_next)
+          } else {
+            self.iterator_next_object(source)
+          }) {
+          Some(res) => res
+          None => return self.error_or_undefined()
+        }
         let is_done = self.get_prop_value(result, "done").to_boolean()
         if is_done {
           let _ = js_set_prop(this_arg, "__iter_done", Bool(true))
@@ -724,7 +775,10 @@ fn JSInterpreter::iterator_helper_next_inner(
           Some(err) => return err
           None => ()
         }
-        let passed = self.call_function(predicate, Undefined, [value, Number(idx.to_double())])
+        let passed = self.call_function(predicate, Undefined, [
+          value,
+          Number(idx.to_double()),
+        ])
         match self.peek_error() {
           Some(err) => {
             self.iterator_close_on_error(source)
@@ -750,15 +804,15 @@ fn JSInterpreter::iterator_helper_next_inner(
         self.iterator_close(source)
         return self.make_iter_result(Undefined, true)
       }
-      let result =
-        match (if use_cached_next {
-            self.iterator_next_object_with(source, cached_next)
-          } else {
-            self.iterator_next_object(source)
-          }) {
-          Some(res) => res
-          None => return self.error_or_undefined()
-        }
+      let result = match
+        (if use_cached_next {
+          self.iterator_next_object_with(source, cached_next)
+        } else {
+          self.iterator_next_object(source)
+        }) {
+        Some(res) => res
+        None => return self.error_or_undefined()
+      }
       let is_done = self.get_prop_value(result, "done").to_boolean()
       if is_done {
         let _ = js_set_prop(this_arg, "__iter_done", Bool(true))
@@ -779,25 +833,8 @@ fn JSInterpreter::iterator_helper_next_inner(
       let limit = limit_val.to_number().to_int()
       let mut dropped = dropped_val.to_number().to_int()
       while dropped < limit {
-        let result =
-          match (if use_cached_next {
-              self.iterator_next_object_with(source, cached_next)
-            } else {
-              self.iterator_next_object(source)
-            }) {
-            Some(res) => res
-            None => return self.error_or_undefined()
-          }
-        let is_done = self.get_prop_value(result, "done").to_boolean()
-        if is_done {
-          let _ = js_set_prop(this_arg, "__iter_done", Bool(true))
-          return self.make_iter_result(Undefined, true)
-        }
-        dropped += 1
-      }
-      let _ = js_set_prop(this_arg, "__iter_dropped", Number(dropped.to_double()))
-      let result =
-        match (if use_cached_next {
+        let result = match
+          (if use_cached_next {
             self.iterator_next_object_with(source, cached_next)
           } else {
             self.iterator_next_object(source)
@@ -805,6 +842,27 @@ fn JSInterpreter::iterator_helper_next_inner(
           Some(res) => res
           None => return self.error_or_undefined()
         }
+        let is_done = self.get_prop_value(result, "done").to_boolean()
+        if is_done {
+          let _ = js_set_prop(this_arg, "__iter_done", Bool(true))
+          return self.make_iter_result(Undefined, true)
+        }
+        dropped += 1
+      }
+      let _ = js_set_prop(
+        this_arg,
+        "__iter_dropped",
+        Number(dropped.to_double()),
+      )
+      let result = match
+        (if use_cached_next {
+          self.iterator_next_object_with(source, cached_next)
+        } else {
+          self.iterator_next_object(source)
+        }) {
+        Some(res) => res
+        None => return self.error_or_undefined()
+      }
       let is_done = self.get_prop_value(result, "done").to_boolean()
       if is_done {
         let _ = js_set_prop(this_arg, "__iter_done", Bool(true))
@@ -825,14 +883,13 @@ fn JSInterpreter::iterator_helper_next_inner(
         let inner = js_get_prop(this_arg, "__iter_inner")
         match inner {
           Object(_) | Function(_) | Array(_) => {
-            let inner_result =
-              match self.iterator_next_object(inner) {
-                Some(res) => res
-                None => {
-                  self.iterator_close_on_error(source)
-                  return self.error_or_undefined()
-                }
+            let inner_result = match self.iterator_next_object(inner) {
+              Some(res) => res
+              None => {
+                self.iterator_close_on_error(source)
+                return self.error_or_undefined()
               }
+            }
             let inner_done_val = self.get_prop_value(inner_result, "done")
             match self.peek_error() {
               Some(err) => {
@@ -858,16 +915,15 @@ fn JSInterpreter::iterator_helper_next_inner(
           }
           _ => ()
         }
-
-        let outer_result =
-          match (if use_cached_next {
-              self.iterator_next_object_with(source, cached_next)
-            } else {
-              self.iterator_next_object(source)
-            }) {
-            Some(res) => res
-            None => return self.error_or_undefined()
-          }
+        let outer_result = match
+          (if use_cached_next {
+            self.iterator_next_object_with(source, cached_next)
+          } else {
+            self.iterator_next_object(source)
+          }) {
+          Some(res) => res
+          None => return self.error_or_undefined()
+        }
         let outer_done = self.get_prop_value(outer_result, "done").to_boolean()
         if outer_done {
           let _ = js_set_prop(this_arg, "__iter_done", Bool(true))
@@ -878,7 +934,10 @@ fn JSInterpreter::iterator_helper_next_inner(
           Some(err) => return err
           None => ()
         }
-        let mapped = self.call_function(mapper, Undefined, [outer_val, Number(idx.to_double())])
+        let mapped = self.call_function(mapper, Undefined, [
+          outer_val,
+          Number(idx.to_double()),
+        ])
         match self.peek_error() {
           Some(err) => {
             self.iterator_close_on_error(source)
@@ -888,16 +947,18 @@ fn JSInterpreter::iterator_helper_next_inner(
         }
         idx += 1
         let _ = js_set_prop(this_arg, "__iter_index", Number(idx.to_double()))
-        let inner_iter =
-          match self.get_iterator(mapped) {
-            Some(it) => it
-            None => {
-              let _ = self.set_error_kind("TypeError", "flatMap value is not iterable")
-              self.iterator_close_on_error(source)
-              return self.error_or_undefined()
-            }
+        let inner_iter = match self.get_iterator(mapped) {
+          Some(it) => it
+          None => {
+            let _ = self.set_error_kind(
+              "TypeError", "flatMap value is not iterable",
+            )
+            self.iterator_close_on_error(source)
+            return self.error_or_undefined()
           }
+        }
         let _ = js_set_prop(this_arg, "__iter_inner", inner_iter)
+
       }
       self.make_iter_result(Undefined, true)
     }
@@ -914,22 +975,25 @@ pub fn JSInterpreter::iterator_helper_next(
   let source = js_get_prop(this_arg, "__iter_source")
   match source {
     Undefined =>
-      return self.set_error_kind("TypeError", "Iterator helper called on incompatible receiver")
+      return self.set_error_kind(
+        "TypeError", "Iterator helper called on incompatible receiver",
+      )
     _ => ()
   }
   let active_flag = js_get_prop(this_arg, "__iter_active")
   match active_flag {
     Bool(true) =>
-      return self.set_error_kind("TypeError", "Iterator helper is already running")
+      return self.set_error_kind(
+        "TypeError", "Iterator helper is already running",
+      )
     _ => ()
   }
   let _ = js_set_prop(this_arg, "__iter_active", Bool(true))
   let done_flag = js_get_prop(this_arg, "__iter_done")
-  let done =
-    match done_flag {
-      Bool(b) => b
-      _ => false
-    }
+  let done = match done_flag {
+    Bool(b) => b
+    _ => false
+  }
   if done {
     let result = self.make_iter_result(Undefined, true)
     let _ = js_set_prop(this_arg, "__iter_active", Bool(false))
@@ -949,15 +1013,16 @@ pub fn JSInterpreter::iterator_helper_return(
   let source = js_get_prop(this_arg, "__iter_source")
   match source {
     Undefined =>
-      return self.set_error_kind("TypeError", "Iterator helper called on incompatible receiver")
+      return self.set_error_kind(
+        "TypeError", "Iterator helper called on incompatible receiver",
+      )
     _ => ()
   }
   let kind_val = js_get_prop(this_arg, "__iter_kind")
-  let kind =
-    match kind_val {
-      String(s) => s
-      _ => ""
-    }
+  let kind = match kind_val {
+    String(s) => s
+    _ => ""
+  }
   match kind {
     "wrap" => {
       let _ = js_set_prop(this_arg, "__iter_done", Bool(true))
@@ -999,7 +1064,9 @@ pub fn JSInterpreter::iterator_helper_throw(
   let source = js_get_prop(this_arg, "__iter_source")
   match source {
     Undefined =>
-      return self.set_error_kind("TypeError", "Iterator helper called on incompatible receiver")
+      return self.set_error_kind(
+        "TypeError", "Iterator helper called on incompatible receiver",
+      )
     _ => ()
   }
   self.set_error_kind("TypeError", "Iterator helper throw is not supported")

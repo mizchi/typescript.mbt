@@ -28,7 +28,10 @@ pub fn Parser::new(tokens : Array[Token]) -> Parser {
 }
 
 ///|
-pub fn Parser::new_with_strict(tokens : Array[Token], in_strict : Bool) -> Parser {
+pub fn Parser::new_with_strict(
+  tokens : Array[Token],
+  in_strict : Bool,
+) -> Parser {
   {
     tokens,
     pos: 0,
@@ -49,8 +52,8 @@ pub fn Parser::from_source(src : String) -> Parser {
   let lexer = Lexer::new(src)
   let tokens = lexer.tokenize()
   let trimmed = src.trim_start()
-  let in_strict =
-    trimmed.has_prefix("\"use strict\";") || trimmed.has_prefix("'use strict';")
+  let in_strict = trimmed.has_prefix("\"use strict\";") ||
+    trimmed.has_prefix("'use strict';")
   {
     tokens,
     pos: 0,
@@ -216,12 +219,11 @@ fn Parser::has_line_terminator_between_positions(
     return false
   }
   let mut i = start_pos
-  let limit =
-    if end_pos <= self.src.length() {
-      end_pos
-    } else {
-      self.src.length()
-    }
+  let limit = if end_pos <= self.src.length() {
+    end_pos
+  } else {
+    self.src.length()
+  }
   while i < limit {
     let ch = self.src[i]
     // JavaScript line terminators: LF, CR, LS (U+2028), PS (U+2029)

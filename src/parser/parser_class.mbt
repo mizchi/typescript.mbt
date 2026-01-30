@@ -33,42 +33,38 @@ fn Parser::parse_class_method_key(self : Parser) -> ClassKey raise ParseError {
     let _ = self.expect(RBracket)
     return Computed(key_expr)
   }
-  let name =
-    match self.advance().kind {
-      Ident(n) => n
-      PrivateIdent(n) => "#" + n
-      Str(s) => s
-      Number(n) => "\{n}"
-      Int(n) => "\{n}"
-      Return => "return"
-      If => "if"
-      Else => "else"
-      For => "for"
-      While => "while"
-      Break => "break"
-      Continue => "continue"
-      Function => "function"
-      Try => "try"
-      Catch => "catch"
-      Finally => "finally"
-      Throw => "throw"
-      Yield => "yield"
-      Type => "type"
-      Let => "let"
-      Const => "const"
-      Var => "var"
-      Class => "class"
-      New => "new"
-      k => raise ParseError("Expected method name, got \{k}")
-    }
+  let name = match self.advance().kind {
+    Ident(n) => n
+    PrivateIdent(n) => "#" + n
+    Str(s) => s
+    Number(n) => "\{n}"
+    Int(n) => "\{n}"
+    Return => "return"
+    If => "if"
+    Else => "else"
+    For => "for"
+    While => "while"
+    Break => "break"
+    Continue => "continue"
+    Function => "function"
+    Try => "try"
+    Catch => "catch"
+    Finally => "finally"
+    Throw => "throw"
+    Yield => "yield"
+    Type => "type"
+    Let => "let"
+    Const => "const"
+    Var => "var"
+    Class => "class"
+    New => "new"
+    k => raise ParseError("Expected method name, got \{k}")
+  }
   Name(name)
 }
 
 ///|
-fn Parser::computed_key_name(
-  _self : Parser,
-  key_expr : @ast.TsExpr,
-) -> String {
+fn Parser::computed_key_name(_self : Parser, key_expr : @ast.TsExpr) -> String {
   match key_expr {
     StringLit(s) => s
     IntLit(i) => i.to_string()
@@ -132,7 +128,7 @@ fn Parser::inject_instance_field_assigns(
     name: func.name,
     params: func.params,
     return_type: func.return_type,
-    body: { stmts: new_stmts, },
+    body: { stmts: new_stmts },
     is_generator: func.is_generator,
   }
 }
@@ -140,10 +136,7 @@ fn Parser::inject_instance_field_assigns(
 ///|
 fn Parser::parse_class_body(
   self : Parser,
-) -> (
-  @ast.TsFunc?,
-  Array[ClassElement],
-) raise ParseError {
+) -> (@ast.TsFunc?, Array[ClassElement]) raise ParseError {
   let _ = self.expect(LBrace)
   let mut ctor : @ast.TsFunc? = None
   let elements : Array[ClassElement] = []
@@ -192,7 +185,13 @@ fn Parser::parse_class_body(
         Any
       }
       let body = self.parse_block()
-      let func : @ast.TsFunc = { name: method_name, params, return_type, body, is_generator }
+      let func : @ast.TsFunc = {
+        name: method_name,
+        params,
+        return_type,
+        body,
+        is_generator,
+      }
       if accessor_kind is None && key is Name("constructor") && not(is_static) {
         ctor = Some(func)
       } else {
@@ -201,6 +200,7 @@ fn Parser::parse_class_body(
     } else {
       if self.match_(Colon) {
         let _ = self.parse_type()
+
       }
       let init : @ast.TsExpr? = if self.match_(Eq) {
         Some(self.parse_assignment())
@@ -219,14 +219,13 @@ fn Parser::parse_class_body(
 fn Parser::parse_class_stub(self : Parser) -> @ast.TsExpr raise ParseError {
   let _ = self.expect(Class)
   let mut class_name = ""
-  let _ =
-    match self.peek().kind {
-      Ident(n) => {
-        class_name = n
-        self.advance()
-      }
-      _ => { kind: Eof, pos: 0 }
+  let _ = match self.peek().kind {
+    Ident(n) => {
+      class_name = n
+      self.advance()
     }
+    _ => { kind: Eof, pos: 0 }
+  }
   let mut base : String? = None
   if self.match_(Extends) {
     base = match self.advance().kind {
@@ -267,14 +266,20 @@ fn Parser::parse_class_stub(self : Parser) -> @ast.TsExpr raise ParseError {
           }
           match key {
             Name(field_name) => {
-              instance_assigns.push(PropAssign(@ast.TsExpr::Var("this"), field_name, init))
+              instance_assigns.push(
+                PropAssign(@ast.TsExpr::Var("this"), field_name, init),
+              )
               field_temps.push(None)
             }
             Computed(_) => {
               let temp_name = "__class_key_" + key_index.to_string()
               key_index += 1
               instance_assigns.push(
-                IndexAssign(@ast.TsExpr::Var("this"), @ast.TsExpr::Var(temp_name), init),
+                IndexAssign(
+                  @ast.TsExpr::Var("this"),
+                  @ast.TsExpr::Var(temp_name),
+                  init,
+                ),
               )
               field_temps.push(Some(temp_name))
             }
@@ -288,7 +293,7 @@ fn Parser::parse_class_stub(self : Parser) -> @ast.TsExpr raise ParseError {
   let stmts : Array[@ast.TsStmt] = []
   let ctor_func = match ctor_opt {
     Some(func) => func
-    None => {
+    None =>
       match base {
         Some(_) => {
           let rest_name = "__super_args__"
@@ -299,7 +304,9 @@ fn Parser::parse_class_stub(self : Parser) -> @ast.TsExpr raise ParseError {
             type_: Any,
             default: None,
           }
-          let empty_body : @ast.TsBlock = { stmts: [Expr(Call("super", [@ast.TsExpr::Var(rest_name)]))] }
+          let empty_body : @ast.TsBlock = {
+            stmts: [Expr(Call("super", [@ast.TsExpr::Var(rest_name)]))],
+          }
           {
             name: tmp_name,
             params: [rest_param],
@@ -319,33 +326,62 @@ fn Parser::parse_class_stub(self : Parser) -> @ast.TsExpr raise ParseError {
           }
         }
       }
-    }
   }
-  let ctor_func = self.inject_instance_field_assigns(ctor_func, instance_assigns, base)
-  stmts.push(Let(@ast.TsBinding::Ident(tmp_name), Any, @ast.TsExpr::FuncExpr(ctor_func)))
-
-  let proto_expr = @ast.TsExpr::PropAccess(@ast.TsExpr::Var(tmp_name), "prototype")
+  let ctor_func = self.inject_instance_field_assigns(
+    ctor_func, instance_assigns, base,
+  )
+  stmts.push(
+    Let(@ast.TsBinding::Ident(tmp_name), Any, @ast.TsExpr::FuncExpr(ctor_func)),
+  )
+  let proto_expr = @ast.TsExpr::PropAccess(
+    @ast.TsExpr::Var(tmp_name),
+    "prototype",
+  )
   match base {
     Some(base_name) => {
-      let base_proto = @ast.TsExpr::PropAccess(@ast.TsExpr::Var(base_name), "prototype")
-      stmts.push(PropAssign(@ast.TsExpr::Var(tmp_name), "__super_ctor", @ast.TsExpr::Var(base_name)))
-      stmts.push(PropAssign(@ast.TsExpr::Var(tmp_name), "__super_proto", base_proto))
-      stmts.push(PropAssign(@ast.TsExpr::Var(tmp_name), "__proto__", @ast.TsExpr::Var(base_name)))
+      let base_proto = @ast.TsExpr::PropAccess(
+        @ast.TsExpr::Var(base_name),
+        "prototype",
+      )
+      stmts.push(
+        PropAssign(
+          @ast.TsExpr::Var(tmp_name),
+          "__super_ctor",
+          @ast.TsExpr::Var(base_name),
+        ),
+      )
+      stmts.push(
+        PropAssign(@ast.TsExpr::Var(tmp_name), "__super_proto", base_proto),
+      )
+      stmts.push(
+        PropAssign(
+          @ast.TsExpr::Var(tmp_name),
+          "__proto__",
+          @ast.TsExpr::Var(base_name),
+        ),
+      )
       stmts.push(PropAssign(proto_expr, "__proto__", base_proto))
     }
     None => ()
   }
-
   for idx, element in elements {
     match element {
       Method(is_static, key, accessor_kind, func) => {
-        let target = if is_static { @ast.TsExpr::Var(tmp_name) } else { proto_expr }
+        let target = if is_static {
+          @ast.TsExpr::Var(tmp_name)
+        } else {
+          proto_expr
+        }
         let func_expr = @ast.TsExpr::FuncExpr(func)
         match key {
           Name(method_name) =>
             match accessor_kind {
               Some(kind) => {
-                let prop_key = if kind == "get" { "@@get:" + method_name } else { "@@set:" + method_name }
+                let prop_key = if kind == "get" {
+                  "@@get:" + method_name
+                } else {
+                  "@@set:" + method_name
+                }
                 stmts.push(PropAssign(target, prop_key, func_expr))
               }
               None => {
@@ -354,9 +390,16 @@ fn Parser::parse_class_stub(self : Parser) -> @ast.TsExpr raise ParseError {
                 match base {
                   Some(base_name) =>
                     if not(is_static) {
-                      let base_proto = @ast.TsExpr::PropAccess(@ast.TsExpr::Var(base_name), "prototype")
-                      let method_ref = @ast.TsExpr::PropAccess(proto_expr, method_name)
-                      stmts.push(PropAssign(method_ref, "__super_proto", base_proto))
+                      let base_proto = @ast.TsExpr::PropAccess(
+                        @ast.TsExpr::Var(base_name),
+                        "prototype",
+                      )
+                      let method_ref = @ast.TsExpr::PropAccess(
+                        proto_expr, method_name,
+                      )
+                      stmts.push(
+                        PropAssign(method_ref, "__super_proto", base_proto),
+                      )
                     }
                   None => ()
                 }
@@ -364,29 +407,30 @@ fn Parser::parse_class_stub(self : Parser) -> @ast.TsExpr raise ParseError {
             }
           Computed(_) => {
             let key_expr = class_key_expr(key)
-            let desc =
-              match accessor_kind {
-                Some(kind) => {
-                  let prop_key = if kind == "get" { "get" } else { "set" }
-                  @ast.TsExpr::ObjectLit([
-                    (prop_key, func_expr),
-                    ("enumerable", @ast.TsExpr::BoolLit(false)),
-                    ("configurable", @ast.TsExpr::BoolLit(true)),
-                  ])
-                }
-                None =>
-                  @ast.TsExpr::ObjectLit([
-                    ("value", func_expr),
-                    ("writable", @ast.TsExpr::BoolLit(true)),
-                    ("enumerable", @ast.TsExpr::BoolLit(false)),
-                    ("configurable", @ast.TsExpr::BoolLit(true)),
-                  ])
+            let desc = match accessor_kind {
+              Some(kind) => {
+                let prop_key = if kind == "get" { "get" } else { "set" }
+                @ast.TsExpr::ObjectLit([
+                  (prop_key, func_expr),
+                  ("enumerable", @ast.TsExpr::BoolLit(false)),
+                  ("configurable", @ast.TsExpr::BoolLit(true)),
+                ])
               }
-            let define_call =
-              @ast.TsExpr::CallExpr(
-                @ast.TsExpr::PropAccess(@ast.TsExpr::Var("Object"), "defineProperty"),
-                [target, key_expr, desc],
-              )
+              None =>
+                @ast.TsExpr::ObjectLit([
+                  ("value", func_expr),
+                  ("writable", @ast.TsExpr::BoolLit(true)),
+                  ("enumerable", @ast.TsExpr::BoolLit(false)),
+                  ("configurable", @ast.TsExpr::BoolLit(true)),
+                ])
+            }
+            let define_call = @ast.TsExpr::CallExpr(
+              @ast.TsExpr::PropAccess(
+                @ast.TsExpr::Var("Object"),
+                "defineProperty",
+              ),
+              [target, key_expr, desc],
+            )
             stmts.push(Expr(define_call))
           }
         }
@@ -399,21 +443,24 @@ fn Parser::parse_class_stub(self : Parser) -> @ast.TsExpr raise ParseError {
         if is_static {
           match key {
             Name(field_name) =>
-              stmts.push(PropAssign(@ast.TsExpr::Var(tmp_name), field_name, init))
+              stmts.push(
+                PropAssign(@ast.TsExpr::Var(tmp_name), field_name, init),
+              )
             Computed(_) => {
               let key_expr = class_key_expr(key)
-              let desc =
-                @ast.TsExpr::ObjectLit([
-                  ("value", init),
-                  ("writable", @ast.TsExpr::BoolLit(true)),
-                  ("enumerable", @ast.TsExpr::BoolLit(true)),
-                  ("configurable", @ast.TsExpr::BoolLit(true)),
-                ])
-              let define_call =
-                @ast.TsExpr::CallExpr(
-                  @ast.TsExpr::PropAccess(@ast.TsExpr::Var("Object"), "defineProperty"),
-                  [@ast.TsExpr::Var(tmp_name), key_expr, desc],
-                )
+              let desc = @ast.TsExpr::ObjectLit([
+                ("value", init),
+                ("writable", @ast.TsExpr::BoolLit(true)),
+                ("enumerable", @ast.TsExpr::BoolLit(true)),
+                ("configurable", @ast.TsExpr::BoolLit(true)),
+              ])
+              let define_call = @ast.TsExpr::CallExpr(
+                @ast.TsExpr::PropAccess(
+                  @ast.TsExpr::Var("Object"),
+                  "defineProperty",
+                ),
+                [@ast.TsExpr::Var(tmp_name), key_expr, desc],
+              )
               stmts.push(Expr(define_call))
             }
           }
@@ -421,11 +468,10 @@ fn Parser::parse_class_stub(self : Parser) -> @ast.TsExpr raise ParseError {
           match key {
             Name(_) => ()
             Computed(_) => {
-              let temp_name =
-                match field_temps[idx] {
-                  Some(name) => name
-                  None => "__class_key__"
-                }
+              let temp_name = match field_temps[idx] {
+                Some(name) => name
+                None => "__class_key__"
+              }
               let key_expr = class_key_expr(key)
               stmts.push(Let(@ast.TsBinding::Ident(temp_name), Any, key_expr))
             }
@@ -475,14 +521,20 @@ fn Parser::parse_class_decl(self : Parser) -> @ast.TsStmt raise ParseError {
           }
           match key {
             Name(field_name) => {
-              instance_assigns.push(PropAssign(@ast.TsExpr::Var("this"), field_name, init))
+              instance_assigns.push(
+                PropAssign(@ast.TsExpr::Var("this"), field_name, init),
+              )
               field_temps.push(None)
             }
             Computed(_) => {
               let temp_name = "__class_key_" + key_index.to_string()
               key_index += 1
               instance_assigns.push(
-                IndexAssign(@ast.TsExpr::Var("this"), @ast.TsExpr::Var(temp_name), init),
+                IndexAssign(
+                  @ast.TsExpr::Var("this"),
+                  @ast.TsExpr::Var(temp_name),
+                  init,
+                ),
               )
               field_temps.push(Some(temp_name))
             }
@@ -501,10 +553,9 @@ fn Parser::parse_class_decl(self : Parser) -> @ast.TsStmt raise ParseError {
       }
     None => ()
   }
-
   let ctor_func = match ctor_opt {
     Some(func) => func
-    None => {
+    None =>
       match base {
         Some(_) => {
           let rest_name = "__super_args__"
@@ -515,7 +566,9 @@ fn Parser::parse_class_decl(self : Parser) -> @ast.TsStmt raise ParseError {
             type_: Any,
             default: None,
           }
-          let empty_body : @ast.TsBlock = { stmts: [Expr(Call("super", [@ast.TsExpr::Var(rest_name)]))] }
+          let empty_body : @ast.TsBlock = {
+            stmts: [Expr(Call("super", [@ast.TsExpr::Var(rest_name)]))],
+          }
           {
             name,
             params: [rest_param],
@@ -535,23 +588,41 @@ fn Parser::parse_class_decl(self : Parser) -> @ast.TsStmt raise ParseError {
           }
         }
       }
-    }
   }
-  let ctor_func = self.inject_instance_field_assigns(ctor_func, instance_assigns, base)
-  stmts.push(Let(@ast.TsBinding::Ident(name), Any, @ast.TsExpr::FuncExpr(ctor_func)))
-
+  let ctor_func = self.inject_instance_field_assigns(
+    ctor_func, instance_assigns, base,
+  )
+  stmts.push(
+    Let(@ast.TsBinding::Ident(name), Any, @ast.TsExpr::FuncExpr(ctor_func)),
+  )
   let proto_expr = @ast.TsExpr::PropAccess(@ast.TsExpr::Var(name), "prototype")
   match base {
     Some(base_name) => {
-      let base_proto = @ast.TsExpr::PropAccess(@ast.TsExpr::Var(base_name), "prototype")
-      stmts.push(PropAssign(@ast.TsExpr::Var(name), "__super_ctor", @ast.TsExpr::Var(base_name)))
-      stmts.push(PropAssign(@ast.TsExpr::Var(name), "__super_proto", base_proto))
-      stmts.push(PropAssign(@ast.TsExpr::Var(name), "__proto__", @ast.TsExpr::Var(base_name)))
+      let base_proto = @ast.TsExpr::PropAccess(
+        @ast.TsExpr::Var(base_name),
+        "prototype",
+      )
+      stmts.push(
+        PropAssign(
+          @ast.TsExpr::Var(name),
+          "__super_ctor",
+          @ast.TsExpr::Var(base_name),
+        ),
+      )
+      stmts.push(
+        PropAssign(@ast.TsExpr::Var(name), "__super_proto", base_proto),
+      )
+      stmts.push(
+        PropAssign(
+          @ast.TsExpr::Var(name),
+          "__proto__",
+          @ast.TsExpr::Var(base_name),
+        ),
+      )
       stmts.push(PropAssign(proto_expr, "__proto__", base_proto))
     }
     None => ()
   }
-
   for idx, element in elements {
     match element {
       Method(is_static, key, accessor_kind, func) => {
@@ -561,7 +632,11 @@ fn Parser::parse_class_decl(self : Parser) -> @ast.TsStmt raise ParseError {
           Name(method_name) =>
             match accessor_kind {
               Some(kind) => {
-                let prop_key = if kind == "get" { "@@get:" + method_name } else { "@@set:" + method_name }
+                let prop_key = if kind == "get" {
+                  "@@get:" + method_name
+                } else {
+                  "@@set:" + method_name
+                }
                 stmts.push(PropAssign(target, prop_key, func_expr))
               }
               None => {
@@ -570,9 +645,16 @@ fn Parser::parse_class_decl(self : Parser) -> @ast.TsStmt raise ParseError {
                 match base {
                   Some(base_name) =>
                     if not(is_static) {
-                      let base_proto = @ast.TsExpr::PropAccess(@ast.TsExpr::Var(base_name), "prototype")
-                      let method_ref = @ast.TsExpr::PropAccess(proto_expr, method_name)
-                      stmts.push(PropAssign(method_ref, "__super_proto", base_proto))
+                      let base_proto = @ast.TsExpr::PropAccess(
+                        @ast.TsExpr::Var(base_name),
+                        "prototype",
+                      )
+                      let method_ref = @ast.TsExpr::PropAccess(
+                        proto_expr, method_name,
+                      )
+                      stmts.push(
+                        PropAssign(method_ref, "__super_proto", base_proto),
+                      )
                     }
                   None => ()
                 }
@@ -580,29 +662,30 @@ fn Parser::parse_class_decl(self : Parser) -> @ast.TsStmt raise ParseError {
             }
           Computed(_) => {
             let key_expr = class_key_expr(key)
-            let desc =
-              match accessor_kind {
-                Some(kind) => {
-                  let prop_key = if kind == "get" { "get" } else { "set" }
-                  @ast.TsExpr::ObjectLit([
-                    (prop_key, func_expr),
-                    ("enumerable", @ast.TsExpr::BoolLit(false)),
-                    ("configurable", @ast.TsExpr::BoolLit(true)),
-                  ])
-                }
-                None =>
-                  @ast.TsExpr::ObjectLit([
-                    ("value", func_expr),
-                    ("writable", @ast.TsExpr::BoolLit(true)),
-                    ("enumerable", @ast.TsExpr::BoolLit(false)),
-                    ("configurable", @ast.TsExpr::BoolLit(true)),
-                  ])
+            let desc = match accessor_kind {
+              Some(kind) => {
+                let prop_key = if kind == "get" { "get" } else { "set" }
+                @ast.TsExpr::ObjectLit([
+                  (prop_key, func_expr),
+                  ("enumerable", @ast.TsExpr::BoolLit(false)),
+                  ("configurable", @ast.TsExpr::BoolLit(true)),
+                ])
               }
-            let define_call =
-              @ast.TsExpr::CallExpr(
-                @ast.TsExpr::PropAccess(@ast.TsExpr::Var("Object"), "defineProperty"),
-                [target, key_expr, desc],
-              )
+              None =>
+                @ast.TsExpr::ObjectLit([
+                  ("value", func_expr),
+                  ("writable", @ast.TsExpr::BoolLit(true)),
+                  ("enumerable", @ast.TsExpr::BoolLit(false)),
+                  ("configurable", @ast.TsExpr::BoolLit(true)),
+                ])
+            }
+            let define_call = @ast.TsExpr::CallExpr(
+              @ast.TsExpr::PropAccess(
+                @ast.TsExpr::Var("Object"),
+                "defineProperty",
+              ),
+              [target, key_expr, desc],
+            )
             stmts.push(Expr(define_call))
           }
         }
@@ -618,18 +701,19 @@ fn Parser::parse_class_decl(self : Parser) -> @ast.TsStmt raise ParseError {
               stmts.push(PropAssign(@ast.TsExpr::Var(name), field_name, init))
             Computed(_) => {
               let key_expr = class_key_expr(key)
-              let desc =
-                @ast.TsExpr::ObjectLit([
-                  ("value", init),
-                  ("writable", @ast.TsExpr::BoolLit(true)),
-                  ("enumerable", @ast.TsExpr::BoolLit(true)),
-                  ("configurable", @ast.TsExpr::BoolLit(true)),
-                ])
-              let define_call =
-                @ast.TsExpr::CallExpr(
-                  @ast.TsExpr::PropAccess(@ast.TsExpr::Var("Object"), "defineProperty"),
-                  [@ast.TsExpr::Var(name), key_expr, desc],
-                )
+              let desc = @ast.TsExpr::ObjectLit([
+                ("value", init),
+                ("writable", @ast.TsExpr::BoolLit(true)),
+                ("enumerable", @ast.TsExpr::BoolLit(true)),
+                ("configurable", @ast.TsExpr::BoolLit(true)),
+              ])
+              let define_call = @ast.TsExpr::CallExpr(
+                @ast.TsExpr::PropAccess(
+                  @ast.TsExpr::Var("Object"),
+                  "defineProperty",
+                ),
+                [@ast.TsExpr::Var(name), key_expr, desc],
+              )
               stmts.push(Expr(define_call))
             }
           }
@@ -637,11 +721,10 @@ fn Parser::parse_class_decl(self : Parser) -> @ast.TsStmt raise ParseError {
           match key {
             Name(_) => ()
             Computed(_) => {
-              let temp_name =
-                match field_temps[idx] {
-                  Some(name) => name
-                  None => "__class_key__"
-                }
+              let temp_name = match field_temps[idx] {
+                Some(name) => name
+                None => "__class_key__"
+              }
               let key_expr = class_key_expr(key)
               stmts.push(Let(@ast.TsBinding::Ident(temp_name), Any, key_expr))
             }
@@ -650,7 +733,6 @@ fn Parser::parse_class_decl(self : Parser) -> @ast.TsStmt raise ParseError {
       }
     }
   }
-
   if stmts.length() == 1 {
     stmts[0]
   } else {

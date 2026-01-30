@@ -215,8 +215,6 @@ test "jsvalue: array operations" {
     Number(n) => assert_eq(n, 2.0)
     _ => fail("expected Number")
   }
-
-
   match js_get_prop(arr, "0") {
     Number(n) => assert_eq(n, 10.0)
     _ => fail("expected Number")

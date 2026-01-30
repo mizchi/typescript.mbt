@@ -78,6 +78,7 @@ pub fn Parser::parse_function(self : Parser) -> @ast.TsFunc raise ParseError {
   // Clear labels for new function scope
   while self.labels.length() > 0 {
     let _ = self.labels.pop()
+
   }
   let body = self.parse_block()
   self.in_generator = prev_generator
@@ -87,6 +88,7 @@ pub fn Parser::parse_function(self : Parser) -> @ast.TsFunc raise ParseError {
   // Restore labels
   while self.labels.length() > 0 {
     let _ = self.labels.pop()
+
   }
   for label in prev_labels {
     self.labels.push(label)
@@ -134,6 +136,7 @@ fn Parser::parse_function_expr(self : Parser) -> @ast.TsFunc raise ParseError {
   // Clear labels for new function scope
   while self.labels.length() > 0 {
     let _ = self.labels.pop()
+
   }
   let body = self.parse_block()
   self.in_generator = prev_generator
@@ -143,6 +146,7 @@ fn Parser::parse_function_expr(self : Parser) -> @ast.TsFunc raise ParseError {
   // Restore labels
   while self.labels.length() > 0 {
     let _ = self.labels.pop()
+
   }
   for label in prev_labels {
     self.labels.push(label)
@@ -163,23 +167,28 @@ fn Parser::skip_type_params(self : Parser) -> Unit {
       Lt => {
         depth += 1
         let _ = self.advance()
+
       }
       Gt => {
         depth -= 1
         let _ = self.advance()
+
       }
       GtGt => {
         // >> counts as two >
         depth -= 2
         let _ = self.advance()
+
       }
       GtGtGt => {
         // >>> counts as three >
         depth -= 3
         let _ = self.advance()
+
       }
       _ => {
         let _ = self.advance()
+
       }
     }
   }
@@ -197,9 +206,11 @@ fn Parser::skip_extends_clause(self : Parser) -> Unit {
     match self.peek().kind {
       Comma => {
         let _ = self.advance()
+
       }
       _ => {
         let _ = self.advance()
+
       }
     }
   }
@@ -207,7 +218,9 @@ fn Parser::skip_extends_clause(self : Parser) -> Unit {
 
 ///|
 // / interface
-pub fn Parser::parse_interface(self : Parser) -> @ast.TsInterface raise ParseError {
+pub fn Parser::parse_interface(
+  self : Parser,
+) -> @ast.TsInterface raise ParseError {
   let _ = self.expect(Interface)
   let name = match self.advance().kind {
     Ident(n) => n
@@ -223,6 +236,7 @@ pub fn Parser::parse_interface(self : Parser) -> @ast.TsInterface raise ParseErr
     // Skip readonly modifier
     if self.check(Ident("readonly")) {
       let _ = self.advance()
+
     }
     // Parse field/method name
     let field_name : String = match self.peek().kind {
@@ -244,6 +258,7 @@ pub fn Parser::parse_interface(self : Parser) -> @ast.TsInterface raise ParseErr
         // Skip until ]
         while not(self.check(RBracket)) && not(self.check(Eof)) {
           let _ = self.advance()
+
         }
         let _ = self.expect(RBracket)
         "<computed>"
@@ -264,40 +279,142 @@ pub fn Parser::parse_interface(self : Parser) -> @ast.TsInterface raise ParseErr
         n.to_string()
       }
       // Keywords as field names (TypeScript allows this)
-      Finally => { let _ = self.advance(); "finally" }
-      Try => { let _ = self.advance(); "try" }
-      Catch => { let _ = self.advance(); "catch" }
-      Throw => { let _ = self.advance(); "throw" }
-      Delete => { let _ = self.advance(); "delete" }
-      Type => { let _ = self.advance(); "type" }
-      In => { let _ = self.advance(); "in" }
-      Of => { let _ = self.advance(); "of" }
-      For => { let _ = self.advance(); "for" }
-      From => { let _ = self.advance(); "from" }
-      With => { let _ = self.advance(); "with" }
-      Typeof => { let _ = self.advance(); "typeof" }
-      Return => { let _ = self.advance(); "return" }
-      If => { let _ = self.advance(); "if" }
-      Else => { let _ = self.advance(); "else" }
-      While => { let _ = self.advance(); "while" }
-      Do => { let _ = self.advance(); "do" }
-      Switch => { let _ = self.advance(); "switch" }
-      Case => { let _ = self.advance(); "case" }
-      Default => { let _ = self.advance(); "default" }
-      Break => { let _ = self.advance(); "break" }
-      Continue => { let _ = self.advance(); "continue" }
-      Extends => { let _ = self.advance(); "extends" }
-      Class => { let _ = self.advance(); "class" }
-      Function => { let _ = self.advance(); "function" }
-      Var => { let _ = self.advance(); "var" }
-      Let => { let _ = self.advance(); "let" }
-      Const => { let _ = self.advance(); "const" }
-      Import => { let _ = self.advance(); "import" }
-      Export => { let _ = self.advance(); "export" }
-      As => { let _ = self.advance(); "as" }
-      Yield => { let _ = self.advance(); "yield" }
-      Instanceof => { let _ = self.advance(); "instanceof" }
-      Declare => { let _ = self.advance(); "declare" }
+      Finally => {
+        let _ = self.advance()
+        "finally"
+      }
+      Try => {
+        let _ = self.advance()
+        "try"
+      }
+      Catch => {
+        let _ = self.advance()
+        "catch"
+      }
+      Throw => {
+        let _ = self.advance()
+        "throw"
+      }
+      Delete => {
+        let _ = self.advance()
+        "delete"
+      }
+      Type => {
+        let _ = self.advance()
+        "type"
+      }
+      In => {
+        let _ = self.advance()
+        "in"
+      }
+      Of => {
+        let _ = self.advance()
+        "of"
+      }
+      For => {
+        let _ = self.advance()
+        "for"
+      }
+      From => {
+        let _ = self.advance()
+        "from"
+      }
+      With => {
+        let _ = self.advance()
+        "with"
+      }
+      Typeof => {
+        let _ = self.advance()
+        "typeof"
+      }
+      Return => {
+        let _ = self.advance()
+        "return"
+      }
+      If => {
+        let _ = self.advance()
+        "if"
+      }
+      Else => {
+        let _ = self.advance()
+        "else"
+      }
+      While => {
+        let _ = self.advance()
+        "while"
+      }
+      Do => {
+        let _ = self.advance()
+        "do"
+      }
+      Switch => {
+        let _ = self.advance()
+        "switch"
+      }
+      Case => {
+        let _ = self.advance()
+        "case"
+      }
+      Default => {
+        let _ = self.advance()
+        "default"
+      }
+      Break => {
+        let _ = self.advance()
+        "break"
+      }
+      Continue => {
+        let _ = self.advance()
+        "continue"
+      }
+      Extends => {
+        let _ = self.advance()
+        "extends"
+      }
+      Class => {
+        let _ = self.advance()
+        "class"
+      }
+      Function => {
+        let _ = self.advance()
+        "function"
+      }
+      Var => {
+        let _ = self.advance()
+        "var"
+      }
+      Let => {
+        let _ = self.advance()
+        "let"
+      }
+      Const => {
+        let _ = self.advance()
+        "const"
+      }
+      Import => {
+        let _ = self.advance()
+        "import"
+      }
+      Export => {
+        let _ = self.advance()
+        "export"
+      }
+      As => {
+        let _ = self.advance()
+        "as"
+      }
+      Yield => {
+        let _ = self.advance()
+        "yield"
+      }
+      Instanceof => {
+        let _ = self.advance()
+        "instanceof"
+      }
+      Declare => {
+        let _ = self.advance()
+        "declare"
+      }
       k => raise ParseError("Expected field name, got \{k}")
     }
     // Skip method type parameters <T>
@@ -314,13 +431,16 @@ pub fn Parser::parse_interface(self : Parser) -> @ast.TsInterface raise ParseErr
           LParen => {
             paren_depth += 1
             let _ = self.advance()
+
           }
           RParen => {
             paren_depth -= 1
             let _ = self.advance()
+
           }
           _ => {
             let _ = self.advance()
+
           }
         }
       }
@@ -344,6 +464,7 @@ pub fn Parser::parse_interface(self : Parser) -> @ast.TsInterface raise ParseErr
     // Skip trailing semicolon or comma (both optional)
     if self.check(Semicolon) || self.check(Comma) {
       let _ = self.advance()
+
     }
   }
   let _ = self.expect(RBrace)
@@ -364,14 +485,42 @@ fn Parser::skip_until_semicolon(self : Parser) -> Unit {
           return
         }
         let _ = self.advance()
+
       }
-      LBrace => { brace_depth += 1; let _ = self.advance() }
-      RBrace => { brace_depth -= 1; let _ = self.advance() }
-      LBracket => { bracket_depth += 1; let _ = self.advance() }
-      RBracket => { bracket_depth -= 1; let _ = self.advance() }
-      LParen => { paren_depth += 1; let _ = self.advance() }
-      RParen => { paren_depth -= 1; let _ = self.advance() }
-      _ => { let _ = self.advance() }
+      LBrace => {
+        brace_depth += 1
+        let _ = self.advance()
+
+      }
+      RBrace => {
+        brace_depth -= 1
+        let _ = self.advance()
+
+      }
+      LBracket => {
+        bracket_depth += 1
+        let _ = self.advance()
+
+      }
+      RBracket => {
+        bracket_depth -= 1
+        let _ = self.advance()
+
+      }
+      LParen => {
+        paren_depth += 1
+        let _ = self.advance()
+
+      }
+      RParen => {
+        paren_depth -= 1
+        let _ = self.advance()
+
+      }
+      _ => {
+        let _ = self.advance()
+
+      }
     }
   }
 }
@@ -388,6 +537,7 @@ fn Parser::skip_type_alias(self : Parser) -> Unit {
       LBrace => {
         brace_depth += 1
         let _ = self.advance()
+
       }
       RBrace => {
         brace_depth -= 1
@@ -399,20 +549,24 @@ fn Parser::skip_type_alias(self : Parser) -> Unit {
       Lt => {
         angle_depth += 1
         let _ = self.advance()
+
       }
       Gt => {
         angle_depth -= 1
         let _ = self.advance()
+
       }
       GtGt => {
         // >> counts as two >
         angle_depth -= 2
         let _ = self.advance()
+
       }
       GtGtGt => {
         // >>> counts as three >
         angle_depth -= 3
         let _ = self.advance()
+
       }
       Semicolon => {
         if brace_depth == 0 && angle_depth <= 0 {
@@ -420,9 +574,11 @@ fn Parser::skip_type_alias(self : Parser) -> Unit {
           break
         }
         let _ = self.advance()
+
       }
       _ => {
         let _ = self.advance()
+
       }
     }
   }
@@ -432,8 +588,11 @@ fn Parser::skip_type_alias(self : Parser) -> Unit {
 /// Skip declaration block (namespace, module, class, enum, etc.)
 fn Parser::skip_declaration_block(self : Parser) -> Unit {
   // Skip until we find { or ;
-  while not(self.check(LBrace)) && not(self.check(Semicolon)) && not(self.check(Eof)) {
+  while not(self.check(LBrace)) &&
+        not(self.check(Semicolon)) &&
+        not(self.check(Eof)) {
     let _ = self.advance()
+
   }
   if self.check(Semicolon) {
     let _ = self.advance()
@@ -447,13 +606,16 @@ fn Parser::skip_declaration_block(self : Parser) -> Unit {
         LBrace => {
           depth += 1
           let _ = self.advance()
+
         }
         RBrace => {
           depth -= 1
           let _ = self.advance()
+
         }
         _ => {
           let _ = self.advance()
+
         }
       }
     }
@@ -462,8 +624,12 @@ fn Parser::skip_declaration_block(self : Parser) -> Unit {
 
 ///|
 // / declare function (without 'declare function' prefix - already consumed)
+
+///|
 /// name(params): returnType;
-pub fn Parser::parse_declare_function(self : Parser) -> @ast.TsImport raise ParseError {
+pub fn Parser::parse_declare_function(
+  self : Parser,
+) -> @ast.TsImport raise ParseError {
 
   // function
   let name = match self.advance().kind {
@@ -481,21 +647,60 @@ pub fn Parser::parse_declare_function(self : Parser) -> @ast.TsImport raise Pars
     let _ = self.match_ellipsis()
     // Handle parameter name (can be identifier, keyword, or destructuring pattern)
     let param_name = match self.peek().kind {
-      Ident(n) => { let _ = self.advance(); n }
+      Ident(n) => {
+        let _ = self.advance()
+        n
+      }
       // Type keywords can be used as parameter names
-      StringType => { let _ = self.advance(); "string" }
-      NumberType => { let _ = self.advance(); "number" }
-      BooleanType => { let _ = self.advance(); "boolean" }
-      VoidType => { let _ = self.advance(); "void" }
+      StringType => {
+        let _ = self.advance()
+        "string"
+      }
+      NumberType => {
+        let _ = self.advance()
+        "number"
+      }
+      BooleanType => {
+        let _ = self.advance()
+        "boolean"
+      }
+      VoidType => {
+        let _ = self.advance()
+        "void"
+      }
       // Other keywords that can be parameter names
-      Type => { let _ = self.advance(); "type" }
-      New => { let _ = self.advance(); "new" }
-      Delete => { let _ = self.advance(); "delete" }
-      Typeof => { let _ = self.advance(); "typeof" }
-      In => { let _ = self.advance(); "in" }
-      Of => { let _ = self.advance(); "of" }
-      From => { let _ = self.advance(); "from" }
-      As => { let _ = self.advance(); "as" }
+      Type => {
+        let _ = self.advance()
+        "type"
+      }
+      New => {
+        let _ = self.advance()
+        "new"
+      }
+      Delete => {
+        let _ = self.advance()
+        "delete"
+      }
+      Typeof => {
+        let _ = self.advance()
+        "typeof"
+      }
+      In => {
+        let _ = self.advance()
+        "in"
+      }
+      Of => {
+        let _ = self.advance()
+        "of"
+      }
+      From => {
+        let _ = self.advance()
+        "from"
+      }
+      As => {
+        let _ = self.advance()
+        "as"
+      }
       LBrace | LBracket => {
         // Destructuring: { a, b } or [ a, b ]
         let open_tok = self.peek().kind
@@ -512,6 +717,7 @@ pub fn Parser::parse_declare_function(self : Parser) -> @ast.TsImport raise Pars
             depth -= 1
           }
           let _ = self.advance()
+
         }
         "<destructured>"
       }
@@ -529,6 +735,7 @@ pub fn Parser::parse_declare_function(self : Parser) -> @ast.TsImport raise Pars
     }
     if self.check(Comma) {
       let _ = self.advance()
+
     }
   }
   let _ = self.expect(RParen)
@@ -536,8 +743,6 @@ pub fn Parser::parse_declare_function(self : Parser) -> @ast.TsImport raise Pars
   // return valuetype
   let _ = self.expect(Colon)
   let return_type = self.parse_type()
-
-
   let _ = self.expect(Semicolon)
   { name, module_: "env", params, return_type }
 }

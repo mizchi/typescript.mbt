@@ -67,7 +67,10 @@ test "js experiment: add function i32" {
   }
   let runtime = @runtime.Runtime::load(module_)
   runtime.run_start()
-  let results = runtime.call_compiled(b"add", [@runtime.Value::I32(3U), @runtime.Value::I32(5U)])
+  let results = runtime.call_compiled(b"add", [
+    @runtime.Value::I32(3U),
+    @runtime.Value::I32(5U),
+  ])
   assert_eq(results[0], @runtime.Value::I32(8U))
 }
 
@@ -155,10 +158,16 @@ test "js experiment: if-else max function" {
   let runtime = @runtime.Runtime::load(module_)
   runtime.run_start()
   // max(10, 5) = 10
-  let results1 = runtime.call_compiled(b"max", [@runtime.Value::I32(10U), @runtime.Value::I32(5U)])
+  let results1 = runtime.call_compiled(b"max", [
+    @runtime.Value::I32(10U),
+    @runtime.Value::I32(5U),
+  ])
   assert_eq(results1[0], @runtime.Value::I32(10U))
   // max(3, 7) = 7
-  let results2 = runtime.call_compiled(b"max", [@runtime.Value::I32(3U), @runtime.Value::I32(7U)])
+  let results2 = runtime.call_compiled(b"max", [
+    @runtime.Value::I32(3U),
+    @runtime.Value::I32(7U),
+  ])
   assert_eq(results2[0], @runtime.Value::I32(7U))
 }
 

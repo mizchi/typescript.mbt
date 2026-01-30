@@ -249,13 +249,12 @@ pub fn JSValue::to_js_string(self : JSValue) -> String {
     Bool(false) => "false"
     Number(n) => n.to_string()
     String(s) => s
-    Object(_) => {
+    Object(_) =>
       // Check for special object types
       match js_get_prop(self, "__gen_id") {
         Number(_) => "[object Generator]"
         _ => "[object Object]"
       }
-    }
     Array(arr) => {
       let parts : Array[String] = []
       for item in arr.items {
@@ -373,9 +372,9 @@ pub fn js_typeof(val : JSValue) -> JSValue {
       String(_) => "string"
       Object(_) => "object"
       Array(_) => "object"
-    Function(_) => "function"
-    BreakSignal(_) | ContinueSignal(_) | Empty => "undefined" // internal
-  },
+      Function(_) => "function"
+      BreakSignal(_) | ContinueSignal(_) | Empty => "undefined" // internal
+    },
   )
 }
 
@@ -426,7 +425,9 @@ pub fn js_eq(left : JSValue, right : JSValue) -> JSValue {
       (Bool(a), Bool(b)) => a == b
       (Number(a), Number(b)) => a == b
       (String(a), String(b)) => a == b
-      (Object(_), Object(_)) | (Array(_), Array(_)) | (Function(_), Function(_)) =>
+      (Object(_), Object(_))
+      | (Array(_), Array(_))
+      | (Function(_), Function(_)) =>
         match js_strict_eq(left, right) {
           Bool(b) => b
           _ => false
@@ -546,4 +547,3 @@ pub fn js_has_prop(obj : JSValue, key : String) -> Bool {
     _ => false
   }
 }
-

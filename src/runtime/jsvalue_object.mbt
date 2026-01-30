@@ -31,14 +31,18 @@ pub struct JSArray {
   mut prototype : JSValue?
 } derive(Show)
 
+///|
 const MAX_DENSE_ARRAY_LENGTH : Int = 1000000
 
+///|
 priv struct ArrayProtoHolder {
   mut proto : JSValue?
 }
 
+///|
 let array_proto_holder : ArrayProtoHolder = { proto: None }
 
+///|
 const WITH_BINDING_NAME : String = "__with_obj__"
 
 ///|
@@ -197,7 +201,6 @@ pub fn js_get_prop(obj : JSValue, key : String) -> JSValue {
           return prop.value
         }
       }
-
       match map.prototype {
         Some(proto) => js_get_prop(proto, key)
         None => Undefined
@@ -212,7 +215,6 @@ pub fn js_get_prop(obj : JSValue, key : String) -> JSValue {
           None => Undefined
         }
       } else {
-
         let idx = @strconv.parse_int(key) catch { _ => -1 }
         if idx >= 0 && idx < arr.items.length() && arr.present[idx] {
           arr.items[idx]
@@ -227,7 +229,9 @@ pub fn js_get_prop(obj : JSValue, key : String) -> JSValue {
                         Native(name) =>
                           if name == "__export_get__" {
                             let name_val = js_get_prop(getter, "__export_name")
-                            let module_val = js_get_prop(getter, "__export_module")
+                            let module_val = js_get_prop(
+                              getter, "__export_module",
+                            )
                             match (module_val, name_val) {
                               (Object(_) | Function(_) | Array(_), String(n)) =>
                                 return js_get_prop(module_val, n)
@@ -275,12 +279,11 @@ pub fn js_set_prop(obj : JSValue, key : String, value : JSValue) -> JSValue {
   match obj {
     Function(closure) => {
       if key == "__proto__" {
-        closure.object_proto =
-          match value {
-            Object(_) | Array(_) | Function(_) => Some(value)
-            Null | Undefined => None
-            _ => closure.object_proto
-          }
+        closure.object_proto = match value {
+          Object(_) | Array(_) | Function(_) => Some(value)
+          Null | Undefined => None
+          _ => closure.object_proto
+        }
         return value
       }
       for i, prop in closure.props {
@@ -316,12 +319,11 @@ pub fn js_set_prop(obj : JSValue, key : String, value : JSValue) -> JSValue {
     }
     Object(map) => {
       if key == "__proto__" {
-        map.prototype =
-          match value {
-            Object(_) | Array(_) | Function(_) => Some(value)
-            Null | Undefined => None
-            _ => map.prototype
-          }
+        map.prototype = match value {
+          Object(_) | Array(_) | Function(_) => Some(value)
+          Null | Undefined => None
+          _ => map.prototype
+        }
         return value
       }
       // propertyupdate
@@ -359,12 +361,11 @@ pub fn js_set_prop(obj : JSValue, key : String, value : JSValue) -> JSValue {
     }
     Array(arr) => {
       if key == "__proto__" {
-        arr.prototype =
-          match value {
-            Object(_) | Array(_) | Function(_) => Some(value)
-            Null | Undefined => None
-            _ => arr.prototype
-          }
+        arr.prototype = match value {
+          Object(_) | Array(_) | Function(_) => Some(value)
+          Null | Undefined => None
+          _ => arr.prototype
+        }
         return value
       }
       if key == "length" {
@@ -374,6 +375,7 @@ pub fn js_set_prop(obj : JSValue, key : String, value : JSValue) -> JSValue {
             while arr.items.length() > new_len {
               let _ = arr.items.pop()
               let _ = arr.present.pop()
+
             }
           } else if new_len <= MAX_DENSE_ARRAY_LENGTH {
             while arr.items.length() < new_len {
@@ -600,6 +602,7 @@ pub fn js_define_data_prop(
             while arr.items.length() > new_len {
               let _ = arr.items.pop()
               let _ = arr.present.pop()
+
             }
           } else if new_len <= MAX_DENSE_ARRAY_LENGTH {
             while arr.items.length() < new_len {
@@ -893,10 +896,7 @@ pub fn JSEnv::get(self : JSEnv, name : String) -> JSValue {
     i -= 1
   }
   match with_target {
-    Some(obj) =>
-      if js_has_prop(obj, name) {
-        return js_get_prop(obj, name)
-      }
+    Some(obj) => if js_has_prop(obj, name) { return js_get_prop(obj, name) }
     None => ()
   }
   // lookup
@@ -941,4 +941,3 @@ pub fn JSEnv::set(self : JSEnv, name : String, value : JSValue) -> Bool {
     None => false
   }
 }
-

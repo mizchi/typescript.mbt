@@ -53,15 +53,17 @@ fn JSInterpreter::maybe_set_function_name(
           if class_name.length() > 0 {
             if not(self.has_own_prop(value, "name")) {
               let _ = js_set_prop(value, "name", String(class_name))
+
             }
           } else {
-            let has_name_prop =
-              match js_get_prop(value, "__class_has_name_prop") {
-                Bool(b) => b
-                _ => false
-              }
+            let has_name_prop = match
+              js_get_prop(value, "__class_has_name_prop") {
+              Bool(b) => b
+              _ => false
+            }
             if not(has_name_prop) && not(self.has_own_prop(value, "name")) {
               let _ = js_set_prop(value, "name", String(name))
+
             }
           }
         _ => ()
@@ -141,6 +143,7 @@ fn JSInterpreter::bind_pattern(
     @ast.TsBinding::Object(obj) => self.bind_object_pattern(obj, value, env)
     @ast.TsBinding::Target(_) => {
       let _ = self.set_error_kind("TypeError", "Invalid binding target")
+
     }
   }
 }
@@ -161,6 +164,7 @@ fn JSInterpreter::init_pattern(
       self.init_object_pattern(obj, value, env, is_const)
     @ast.TsBinding::Target(_) => {
       let _ = self.set_error_kind("TypeError", "Invalid binding target")
+
     }
   }
 }
@@ -183,10 +187,12 @@ fn JSInterpreter::assign_ident(
   if not(env.set(name, value)) {
     if env.has("__strict__") {
       let _ = self.set_error_kind("ReferenceError", name + " is not defined")
+
     } else {
       self.global_env.define_var(name, value)
       let global_obj = self.global_env.get("globalThis")
       let _ = js_set_prop(global_obj, name, value)
+
     }
   }
 }
@@ -202,7 +208,8 @@ fn JSInterpreter::assign_pattern(
     @ast.TsBinding::Ident(name) => self.assign_ident(name, value, env)
     @ast.TsBinding::Array(arr) => self.assign_array_pattern(arr, value, env)
     @ast.TsBinding::Object(obj) => self.assign_object_pattern(obj, value, env)
-    @ast.TsBinding::Target(target) => self.assign_target_expr(target, value, env)
+    @ast.TsBinding::Target(target) =>
+      self.assign_target_expr(target, value, env)
   }
 }
 
@@ -229,8 +236,7 @@ fn JSInterpreter::prepare_assignment_target(
           match obj {
             Undefined | Null => {
               let _ = self.set_error_kind(
-                "TypeError",
-                "Cannot read properties of null or undefined",
+                "TypeError", "Cannot read properties of null or undefined",
               )
               None
             }
@@ -246,8 +252,7 @@ fn JSInterpreter::prepare_assignment_target(
           match obj {
             Undefined | Null => {
               let _ = self.set_error_kind(
-                "TypeError",
-                "Cannot read properties of null or undefined",
+                "TypeError", "Cannot read properties of null or undefined",
               )
               None
             }
@@ -283,9 +288,7 @@ fn JSInterpreter::assign_prepared_target(
     AssignTarget::Prop(obj, prop) => self.set_prop_value(obj, prop, value)
     AssignTarget::Index(obj, key) =>
       match obj {
-        Array(_) | Object(_) => {
-          self.set_prop_value(obj, key, value)
-        }
+        Array(_) | Object(_) => self.set_prop_value(obj, key, value)
         _ => ()
       }
   }
@@ -317,7 +320,8 @@ fn JSInterpreter::assign_pattern_gen(
       GenValue::Value(value)
     }
     @ast.TsBinding::Array(arr) => self.assign_array_pattern_gen(arr, value, env)
-    @ast.TsBinding::Object(obj) => self.assign_object_pattern_gen(obj, value, env)
+    @ast.TsBinding::Object(obj) =>
+      self.assign_object_pattern_gen(obj, value, env)
     @ast.TsBinding::Target(target) =>
       self.assign_target_expr_gen(target, value, env)
   }
@@ -330,7 +334,7 @@ fn JSInterpreter::assign_target_expr_gen(
   value : JSValue,
   env : JSEnv,
 ) -> GenValue {
-  self.eval_assignment_target_gen(target, env, (prepared) => {
+  self.eval_assignment_target_gen(target, env, prepared => {
     self.assign_prepared_target(prepared, value, env)
     GenValue::Value(value)
   })
@@ -346,15 +350,14 @@ fn JSInterpreter::eval_assignment_target_gen(
   match target {
     @ast.TsExpr::Var(name) => cont(AssignTarget::Ident(name))
     @ast.TsExpr::PropAccess(obj_expr, prop) =>
-      gen_bind(self.eval_expr_gen(obj_expr, env), (obj) => {
+      gen_bind(self.eval_expr_gen(obj_expr, env), obj => {
         if self.peek_error() is Some(_) {
           return GenValue::Value(Undefined)
         }
         match obj {
           Undefined | Null => {
             let _ = self.set_error_kind(
-              "TypeError",
-              "Cannot read properties of null or undefined",
+              "TypeError", "Cannot read properties of null or undefined",
             )
             GenValue::Value(Undefined)
           }
@@ -362,20 +365,19 @@ fn JSInterpreter::eval_assignment_target_gen(
         }
       })
     @ast.TsExpr::IndexAccess(obj_expr, idx_expr) =>
-      gen_bind(self.eval_expr_gen(obj_expr, env), (obj) => {
+      gen_bind(self.eval_expr_gen(obj_expr, env), obj => {
         if self.peek_error() is Some(_) {
           return GenValue::Value(Undefined)
         }
         match obj {
           Undefined | Null => {
             let _ = self.set_error_kind(
-              "TypeError",
-              "Cannot read properties of null or undefined",
+              "TypeError", "Cannot read properties of null or undefined",
             )
             GenValue::Value(Undefined)
           }
           _ =>
-            gen_bind(self.eval_expr_gen(idx_expr, env), (idx) => {
+            gen_bind(self.eval_expr_gen(idx_expr, env), idx => {
               if self.peek_error() is Some(_) {
                 return GenValue::Value(Undefined)
               }
@@ -401,8 +403,7 @@ fn JSInterpreter::assign_array_pattern_gen(
   match value {
     Undefined | Null => {
       let _ = self.set_error_kind(
-        "TypeError",
-        "Cannot destructure undefined or null",
+        "TypeError", "Cannot destructure undefined or null",
       )
       return GenValue::Value(Undefined)
     }
@@ -435,41 +436,40 @@ fn JSInterpreter::assign_array_pattern_gen(
             Some(rest_binding) =>
               match rest_binding {
                 @ast.TsBinding::Target(target_expr) =>
-                  self.eval_assignment_target_gen(target_expr, env, (prepared) => {
-                    if self.peek_error() is Some(_) {
-                      if not(done) {
-                        self.iterator_close_on_error(iterator)
+                  self.eval_assignment_target_gen(target_expr, env, prepared => if self.peek_error()
+                    is Some(_) {
+                    if not(done) {
+                      self.iterator_close_on_error(iterator)
+                    }
+                    self.pop_active_iterator()
+                    GenValue::Value(Undefined)
+                  } else {
+                    let rest_items : Array[JSValue] = []
+                    while not(done) {
+                      let val = next_value()
+                      if done {
+                        break
                       }
+                      rest_items.push(val)
+                      if self.peek_error() is Some(_) {
+                        break
+                      }
+                    }
+                    if self.peek_error() is Some(_) {
                       self.pop_active_iterator()
                       GenValue::Value(Undefined)
                     } else {
-                      let rest_items : Array[JSValue] = []
-                      while not(done) {
-                        let val = next_value()
-                        if done {
-                          break
-                        }
-                        rest_items.push(val)
-                        if self.peek_error() is Some(_) {
-                          break
-                        }
-                      }
+                      let rest_val = js_array_from(rest_items)
+                      self.assign_prepared_target(prepared, rest_val, env)
                       if self.peek_error() is Some(_) {
+                        if not(done) {
+                          self.iterator_close_on_error(iterator)
+                        }
                         self.pop_active_iterator()
                         GenValue::Value(Undefined)
                       } else {
-                        let rest_val = js_array_from(rest_items)
-                        self.assign_prepared_target(prepared, rest_val, env)
-                        if self.peek_error() is Some(_) {
-                          if not(done) {
-                            self.iterator_close_on_error(iterator)
-                          }
-                          self.pop_active_iterator()
-                          GenValue::Value(Undefined)
-                        } else {
-                          self.pop_active_iterator()
-                          GenValue::Value(Undefined)
-                        }
+                        self.pop_active_iterator()
+                        GenValue::Value(Undefined)
                       }
                     }
                   })
@@ -490,8 +490,9 @@ fn JSInterpreter::assign_array_pattern_gen(
                     GenValue::Value(Undefined)
                   } else {
                     let rest_val = js_array_from(rest_items)
-                    gen_bind(self.assign_pattern_gen(rest_binding, rest_val, env), (_unused) => {
-                      if self.peek_error() is Some(_) {
+                    gen_bind(
+                      self.assign_pattern_gen(rest_binding, rest_val, env),
+                      _unused => if self.peek_error() is Some(_) {
                         if not(done) {
                           self.iterator_close_on_error(iterator)
                         }
@@ -500,8 +501,8 @@ fn JSInterpreter::assign_array_pattern_gen(
                       } else {
                         self.pop_active_iterator()
                         GenValue::Value(Undefined)
-                      }
-                    })
+                      },
+                    )
                   }
                 }
               }
@@ -511,6 +512,7 @@ fn JSInterpreter::assign_array_pattern_gen(
             None => {
               if not(done) {
                 let _ = next_value()
+
               }
               process_index(index + 1)
             }
@@ -521,17 +523,16 @@ fn JSInterpreter::assign_array_pattern_gen(
               }
               let mut used_default = false
               let default_expr = elem.default
-              let with_default =
-                match elem.default {
-                  Some(expr) =>
-                    if val is Undefined {
-                      used_default = true
-                      Some(self.eval_expr_gen(expr, env))
-                    } else {
-                      None
-                    }
-                  None => None
-                }
+              let with_default = match elem.default {
+                Some(expr) =>
+                  if val is Undefined {
+                    used_default = true
+                    Some(self.eval_expr_gen(expr, env))
+                  } else {
+                    None
+                  }
+                None => None
+              }
               let assign_elem = fn(v : JSValue) -> GenValue {
                 if used_default {
                   self.maybe_set_default_name_for_binding(
@@ -540,27 +541,29 @@ fn JSInterpreter::assign_array_pattern_gen(
                     default_expr,
                   )
                 }
-                gen_bind(self.assign_pattern_gen(elem.binding, v, env), (_unused) => {
-                  if self.peek_error() is Some(_) {
-                    if not(done) {
-                      self.iterator_close_on_error(iterator)
-                    }
-                    self.pop_active_iterator()
-                    GenValue::Value(Undefined)
-                  } else {
-                    process_index(index + 1)
+                gen_bind(self.assign_pattern_gen(elem.binding, v, env), _unused => if self.peek_error()
+                  is Some(_) {
+                  if not(done) {
+                    self.iterator_close_on_error(iterator)
                   }
+                  self.pop_active_iterator()
+                  GenValue::Value(Undefined)
+                } else {
+                  process_index(index + 1)
                 })
               }
               match with_default {
                 Some(default_signal) =>
-                  gen_bind(default_signal, (default_val) => assign_elem(default_val))
+                  gen_bind(default_signal, default_val => assign_elem(
+                    default_val,
+                  ))
                 None => assign_elem(val)
               }
             }
           }
         }
       }
+
       process_index(0)
     }
     None => {
@@ -586,8 +589,7 @@ fn JSInterpreter::assign_object_pattern_gen(
   match value {
     Undefined | Null => {
       let _ = self.set_error_kind(
-        "TypeError",
-        "Cannot destructure undefined or null",
+        "TypeError", "Cannot destructure undefined or null",
       )
       return GenValue::Value(Undefined)
     }
@@ -611,7 +613,7 @@ fn JSInterpreter::assign_object_pattern_gen(
         Some(rest_name) => {
           let rest_obj = self.new_object()
           match value {
-            Object(map) => {
+            Object(map) =>
               for prop in map.props {
                 if not(prop.enumerable) {
                   continue
@@ -619,14 +621,15 @@ fn JSInterpreter::assign_object_pattern_gen(
                 if not(contains_key(used_keys, prop.key)) {
                   let val = self.eval_prop_value(JSValue::Object(map), prop)
                   let _ = js_set_prop(rest_obj, prop.key, val)
+
                 }
               }
-            }
             Array(arr) => {
               for i, item in arr.items {
                 let key = i.to_string()
                 if not(contains_key(used_keys, key)) && arr.present[i] {
                   let _ = js_set_prop(rest_obj, key, item)
+
                 }
               }
               for prop in arr.props {
@@ -636,20 +639,24 @@ fn JSInterpreter::assign_object_pattern_gen(
                   }
                   let val = self.eval_prop_value(JSValue::Array(arr), prop)
                   let _ = js_set_prop(rest_obj, prop.key, val)
+
                 }
               }
             }
-            Function(closure) => {
+            Function(closure) =>
               for prop in closure.props {
                 if not(contains_key(used_keys, prop.key)) {
                   if not(prop.enumerable) {
                     continue
                   }
-                  let val = self.eval_prop_value(JSValue::Function(closure), prop)
+                  let val = self.eval_prop_value(
+                    JSValue::Function(closure),
+                    prop,
+                  )
                   let _ = js_set_prop(rest_obj, prop.key, val)
+
                 }
               }
-            }
             _ => ()
           }
           self.assign_ident(rest_name, rest_obj, env)
@@ -658,28 +665,26 @@ fn JSInterpreter::assign_object_pattern_gen(
       }
     } else {
       let prop = pattern.props[index]
-      let key_signal =
-        match prop.key_expr {
-          Some(expr) => self.eval_expr_gen(expr, env)
-          None => GenValue::Value(JSValue::String(prop.key))
-        }
-      gen_bind(key_signal, (key_val) => {
+      let key_signal = match prop.key_expr {
+        Some(expr) => self.eval_expr_gen(expr, env)
+        None => GenValue::Value(JSValue::String(prop.key))
+      }
+      gen_bind(key_signal, key_val => {
         let key = key_val.to_js_string()
         used_keys.push(key)
         let val = self.get_prop_value(value, key)
         let mut used_default = false
         let default_expr = prop.default
-        let with_default =
-          match prop.default {
-            Some(expr) =>
-              if val is Undefined {
-                used_default = true
-                Some(self.eval_expr_gen(expr, env))
-              } else {
-                None
-              }
-            None => None
-          }
+        let with_default = match prop.default {
+          Some(expr) =>
+            if val is Undefined {
+              used_default = true
+              Some(self.eval_expr_gen(expr, env))
+            } else {
+              None
+            }
+          None => None
+        }
         let assign_prop = fn(v : JSValue) -> GenValue {
           if used_default {
             self.maybe_set_default_name_for_binding(
@@ -688,18 +693,24 @@ fn JSInterpreter::assign_object_pattern_gen(
               default_expr,
             )
           }
-          gen_bind(self.assign_pattern_gen(prop.binding, v, env), (_unused) =>
-            process_prop(self, pattern, env, value, used_keys, index + 1)
-          )
+          gen_bind(self.assign_pattern_gen(prop.binding, v, env), _unused => process_prop(
+            self,
+            pattern,
+            env,
+            value,
+            used_keys,
+            index + 1,
+          ))
         }
         match with_default {
           Some(default_signal) =>
-            gen_bind(default_signal, (default_val) => assign_prop(default_val))
+            gen_bind(default_signal, default_val => assign_prop(default_val))
           None => assign_prop(val)
         }
       })
     }
   }
+
   process_prop(self, pattern, env, value, used_keys, 0)
 }
 
@@ -713,8 +724,7 @@ fn JSInterpreter::bind_array_pattern(
   match value {
     Undefined | Null => {
       let _ = self.set_error_kind(
-        "TypeError",
-        "Cannot destructure undefined or null",
+        "TypeError", "Cannot destructure undefined or null",
       )
       return
     }
@@ -735,11 +745,11 @@ fn JSInterpreter::bind_array_pattern(
       }
       for item in pattern.items {
         match item {
-          None => {
+          None =>
             if not(done) {
               let _ = next_value()
+
             }
-          }
           Some(elem) => {
             let mut val = if done { JSValue::Undefined } else { next_value() }
             let mut used_default = false
@@ -780,6 +790,7 @@ fn JSInterpreter::bind_array_pattern(
       }
       if not(done) {
         let _ = self.generator_return(gen_id, Undefined)
+
       }
     }
     None =>
@@ -808,6 +819,7 @@ fn JSInterpreter::bind_array_pattern(
               None => {
                 if not(done) {
                   let _ = next_value()
+
                 }
                 match self.peek_error() {
                   Some(_) => return
@@ -815,32 +827,36 @@ fn JSInterpreter::bind_array_pattern(
                 }
               }
               Some(elem) => {
-            let mut val = if done { JSValue::Undefined } else { next_value() }
-            match self.peek_error() {
-              Some(_) => return
-              None => ()
-            }
-            let mut used_default = false
-            let default_expr = elem.default
-            match elem.default {
-              Some(expr) =>
-                if val is Undefined {
-                  val = self.eval_expr(expr, env)
-                  used_default = true
+                let mut val = if done {
+                  JSValue::Undefined
+                } else {
+                  next_value()
                 }
-              None => ()
-            }
-            if used_default {
-              self.maybe_set_default_name_for_binding(
-                elem.binding,
-                val,
-                default_expr,
-              )
-            }
-            self.bind_pattern(elem.binding, val, env)
-            match self.peek_error() {
-              Some(_) => {
-                if not(done) {
+                match self.peek_error() {
+                  Some(_) => return
+                  None => ()
+                }
+                let mut used_default = false
+                let default_expr = elem.default
+                match elem.default {
+                  Some(expr) =>
+                    if val is Undefined {
+                      val = self.eval_expr(expr, env)
+                      used_default = true
+                    }
+                  None => ()
+                }
+                if used_default {
+                  self.maybe_set_default_name_for_binding(
+                    elem.binding,
+                    val,
+                    default_expr,
+                  )
+                }
+                self.bind_pattern(elem.binding, val, env)
+                match self.peek_error() {
+                  Some(_) => {
+                    if not(done) {
                       self.iterator_close(iterator)
                     }
                     return
@@ -894,6 +910,7 @@ fn JSInterpreter::bind_array_pattern(
           }
           // If no error but get_iterator returned None, value is not iterable
           let _ = self.set_error_kind("TypeError", "is not iterable")
+
         }
       }
   }
@@ -910,8 +927,7 @@ fn JSInterpreter::init_array_pattern(
   match value {
     Undefined | Null => {
       let _ = self.set_error_kind(
-        "TypeError",
-        "Cannot destructure undefined or null",
+        "TypeError", "Cannot destructure undefined or null",
       )
       return
     }
@@ -932,11 +948,11 @@ fn JSInterpreter::init_array_pattern(
       }
       for item in pattern.items {
         match item {
-          None => {
+          None =>
             if not(done) {
               let _ = next_value()
+
             }
-          }
           Some(elem) => {
             let mut val = if done { JSValue::Undefined } else { next_value() }
             let mut used_default = false
@@ -977,6 +993,7 @@ fn JSInterpreter::init_array_pattern(
       }
       if not(done) {
         let _ = self.generator_return(gen_id, Undefined)
+
       }
     }
     None =>
@@ -1005,6 +1022,7 @@ fn JSInterpreter::init_array_pattern(
               None => {
                 if not(done) {
                   let _ = next_value()
+
                 }
                 match self.peek_error() {
                   Some(_) => return
@@ -1012,7 +1030,11 @@ fn JSInterpreter::init_array_pattern(
                 }
               }
               Some(elem) => {
-                let mut val = if done { JSValue::Undefined } else { next_value() }
+                let mut val = if done {
+                  JSValue::Undefined
+                } else {
+                  next_value()
+                }
                 match self.peek_error() {
                   Some(_) => return
                   None => ()
@@ -1091,6 +1113,7 @@ fn JSInterpreter::init_array_pattern(
           }
           // If no error but get_iterator returned None, value is not iterable
           let _ = self.set_error_kind("TypeError", "is not iterable")
+
         }
       }
   }
@@ -1106,8 +1129,7 @@ fn JSInterpreter::assign_array_pattern(
   match value {
     Undefined | Null => {
       let _ = self.set_error_kind(
-        "TypeError",
-        "Cannot destructure undefined or null",
+        "TypeError", "Cannot destructure undefined or null",
       )
       return
     }
@@ -1128,11 +1150,11 @@ fn JSInterpreter::assign_array_pattern(
       }
       for item in pattern.items {
         match item {
-          None => {
+          None =>
             if not(done) {
               let _ = next_value()
+
             }
-          }
           Some(elem) => {
             let mut val = if done { JSValue::Undefined } else { next_value() }
             let mut used_default = false
@@ -1198,6 +1220,7 @@ fn JSInterpreter::assign_array_pattern(
               None => {
                 if not(done) {
                   let _ = next_value()
+
                 }
                 match self.peek_error() {
                   Some(_) => return
@@ -1205,7 +1228,11 @@ fn JSInterpreter::assign_array_pattern(
                 }
               }
               Some(elem) => {
-                let mut val = if done { JSValue::Undefined } else { next_value() }
+                let mut val = if done {
+                  JSValue::Undefined
+                } else {
+                  next_value()
+                }
                 match self.peek_error() {
                   Some(_) => return
                   None => ()
@@ -1245,7 +1272,9 @@ fn JSInterpreter::assign_array_pattern(
             Some(rest_binding) =>
               match rest_binding {
                 @ast.TsBinding::Target(target_expr) => {
-                  let prepared = self.prepare_assignment_target(target_expr, env)
+                  let prepared = self.prepare_assignment_target(
+                    target_expr, env,
+                  )
                   if self.peek_error() is Some(_) {
                     if not(done) {
                       self.iterator_close_on_error(iterator)
@@ -1322,6 +1351,7 @@ fn JSInterpreter::assign_array_pattern(
           }
           // If no error but get_iterator returned None, value is not iterable
           let _ = self.set_error_kind("TypeError", "is not iterable")
+
         }
       }
   }
@@ -1337,8 +1367,7 @@ fn JSInterpreter::bind_object_pattern(
   match value {
     Undefined | Null => {
       let _ = self.set_error_kind(
-        "TypeError",
-        "Cannot destructure undefined or null",
+        "TypeError", "Cannot destructure undefined or null",
       )
       return
     }
@@ -1363,11 +1392,7 @@ fn JSInterpreter::bind_object_pattern(
       None => ()
     }
     if used_default {
-      self.maybe_set_default_name_for_binding(
-        prop.binding,
-        val,
-        default_expr,
-      )
+      self.maybe_set_default_name_for_binding(prop.binding, val, default_expr)
     }
     self.bind_pattern(prop.binding, val, env)
     if self.peek_error() is Some(_) {
@@ -1379,7 +1404,7 @@ fn JSInterpreter::bind_object_pattern(
     Some(rest_name) => {
       let rest_obj = self.new_object()
       match value {
-        Object(map) => {
+        Object(map) =>
           for prop in map.props {
             if not(prop.enumerable) {
               continue
@@ -1387,14 +1412,15 @@ fn JSInterpreter::bind_object_pattern(
             if not(contains_key(used_keys, prop.key)) {
               let val = self.eval_prop_value(JSValue::Object(map), prop)
               let _ = js_set_prop(rest_obj, prop.key, val)
+
             }
           }
-        }
         Array(arr) => {
           for i, item in arr.items {
             let key = i.to_string()
             if not(contains_key(used_keys, key)) && arr.present[i] {
               let _ = js_set_prop(rest_obj, key, item)
+
             }
           }
           for prop in arr.props {
@@ -1404,10 +1430,11 @@ fn JSInterpreter::bind_object_pattern(
               }
               let val = self.eval_prop_value(JSValue::Array(arr), prop)
               let _ = js_set_prop(rest_obj, prop.key, val)
+
             }
           }
         }
-        Function(closure) => {
+        Function(closure) =>
           for prop in closure.props {
             if not(contains_key(used_keys, prop.key)) {
               if not(prop.enumerable) {
@@ -1415,9 +1442,9 @@ fn JSInterpreter::bind_object_pattern(
               }
               let val = self.eval_prop_value(JSValue::Function(closure), prop)
               let _ = js_set_prop(rest_obj, prop.key, val)
+
             }
           }
-        }
         _ => ()
       }
       env.define_var(rest_name, rest_obj)
@@ -1436,8 +1463,7 @@ fn JSInterpreter::init_object_pattern(
   match value {
     Undefined | Null => {
       let _ = self.set_error_kind(
-        "TypeError",
-        "Cannot destructure undefined or null",
+        "TypeError", "Cannot destructure undefined or null",
       )
       return
     }
@@ -1462,11 +1488,7 @@ fn JSInterpreter::init_object_pattern(
       None => ()
     }
     if used_default {
-      self.maybe_set_default_name_for_binding(
-        prop.binding,
-        val,
-        default_expr,
-      )
+      self.maybe_set_default_name_for_binding(prop.binding, val, default_expr)
     }
     self.init_pattern(prop.binding, val, env, is_const)
     if self.peek_error() is Some(_) {
@@ -1478,7 +1500,7 @@ fn JSInterpreter::init_object_pattern(
     Some(rest_name) => {
       let rest_obj = self.new_object()
       match value {
-        Object(map) => {
+        Object(map) =>
           for prop in map.props {
             if not(prop.enumerable) {
               continue
@@ -1486,14 +1508,15 @@ fn JSInterpreter::init_object_pattern(
             if not(contains_key(used_keys, prop.key)) {
               let val = self.eval_prop_value(JSValue::Object(map), prop)
               let _ = js_set_prop(rest_obj, prop.key, val)
+
             }
           }
-        }
         Array(arr) => {
           for i, item in arr.items {
             let key = i.to_string()
             if not(contains_key(used_keys, key)) && arr.present[i] {
               let _ = js_set_prop(rest_obj, key, item)
+
             }
           }
           for prop in arr.props {
@@ -1503,10 +1526,11 @@ fn JSInterpreter::init_object_pattern(
               }
               let val = self.eval_prop_value(JSValue::Array(arr), prop)
               let _ = js_set_prop(rest_obj, prop.key, val)
+
             }
           }
         }
-        Function(closure) => {
+        Function(closure) =>
           for prop in closure.props {
             if not(contains_key(used_keys, prop.key)) {
               if not(prop.enumerable) {
@@ -1514,9 +1538,9 @@ fn JSInterpreter::init_object_pattern(
               }
               let val = self.eval_prop_value(JSValue::Function(closure), prop)
               let _ = js_set_prop(rest_obj, prop.key, val)
+
             }
           }
-        }
         _ => ()
       }
       env.initialize(rest_name, rest_obj, is_const)
@@ -1534,8 +1558,7 @@ fn JSInterpreter::assign_object_pattern(
   match value {
     Undefined | Null => {
       let _ = self.set_error_kind(
-        "TypeError",
-        "Cannot destructure undefined or null",
+        "TypeError", "Cannot destructure undefined or null",
       )
       return
     }
@@ -1560,11 +1583,7 @@ fn JSInterpreter::assign_object_pattern(
       None => ()
     }
     if used_default {
-      self.maybe_set_default_name_for_binding(
-        prop.binding,
-        val,
-        default_expr,
-      )
+      self.maybe_set_default_name_for_binding(prop.binding, val, default_expr)
     }
     self.assign_pattern(prop.binding, val, env)
     if self.peek_error() is Some(_) {
@@ -1576,7 +1595,7 @@ fn JSInterpreter::assign_object_pattern(
     Some(rest_name) => {
       let rest_obj = self.new_object()
       match value {
-        Object(map) => {
+        Object(map) =>
           for prop in map.props {
             if not(prop.enumerable) {
               continue
@@ -1584,14 +1603,15 @@ fn JSInterpreter::assign_object_pattern(
             if not(contains_key(used_keys, prop.key)) {
               let val = self.eval_prop_value(JSValue::Object(map), prop)
               let _ = js_set_prop(rest_obj, prop.key, val)
+
             }
           }
-        }
         Array(arr) => {
           for i, item in arr.items {
             let key = i.to_string()
             if not(contains_key(used_keys, key)) && arr.present[i] {
               let _ = js_set_prop(rest_obj, key, item)
+
             }
           }
           for prop in arr.props {
@@ -1601,10 +1621,11 @@ fn JSInterpreter::assign_object_pattern(
               }
               let val = self.eval_prop_value(JSValue::Array(arr), prop)
               let _ = js_set_prop(rest_obj, prop.key, val)
+
             }
           }
         }
-        Function(closure) => {
+        Function(closure) =>
           for prop in closure.props {
             if not(contains_key(used_keys, prop.key)) {
               if not(prop.enumerable) {
@@ -1612,9 +1633,9 @@ fn JSInterpreter::assign_object_pattern(
               }
               let val = self.eval_prop_value(JSValue::Function(closure), prop)
               let _ = js_set_prop(rest_obj, prop.key, val)
+
             }
           }
-        }
         _ => ()
       }
       self.assign_ident(rest_name, rest_obj, env)
@@ -1639,7 +1660,11 @@ fn JSInterpreter::bind_params(
       }
       js_array_from(rest_items)
     } else {
-      let v = if arg_index < args.length() { args[arg_index] } else { Undefined }
+      let v = if arg_index < args.length() {
+        args[arg_index]
+      } else {
+        Undefined
+      }
       arg_index = arg_index + 1
       v
     }

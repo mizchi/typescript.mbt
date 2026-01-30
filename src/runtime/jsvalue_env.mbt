@@ -25,22 +25,16 @@ pub fn js_new_env(parent : JSEnv?) -> JSEnv {
 ///|
 // / variabledefine
 pub fn JSEnv::define_var(self : JSEnv, name : String, value : JSValue) -> Unit {
-  self.bindings.push({
-    name,
-    value,
-    is_const: false,
-    is_uninitialized: false,
-  })
+  self.bindings.push({ name, value, is_const: false, is_uninitialized: false })
 }
 
 ///|
-pub fn JSEnv::define_const(self : JSEnv, name : String, value : JSValue) -> Unit {
-  self.bindings.push({
-    name,
-    value,
-    is_const: true,
-    is_uninitialized: false,
-  })
+pub fn JSEnv::define_const(
+  self : JSEnv,
+  name : String,
+  value : JSValue,
+) -> Unit {
+  self.bindings.push({ name, value, is_const: true, is_uninitialized: false })
 }
 
 ///|
@@ -79,22 +73,16 @@ pub fn JSEnv::initialize(
   // If not found locally, recursively check parent chain
   // (for var declarations hoisted to outer scope)
   match self.parent {
-    Some(parent) => {
+    Some(parent) =>
       if parent.has(name) {
         // Recursively initialize in parent (will find the correct scope)
         parent.initialize(name, value, is_const)
         return
       }
-    }
     None => ()
   }
   // Create new binding if not found anywhere
-  self.bindings.push({
-    name,
-    value,
-    is_const,
-    is_uninitialized: false,
-  })
+  self.bindings.push({ name, value, is_const, is_uninitialized: false })
 }
 
 ///|
@@ -127,11 +115,7 @@ pub fn JSEnv::has(self : JSEnv, name : String) -> Bool {
     i -= 1
   }
   match with_target {
-    Some(obj) => {
-      if js_has_prop(obj, name) {
-        return true
-      }
-    }
+    Some(obj) => if js_has_prop(obj, name) { return true }
     None => ()
   }
   match self.parent {

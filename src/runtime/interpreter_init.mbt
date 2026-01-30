@@ -65,6 +65,7 @@ fn JSInterpreter::make_arguments(
   let _ = js_set_prop(obj, "__class", String("Arguments"))
   for i, item in args {
     let _ = js_set_prop(obj, i.to_string(), item)
+
   }
   let _ = js_set_prop(obj, "length", Number(args.length().to_double()))
   obj
@@ -78,6 +79,7 @@ fn JSInterpreter::set_function_length(
   len : Double,
 ) -> Unit {
   let _ = js_define_data_prop(func, "length", Number(len), false, false, true)
+
 }
 
 ///|
@@ -88,6 +90,7 @@ fn JSInterpreter::set_function_name(
   name : String,
 ) -> Unit {
   let _ = js_define_data_prop(func, "name", String(name), false, false, true)
+
 }
 
 ///|
@@ -147,17 +150,21 @@ fn JSInterpreter::make_accessor_descriptor(
   match get {
     Some(g) => {
       let _ = js_set_prop(desc, "get", g)
+
     }
     None => {
       let _ = js_set_prop(desc, "get", Undefined)
+
     }
   }
   match set {
     Some(s) => {
       let _ = js_set_prop(desc, "set", s)
+
     }
     None => {
       let _ = js_set_prop(desc, "set", Undefined)
+
     }
   }
   let _ = js_set_prop(desc, "enumerable", Bool(enumerable))
@@ -174,7 +181,7 @@ fn JSInterpreter::calc_bound_length(
 ) -> Double {
   let target_len = js_get_prop(target, "length")
   match target_len {
-    Number(n) => {
+    Number(n) =>
       if n.is_nan() || n == 0.0 {
         0.0
       } else if n.is_pos_inf() {
@@ -194,7 +201,6 @@ fn JSInterpreter::calc_bound_length(
         }
         len
       }
-    }
     _ => 0.0
   }
 }

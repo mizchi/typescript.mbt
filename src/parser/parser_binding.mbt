@@ -2,16 +2,19 @@
 // /
 fn Parser::parse_binding_ident(self : Parser) -> String raise ParseError {
   match self.peek().kind {
-    Ident(_) => match self.advance().kind {
-      Ident(n) => {
-        // In strict mode, eval and arguments cannot be used as binding identifiers
-        if self.in_strict && (n == "eval" || n == "arguments") {
-          raise ParseError("'" + n + "' cannot be used as identifier in strict mode")
+    Ident(_) =>
+      match self.advance().kind {
+        Ident(n) => {
+          // In strict mode, eval and arguments cannot be used as binding identifiers
+          if self.in_strict && (n == "eval" || n == "arguments") {
+            raise ParseError(
+              "'" + n + "' cannot be used as identifier in strict mode",
+            )
+          }
+          n
         }
-        n
+        _ => "<param>"
       }
-      _ => "<param>"
-    }
     Yield => {
       let _ = self.advance()
       "yield"
@@ -85,7 +88,10 @@ fn Parser::parse_binding_ident(self : Parser) -> String raise ParseError {
 }
 
 ///|
-fn Parser::binding_first_name(self : Parser, binding : @ast.TsBinding) -> String {
+fn Parser::binding_first_name(
+  self : Parser,
+  binding : @ast.TsBinding,
+) -> String {
   match binding {
     @ast.TsBinding::Ident(n) => n
     @ast.TsBinding::Array(arr) => {
@@ -122,7 +128,9 @@ fn Parser::binding_first_name(self : Parser, binding : @ast.TsBinding) -> String
 }
 
 ///|
-fn Parser::parse_binding_element(self : Parser) -> @ast.TsBindingElem raise ParseError {
+fn Parser::parse_binding_element(
+  self : Parser,
+) -> @ast.TsBindingElem raise ParseError {
   let binding = self.parse_binding_pattern()
   let default : @ast.TsExpr? = if self.match_(Eq) {
     Some(self.parse_assignment())
@@ -133,7 +141,9 @@ fn Parser::parse_binding_element(self : Parser) -> @ast.TsBindingElem raise Pars
 }
 
 ///|
-fn Parser::parse_binding_array(self : Parser) -> @ast.TsBinding raise ParseError {
+fn Parser::parse_binding_array(
+  self : Parser,
+) -> @ast.TsBinding raise ParseError {
   let _ = self.expect(LBracket)
   let items : Array[@ast.TsBindingElem?] = []
   let mut rest : @ast.TsBinding? = None
@@ -218,7 +228,9 @@ fn Parser::parse_object_binding_key(self : Parser) -> String raise ParseError {
 }
 
 ///|
-fn Parser::parse_binding_object(self : Parser) -> @ast.TsBinding raise ParseError {
+fn Parser::parse_binding_object(
+  self : Parser,
+) -> @ast.TsBinding raise ParseError {
   let _ = self.expect(LBrace)
   let props : Array[@ast.TsObjectBindingProp] = []
   let mut rest : String? = None
@@ -232,14 +244,13 @@ fn Parser::parse_binding_object(self : Parser) -> @ast.TsBinding raise ParseErro
         }
         break
       }
-      let (key, key_expr) =
-        if self.match_(LBracket) {
-          let expr = self.parse_assignment()
-          let _ = self.expect(RBracket)
-          ("<computed>", Some(expr))
-        } else {
-          (self.parse_object_binding_key(), None)
-        }
+      let (key, key_expr) = if self.match_(LBracket) {
+        let expr = self.parse_assignment()
+        let _ = self.expect(RBracket)
+        ("<computed>", Some(expr))
+      } else {
+        (self.parse_object_binding_key(), None)
+      }
       if self.match_(Colon) {
         let elem = self.parse_binding_element()
         props.push({
@@ -279,7 +290,9 @@ fn Parser::parse_binding_object(self : Parser) -> @ast.TsBinding raise ParseErro
 }
 
 ///|
-fn Parser::parse_binding_pattern(self : Parser) -> @ast.TsBinding raise ParseError {
+fn Parser::parse_binding_pattern(
+  self : Parser,
+) -> @ast.TsBinding raise ParseError {
   match self.peek().kind {
     LBracket => self.parse_binding_array()
     LBrace => self.parse_binding_object()
@@ -291,7 +304,9 @@ fn Parser::parse_binding_pattern(self : Parser) -> @ast.TsBinding raise ParseErr
 }
 
 ///|
-fn Parser::parse_assignment_target_expr(self : Parser) -> @ast.TsExpr raise ParseError {
+fn Parser::parse_assignment_target_expr(
+  self : Parser,
+) -> @ast.TsExpr raise ParseError {
   let expr = self.parse_ternary()
   match expr {
     Var(_) | PropAccess(_, _) | IndexAccess(_, _) => expr
@@ -300,7 +315,9 @@ fn Parser::parse_assignment_target_expr(self : Parser) -> @ast.TsExpr raise Pars
 }
 
 ///|
-fn Parser::parse_assignment_binding_element(self : Parser) -> @ast.TsBindingElem raise ParseError {
+fn Parser::parse_assignment_binding_element(
+  self : Parser,
+) -> @ast.TsBindingElem raise ParseError {
   let binding = self.parse_assignment_binding_pattern()
   let default : @ast.TsExpr? = if self.match_(Eq) {
     Some(self.parse_assignment())
@@ -311,7 +328,9 @@ fn Parser::parse_assignment_binding_element(self : Parser) -> @ast.TsBindingElem
 }
 
 ///|
-fn Parser::parse_assignment_binding_array(self : Parser) -> @ast.TsBinding raise ParseError {
+fn Parser::parse_assignment_binding_array(
+  self : Parser,
+) -> @ast.TsBinding raise ParseError {
   let _ = self.expect(LBracket)
   let items : Array[@ast.TsBindingElem?] = []
   let mut rest : @ast.TsBinding? = None
@@ -343,7 +362,9 @@ fn Parser::parse_assignment_binding_array(self : Parser) -> @ast.TsBinding raise
 }
 
 ///|
-fn Parser::parse_assignment_binding_object(self : Parser) -> @ast.TsBinding raise ParseError {
+fn Parser::parse_assignment_binding_object(
+  self : Parser,
+) -> @ast.TsBinding raise ParseError {
   let _ = self.expect(LBrace)
   let props : Array[@ast.TsObjectBindingProp] = []
   let mut rest : String? = None
@@ -357,14 +378,13 @@ fn Parser::parse_assignment_binding_object(self : Parser) -> @ast.TsBinding rais
         }
         break
       }
-      let (key, key_expr) =
-        if self.match_(LBracket) {
-          let expr = self.parse_assignment()
-          let _ = self.expect(RBracket)
-          ("<computed>", Some(expr))
-        } else {
-          (self.parse_object_binding_key(), None)
-        }
+      let (key, key_expr) = if self.match_(LBracket) {
+        let expr = self.parse_assignment()
+        let _ = self.expect(RBracket)
+        ("<computed>", Some(expr))
+      } else {
+        (self.parse_object_binding_key(), None)
+      }
       if self.match_(Colon) {
         let elem = self.parse_assignment_binding_element()
         props.push({
@@ -404,15 +424,12 @@ fn Parser::parse_assignment_binding_object(self : Parser) -> @ast.TsBinding rais
 }
 
 ///|
-fn Parser::parse_assignment_binding_pattern(self : Parser) -> @ast.TsBinding raise ParseError {
+fn Parser::parse_assignment_binding_pattern(
+  self : Parser,
+) -> @ast.TsBinding raise ParseError {
   let saved_pos = self.pos
   let saved_gen = self.in_generator
-  let target =
-    try {
-      Some(self.parse_assignment_target_expr())
-    } catch {
-      _ => None
-    }
+  let target = Some(self.parse_assignment_target_expr()) catch { _ => None }
   match target {
     Some(expr) =>
       match expr {

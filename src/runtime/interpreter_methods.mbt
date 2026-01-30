@@ -16,7 +16,8 @@ pub fn JSInterpreter::call_method(
     }
     Function(_) =>
       match method_name {
-        "call" | "apply" | "bind" => self.function_method(obj, method_name, args)
+        "call" | "apply" | "bind" =>
+          self.function_method(obj, method_name, args)
         _ => {
           let func = self.get_prop_value(obj, method_name)
           self.call_function(func, obj, args)
@@ -53,30 +54,29 @@ fn JSInterpreter::compare_sort_items(
 ) -> Int {
   let (av, ai) = a
   let (bv, bi) = b
-  let order =
-    match (av, bv) {
-      (Undefined, Undefined) => 0
-      (Undefined, _) => 1
-      (_, Undefined) => -1
-      _ =>
-        if use_compare {
-          let res = self.call_function(compare_fn, Undefined, [av, bv])
-          let n = res.to_number()
-          if n.is_nan() {
-            0
-          } else if n < 0.0 {
-            -1
-          } else if n > 0.0 {
-            1
-          } else {
-            0
-          }
+  let order = match (av, bv) {
+    (Undefined, Undefined) => 0
+    (Undefined, _) => 1
+    (_, Undefined) => -1
+    _ =>
+      if use_compare {
+        let res = self.call_function(compare_fn, Undefined, [av, bv])
+        let n = res.to_number()
+        if n.is_nan() {
+          0
+        } else if n < 0.0 {
+          -1
+        } else if n > 0.0 {
+          1
         } else {
-          let a_str = av.to_js_string()
-          let b_str = bv.to_js_string()
-          a_str.compare(b_str)
+          0
         }
-    }
+      } else {
+        let a_str = av.to_js_string()
+        let b_str = bv.to_js_string()
+        a_str.compare(b_str)
+      }
+  }
   if order == 0 {
     if ai < bi {
       -1
@@ -107,11 +107,11 @@ fn JSInterpreter::quicksort_values(
   let mut j = hi
   while i <= j {
     while i <= hi &&
-      self.compare_sort_items(values[i], pivot, compare_fn, use_compare) < 0 {
+          self.compare_sort_items(values[i], pivot, compare_fn, use_compare) < 0 {
       i += 1
     }
     while j >= lo &&
-      self.compare_sort_items(values[j], pivot, compare_fn, use_compare) > 0 {
+          self.compare_sort_items(values[j], pivot, compare_fn, use_compare) > 0 {
       j -= 1
     }
     if i <= j {
@@ -152,11 +152,10 @@ fn JSInterpreter::function_method(
       let call_args : Array[JSValue] = []
       if args.length() > 1 {
         match args[1] {
-          Array(arr) => {
+          Array(arr) =>
             for item in arr.items {
               call_args.push(item)
             }
-          }
           _ => ()
         }
       }
@@ -212,7 +211,7 @@ fn JSInterpreter::string_method(
     "charAt" => {
       let idx = if args.length() > 0 { args[0].to_number().to_int() } else { 0 }
       if idx >= 0 && idx < s.length() {
-        String(try { s[idx:idx + 1].to_string() } catch { _ => "" })
+        String(s[idx:idx + 1].to_string() catch { _ => "" })
       } else {
         String("")
       }
@@ -269,7 +268,7 @@ fn JSInterpreter::string_method(
         let end_idx = s.length() - search_len + 1
         let mut i = start_idx
         while i < end_idx && idx == -1 {
-          if (try { s[i:i + search_len].to_string() } catch { _ => "" }) == search_str {
+          if (s[i:i + search_len].to_string() catch { _ => "" }) == search_str {
             idx = i
           }
           i = i + 1
@@ -304,7 +303,7 @@ fn JSInterpreter::string_method(
         i = 0
       }
       while i >= 0 {
-        if (try { s[i:i + search_len].to_string() } catch { _ => "" }) == search_str {
+        if (s[i:i + search_len].to_string() catch { _ => "" }) == search_str {
           idx = i
           break
         }
@@ -317,7 +316,9 @@ fn JSInterpreter::string_method(
     }
     "includes" => {
       if args.length() > 0 && is_regexp(args[0]) {
-        return self.set_error_kind("TypeError", "String.prototype.includes does not accept a RegExp")
+        return self.set_error_kind(
+          "TypeError", "String.prototype.includes does not accept a RegExp",
+        )
       }
       let search_str = if args.length() > 0 {
         self.to_string_value(args[0])
@@ -342,7 +343,7 @@ fn JSInterpreter::string_method(
         let mut i = start_idx
         let mut found = false
         while i < end_idx && not(found) {
-          if (try { s[i:i + search_len].to_string() } catch { _ => "" }) == search_str {
+          if (s[i:i + search_len].to_string() catch { _ => "" }) == search_str {
             found = true
           }
           i = i + 1
@@ -352,7 +353,9 @@ fn JSInterpreter::string_method(
     }
     "startsWith" => {
       if args.length() > 0 && is_regexp(args[0]) {
-        return self.set_error_kind("TypeError", "String.prototype.startsWith does not accept a RegExp")
+        return self.set_error_kind(
+          "TypeError", "String.prototype.startsWith does not accept a RegExp",
+        )
       }
       let search_str = if args.length() > 0 {
         self.to_string_value(args[0])
@@ -374,13 +377,15 @@ fn JSInterpreter::string_method(
         Bool(false)
       } else {
         Bool(
-          (try { s[pos:pos + search_len].to_string() } catch { _ => "" }) == search_str,
+          (s[pos:pos + search_len].to_string() catch { _ => "" }) == search_str,
         )
       }
     }
     "endsWith" => {
       if args.length() > 0 && is_regexp(args[0]) {
-        return self.set_error_kind("TypeError", "String.prototype.endsWith does not accept a RegExp")
+        return self.set_error_kind(
+          "TypeError", "String.prototype.endsWith does not accept a RegExp",
+        )
       }
       let search_str = if args.length() > 0 {
         self.to_string_value(args[0])
@@ -405,9 +410,7 @@ fn JSInterpreter::string_method(
         Bool(false)
       } else {
         let start = end_pos - search_len
-        Bool(
-          (try { s[start:end_pos].to_string() } catch { _ => "" }) == search_str,
-        )
+        Bool((s[start:end_pos].to_string() catch { _ => "" }) == search_str)
       }
     }
     "at" => {
@@ -422,7 +425,7 @@ fn JSInterpreter::string_method(
       if idx < 0 || idx >= s.length() {
         Undefined
       } else {
-        String(try { s[idx:idx + 1].to_string() } catch { _ => "" })
+        String(s[idx:idx + 1].to_string() catch { _ => "" })
       }
     }
     "split" => {
@@ -464,9 +467,7 @@ fn JSInterpreter::string_method(
         return js_array_from(result)
       }
       match sep_val {
-        Undefined => {
-          return js_array_from([String(s)])
-        }
+        Undefined => return js_array_from([String(s)])
         _ => ()
       }
       let sep = match sep_string {
@@ -482,7 +483,7 @@ fn JSInterpreter::string_method(
             if limit >= 0 && result.length() >= limit {
               break
             }
-            result.push(String(try { s[i:i + 1].to_string() } catch { _ => "" }))
+            result.push(String(s[i:i + 1].to_string() catch { _ => "" }))
           }
         }
         return js_array_from(result)
@@ -498,7 +499,7 @@ fn JSInterpreter::string_method(
         if start + sep_len <= s.length() {
           let end_idx = s.length() - sep_len + 1
           while pos < end_idx && not(found) {
-            if (try { s[pos:pos + sep_len].to_string() } catch { _ => "" }) == sep {
+            if (s[pos:pos + sep_len].to_string() catch { _ => "" }) == sep {
               found = true
             } else {
               pos = pos + 1
@@ -506,33 +507,28 @@ fn JSInterpreter::string_method(
           }
         }
         if found {
-          result.push(String(try { s[start:pos].to_string() } catch { _ => "" }))
+          result.push(String(s[start:pos].to_string() catch { _ => "" }))
           start = pos + sep_len
         } else {
-          result.push(String(try { s[start:s.length()].to_string() } catch { _ => "" }))
+          result.push(String(s[start:s.length()].to_string() catch { _ => "" }))
           break
         }
       }
       js_array_from(result)
     }
-    "replace" => {
+    "replace" =>
       if args.length() > 0 && is_regexp(args[0]) {
         let pattern = regexp_source(args[0])
         let flags = regexp_flags(args[0])
         let to = if args.length() > 1 { args[1].to_js_string() } else { "" }
-        String(regexp_replace_simple(
-          pattern,
-          flags,
-          s,
-          to,
-          regexp_has_global(flags),
-        ))
+        String(
+          regexp_replace_simple(pattern, flags, s, to, regexp_has_global(flags)),
+        )
       } else {
         let from = if args.length() > 0 { args[0].to_js_string() } else { "" }
         let to = if args.length() > 1 { args[1].to_js_string() } else { "" }
         String(s.replace(old=from, new=to))
       }
-    }
     "replaceAll" => {
       let from = if args.length() > 0 { args[0].to_js_string() } else { "" }
       let to = if args.length() > 1 { args[1].to_js_string() } else { "" }
@@ -574,14 +570,17 @@ fn JSInterpreter::string_method(
         Some(_) => return self.error_or_undefined()
         None => ()
       }
-      let mut start =
-        if start_num.is_nan() {
+      let mut start = if start_num.is_nan() {
+        0
+      } else if start_num.is_inf() {
+        if start_num < 0.0 {
           0
-        } else if start_num.is_inf() {
-          if start_num < 0.0 { 0 } else { len }
         } else {
-          start_num.to_int()
+          len
         }
+      } else {
+        start_num.to_int()
+      }
       let end_num = if args.length() > 1 {
         self.to_number_value(args[1])
       } else {
@@ -609,7 +608,7 @@ fn JSInterpreter::string_method(
       if end < start {
         end = start
       }
-      String(try { s[start:end].to_string() } catch { _ => "" })
+      String(s[start:end].to_string() catch { _ => "" })
     }
     "substr" => {
       let len = s.length()
@@ -644,14 +643,17 @@ fn JSInterpreter::string_method(
         Some(_) => return self.error_or_undefined()
         None => ()
       }
-      let mut count =
-        if length_num.is_nan() {
+      let mut count = if length_num.is_nan() {
+        0
+      } else if length_num.is_inf() {
+        if length_num < 0.0 {
           0
-        } else if length_num.is_inf() {
-          if length_num < 0.0 { 0 } else { len }
         } else {
-          length_num.to_int()
+          len
         }
+      } else {
+        length_num.to_int()
+      }
       if count < 0 {
         count = 0
       }
@@ -659,7 +661,7 @@ fn JSInterpreter::string_method(
       if end > len {
         end = len
       }
-      String(try { s[start:end].to_string() } catch { _ => "" })
+      String(s[start:end].to_string() catch { _ => "" })
     }
     "substring" => {
       let mut start = if args.length() > 0 {
@@ -689,7 +691,7 @@ fn JSInterpreter::string_method(
       if end > s.length() {
         end = s.length()
       }
-      String(try { s[start:end].to_string() } catch { _ => "" })
+      String(s[start:end].to_string() catch { _ => "" })
     }
     "toUpperCase" => String(s.to_upper())
     "toLowerCase" => String(s.to_lower())
@@ -705,22 +707,35 @@ fn JSInterpreter::string_method(
     "fixed" => String("<tt>" + s + "</tt>")
     "blink" => String("<blink>" + s + "</blink>")
     "fontcolor" => {
-      let color =
-        if args.length() > 0 { escape_html_attr(self.to_string_value(args[0])) } else { "" }
+      let color = if args.length() > 0 {
+        escape_html_attr(self.to_string_value(args[0]))
+      } else {
+        ""
+      }
       String("<font color=\"" + color + "\">" + s + "</font>")
     }
     "fontsize" => {
-      let size =
-        if args.length() > 0 { escape_html_attr(self.to_string_value(args[0])) } else { "" }
+      let size = if args.length() > 0 {
+        escape_html_attr(self.to_string_value(args[0]))
+      } else {
+        ""
+      }
       String("<font size=\"" + size + "\">" + s + "</font>")
     }
     "link" => {
-      let url =
-        if args.length() > 0 { escape_html_attr(self.to_string_value(args[0])) } else { "" }
+      let url = if args.length() > 0 {
+        escape_html_attr(self.to_string_value(args[0]))
+      } else {
+        ""
+      }
       String("<a href=\"" + url + "\">" + s + "</a>")
     }
     "repeat" => {
-      let count = if args.length() > 0 { args[0].to_number().to_int() } else { 0 }
+      let count = if args.length() > 0 {
+        args[0].to_number().to_int()
+      } else {
+        0
+      }
       if count <= 0 {
         String("")
       } else {
@@ -732,7 +747,11 @@ fn JSInterpreter::string_method(
       }
     }
     "padStart" => {
-      let target_len = if args.length() > 0 { args[0].to_number().to_int() } else { 0 }
+      let target_len = if args.length() > 0 {
+        args[0].to_number().to_int()
+      } else {
+        0
+      }
       let pad = if args.length() > 1 { args[1].to_js_string() } else { " " }
       if target_len <= s.length() {
         String(s)
@@ -746,14 +765,18 @@ fn JSInterpreter::string_method(
             pad_str = pad_str + pad
           }
           if pad_str.length() > needed {
-            pad_str = (try { pad_str[:needed].to_string() } catch { _ => pad_str })
+            pad_str = pad_str[:needed].to_string() catch { _ => pad_str }
           }
         }
         String(pad_str + s)
       }
     }
     "padEnd" => {
-      let target_len = if args.length() > 0 { args[0].to_number().to_int() } else { 0 }
+      let target_len = if args.length() > 0 {
+        args[0].to_number().to_int()
+      } else {
+        0
+      }
       let pad = if args.length() > 1 { args[1].to_js_string() } else { " " }
       if target_len <= s.length() {
         String(s)
@@ -767,7 +790,7 @@ fn JSInterpreter::string_method(
             pad_str = pad_str + pad
           }
           if pad_str.length() > needed {
-            pad_str = (try { pad_str[:needed].to_string() } catch { _ => pad_str })
+            pad_str = pad_str[:needed].to_string() catch { _ => pad_str }
           }
         }
         String(s + pad_str)
@@ -788,21 +811,51 @@ fn JSInterpreter::string_method(
 // / JS trim check
 fn is_js_trim_whitespace(unit : UInt16) -> Bool {
   let code = unit.to_int()
-  if code == 0x0009 { return true }
-  if code == 0x000a { return true }
-  if code == 0x000b { return true }
-  if code == 0x000c { return true }
-  if code == 0x000d { return true }
-  if code == 0x0020 { return true }
-  if code == 0x00a0 { return true }
-  if code == 0x1680 { return true }
-  if code >= 0x2000 && code <= 0x200a { return true }
-  if code == 0x2028 { return true }
-  if code == 0x2029 { return true }
-  if code == 0x202f { return true }
-  if code == 0x205f { return true }
-  if code == 0x3000 { return true }
-  if code == 0xfeff { return true }
+  if code == 0x0009 {
+    return true
+  }
+  if code == 0x000a {
+    return true
+  }
+  if code == 0x000b {
+    return true
+  }
+  if code == 0x000c {
+    return true
+  }
+  if code == 0x000d {
+    return true
+  }
+  if code == 0x0020 {
+    return true
+  }
+  if code == 0x00a0 {
+    return true
+  }
+  if code == 0x1680 {
+    return true
+  }
+  if code >= 0x2000 && code <= 0x200a {
+    return true
+  }
+  if code == 0x2028 {
+    return true
+  }
+  if code == 0x2029 {
+    return true
+  }
+  if code == 0x202f {
+    return true
+  }
+  if code == 0x205f {
+    return true
+  }
+  if code == 0x3000 {
+    return true
+  }
+  if code == 0xfeff {
+    return true
+  }
   false
 }
 
@@ -822,7 +875,9 @@ fn trim_js_string(s : String, mode : String) -> String {
       end = end - 1
     }
   }
-  try { s[start:end].to_string() } catch { _ => "" }
+  s[start:end].to_string() catch {
+    _ => ""
+  }
 }
 
 ///|
@@ -833,15 +888,14 @@ fn JSInterpreter::same_value(
   right : JSValue,
 ) -> Bool {
   match (left, right) {
-    (Number(l), Number(r)) => {
+    (Number(l), Number(r)) =>
       if l.is_nan() && r.is_nan() {
         true
       } else if l == 0.0 && r == 0.0 {
-        (1.0 / l) == (1.0 / r)
+        1.0 / l == 1.0 / r
       } else {
         l == r
       }
-    }
     _ =>
       match js_strict_eq(left, right) {
         Bool(true) => true
@@ -918,12 +972,11 @@ fn JSInterpreter::array_method(
     "pop" =>
       if arr.items.length() > 0 {
         let last_idx = arr.items.length() - 1
-        let result =
-          if arr.present[last_idx] {
-            arr.items[last_idx]
-          } else {
-            Undefined
-          }
+        let result = if arr.present[last_idx] {
+          arr.items[last_idx]
+        } else {
+          Undefined
+        }
         let _ = arr.items.pop()
         let _ = arr.present.pop()
         arr.length = arr.items.length()
@@ -933,12 +986,7 @@ fn JSInterpreter::array_method(
       }
     "shift" =>
       if arr.items.length() > 0 {
-        let first =
-          if arr.present[0] {
-            arr.items[0]
-          } else {
-            Undefined
-          }
+        let first = if arr.present[0] { arr.items[0] } else { Undefined }
         let new_arr : Array[JSValue] = []
         let new_present : Array[Bool] = []
         for i in 1..<arr.items.length() {
@@ -1093,13 +1141,14 @@ fn JSInterpreter::array_method(
     }
     "map" =>
       if args.length() == 0 {
-        self.set_error_kind("TypeError", "Array.prototype.map requires a callback")
+        self.set_error_kind(
+          "TypeError", "Array.prototype.map requires a callback",
+        )
       } else {
         let callback = args[0]
         if not(self.is_callable(callback)) {
           return self.set_error_kind(
-            "TypeError",
-            "Array.prototype.map requires a callback",
+            "TypeError", "Array.prototype.map requires a callback",
           )
         }
         let this_arg = if args.length() > 1 { args[1] } else { Undefined }
@@ -1134,13 +1183,14 @@ fn JSInterpreter::array_method(
       }
     "filter" =>
       if args.length() == 0 {
-        self.set_error_kind("TypeError", "Array.prototype.filter requires a callback")
+        self.set_error_kind(
+          "TypeError", "Array.prototype.filter requires a callback",
+        )
       } else {
         let callback = args[0]
         if not(self.is_callable(callback)) {
           return self.set_error_kind(
-            "TypeError",
-            "Array.prototype.filter requires a callback",
+            "TypeError", "Array.prototype.filter requires a callback",
           )
         }
         let this_arg = if args.length() > 1 { args[1] } else { Undefined }
@@ -1150,16 +1200,8 @@ fn JSInterpreter::array_method(
           let key = i.to_string()
           if js_has_prop(arr_val, key) {
             let item = self.get_prop_value(arr_val, key)
-            let args_array = [
-              item,
-              JSValue::Number(i.to_double()),
-              arr_val,
-            ]
-            let filtered = self.call_function(
-              callback,
-              this_arg,
-              args_array,
-            )
+            let args_array = [item, JSValue::Number(i.to_double()), arr_val]
+            let filtered = self.call_function(callback, this_arg, args_array)
             if filtered.to_boolean() {
               result.push(item)
             }
@@ -1170,13 +1212,14 @@ fn JSInterpreter::array_method(
       }
     "reduce" =>
       if args.length() == 0 {
-        self.set_error_kind("TypeError", "Array.prototype.reduce requires a callback")
+        self.set_error_kind(
+          "TypeError", "Array.prototype.reduce requires a callback",
+        )
       } else {
         let callback = args[0]
         if not(self.is_callable(callback)) {
           return self.set_error_kind(
-            "TypeError",
-            "Array.prototype.reduce requires a callback",
+            "TypeError", "Array.prototype.reduce requires a callback",
           )
         }
         let has_init = args.length() > 1
@@ -1198,8 +1241,7 @@ fn JSInterpreter::array_method(
           }
           if not(found) {
             return self.set_error_kind(
-              "TypeError",
-              "Reduce of empty array with no initial value",
+              "TypeError", "Reduce of empty array with no initial value",
             )
           }
         }
@@ -1213,11 +1255,7 @@ fn JSInterpreter::array_method(
               JSValue::Number(i.to_double()),
               arr_val,
             ]
-            accumulator = self.call_function(
-              callback,
-              Undefined,
-              args_array,
-            )
+            accumulator = self.call_function(callback, Undefined, args_array)
           }
           i += 1
         }
@@ -1225,13 +1263,14 @@ fn JSInterpreter::array_method(
       }
     "reduceRight" =>
       if args.length() == 0 {
-        self.set_error_kind("TypeError", "Array.prototype.reduceRight requires a callback")
+        self.set_error_kind(
+          "TypeError", "Array.prototype.reduceRight requires a callback",
+        )
       } else {
         let callback = args[0]
         if not(self.is_callable(callback)) {
           return self.set_error_kind(
-            "TypeError",
-            "Array.prototype.reduceRight requires a callback",
+            "TypeError", "Array.prototype.reduceRight requires a callback",
           )
         }
         let has_init = args.length() > 1
@@ -1256,8 +1295,7 @@ fn JSInterpreter::array_method(
           }
           if not(found) {
             return self.set_error_kind(
-              "TypeError",
-              "Reduce of empty array with no initial value",
+              "TypeError", "Reduce of empty array with no initial value",
             )
           }
         }
@@ -1271,11 +1309,7 @@ fn JSInterpreter::array_method(
               JSValue::Number(i.to_double()),
               arr_val,
             ]
-            accumulator = self.call_function(
-              callback,
-              Undefined,
-              args_array,
-            )
+            accumulator = self.call_function(callback, Undefined, args_array)
           }
           if i == 0 {
             break
@@ -1286,13 +1320,14 @@ fn JSInterpreter::array_method(
       }
     "forEach" =>
       if args.length() == 0 {
-        self.set_error_kind("TypeError", "Array.prototype.forEach requires a callback")
+        self.set_error_kind(
+          "TypeError", "Array.prototype.forEach requires a callback",
+        )
       } else {
         let callback = args[0]
         if not(self.is_callable(callback)) {
           return self.set_error_kind(
-            "TypeError",
-            "Array.prototype.forEach requires a callback",
+            "TypeError", "Array.prototype.forEach requires a callback",
           )
         }
         let this_arg = if args.length() > 1 { args[1] } else { Undefined }
@@ -1301,16 +1336,9 @@ fn JSInterpreter::array_method(
           let key = i.to_string()
           if js_has_prop(arr_val, key) {
             let value = self.get_prop_value(arr_val, key)
-            let args_array = [
-              value,
-              JSValue::Number(i.to_double()),
-              arr_val,
-            ]
-            let _ = self.call_function(
-              callback,
-              this_arg,
-              args_array,
-            )
+            let args_array = [value, JSValue::Number(i.to_double()), arr_val]
+            let _ = self.call_function(callback, this_arg, args_array)
+
           }
           i += 1
         }
@@ -1318,13 +1346,14 @@ fn JSInterpreter::array_method(
       }
     "every" =>
       if args.length() == 0 {
-        self.set_error_kind("TypeError", "Array.prototype.every requires a callback")
+        self.set_error_kind(
+          "TypeError", "Array.prototype.every requires a callback",
+        )
       } else {
         let callback = args[0]
         if not(self.is_callable(callback)) {
           return self.set_error_kind(
-            "TypeError",
-            "Array.prototype.every requires a callback",
+            "TypeError", "Array.prototype.every requires a callback",
           )
         }
         let this_arg = if args.length() > 1 { args[1] } else { Undefined }
@@ -1333,16 +1362,8 @@ fn JSInterpreter::array_method(
           let key = i.to_string()
           if js_has_prop(arr_val, key) {
             let value = self.get_prop_value(arr_val, key)
-            let args_array = [
-              value,
-              JSValue::Number(i.to_double()),
-              arr_val,
-            ]
-            let ok = self.call_function(
-              callback,
-              this_arg,
-              args_array,
-            )
+            let args_array = [value, JSValue::Number(i.to_double()), arr_val]
+            let ok = self.call_function(callback, this_arg, args_array)
             if not(ok.to_boolean()) {
               return Bool(false)
             }
@@ -1353,13 +1374,14 @@ fn JSInterpreter::array_method(
       }
     "some" =>
       if args.length() == 0 {
-        self.set_error_kind("TypeError", "Array.prototype.some requires a callback")
+        self.set_error_kind(
+          "TypeError", "Array.prototype.some requires a callback",
+        )
       } else {
         let callback = args[0]
         if not(self.is_callable(callback)) {
           return self.set_error_kind(
-            "TypeError",
-            "Array.prototype.some requires a callback",
+            "TypeError", "Array.prototype.some requires a callback",
           )
         }
         let this_arg = if args.length() > 1 { args[1] } else { Undefined }
@@ -1368,16 +1390,8 @@ fn JSInterpreter::array_method(
           let key = i.to_string()
           if js_has_prop(arr_val, key) {
             let value = self.get_prop_value(arr_val, key)
-            let args_array = [
-              value,
-              JSValue::Number(i.to_double()),
-              arr_val,
-            ]
-            let ok = self.call_function(
-              callback,
-              this_arg,
-              args_array,
-            )
+            let args_array = [value, JSValue::Number(i.to_double()), arr_val]
+            let ok = self.call_function(callback, this_arg, args_array)
             if ok.to_boolean() {
               return Bool(true)
             }
@@ -1396,11 +1410,7 @@ fn JSInterpreter::array_method(
               let key = i.to_string()
               if js_has_prop(arr_val, key) {
                 let item = js_get_prop(arr_val, key)
-                let args_array = [
-                  item,
-                  JSValue::Number(i.to_double()),
-                  arr_val,
-                ]
+                let args_array = [item, JSValue::Number(i.to_double()), arr_val]
                 let found = self.call_function(
                   JSValue::Function(closure),
                   this_arg,
@@ -1430,11 +1440,7 @@ fn JSInterpreter::array_method(
               let key = i.to_string()
               if js_has_prop(arr_val, key) {
                 let item = js_get_prop(arr_val, key)
-                let args_array = [
-                  item,
-                  JSValue::Number(i.to_double()),
-                  arr_val,
-                ]
+                let args_array = [item, JSValue::Number(i.to_double()), arr_val]
                 let found = self.call_function(
                   JSValue::Function(closure),
                   this_arg,
@@ -1464,11 +1470,7 @@ fn JSInterpreter::array_method(
               let key = i.to_string()
               if js_has_prop(arr_val, key) {
                 let item = js_get_prop(arr_val, key)
-                let args_array = [
-                  item,
-                  JSValue::Number(i.to_double()),
-                  arr_val,
-                ]
+                let args_array = [item, JSValue::Number(i.to_double()), arr_val]
                 let found = self.call_function(
                   JSValue::Function(closure),
                   this_arg,
@@ -1501,11 +1503,7 @@ fn JSInterpreter::array_method(
               let key = i.to_string()
               if js_has_prop(arr_val, key) {
                 let item = js_get_prop(arr_val, key)
-                let args_array = [
-                  item,
-                  JSValue::Number(i.to_double()),
-                  arr_val,
-                ]
+                let args_array = [item, JSValue::Number(i.to_double()), arr_val]
                 let found = self.call_function(
                   JSValue::Function(closure),
                   this_arg,
@@ -1774,14 +1772,15 @@ fn JSInterpreter::array_method(
     }
     "sort" => {
       let compare_fn = if args.length() > 0 { args[0] } else { Undefined }
-      let use_compare =
-        if compare_fn is Undefined {
-          false
-        } else if self.is_callable(compare_fn) {
-          true
-        } else {
-          return self.set_error_kind("TypeError", "Array.prototype.sort requires a callable")
-        }
+      let use_compare = if compare_fn is Undefined {
+        false
+      } else if self.is_callable(compare_fn) {
+        true
+      } else {
+        return self.set_error_kind(
+          "TypeError", "Array.prototype.sort requires a callable",
+        )
+      }
       let values : Array[(JSValue, Int)] = []
       let mut holes = 0
       let mut i = 0
@@ -1794,7 +1793,13 @@ fn JSInterpreter::array_method(
         i += 1
       }
       if values.length() > 1 {
-        self.quicksort_values(values, 0, values.length() - 1, compare_fn, use_compare)
+        self.quicksort_values(
+          values,
+          0,
+          values.length() - 1,
+          compare_fn,
+          use_compare,
+        )
       }
       arr.items.clear()
       arr.present.clear()
@@ -1898,7 +1903,11 @@ fn JSInterpreter::array_method(
         out
       }
     "flat" => {
-      let depth = if args.length() > 0 { args[0].to_number().to_int() } else { 1 }
+      let depth = if args.length() > 0 {
+        args[0].to_number().to_int()
+      } else {
+        1
+      }
       let result : Array[JSValue] = []
       if depth <= 0 {
         for item in arr.items {
@@ -1914,8 +1923,7 @@ fn JSInterpreter::array_method(
         let callback = args[0]
         if not(self.is_callable(callback)) {
           return self.set_error_kind(
-            "TypeError",
-            "Array.prototype.flatMap requires a callback",
+            "TypeError", "Array.prototype.flatMap requires a callback",
           )
         }
         let this_arg = if args.length() > 1 { args[1] } else { Undefined }
@@ -1926,16 +1934,8 @@ fn JSInterpreter::array_method(
           let key = i.to_string()
           if js_has_prop(arr_val, key) {
             let item = self.get_prop_value(arr_val, key)
-            let args_array = [
-              item,
-              JSValue::Number(i.to_double()),
-              arr_val,
-            ]
-            let value = self.call_function(
-              callback,
-              this_arg,
-              args_array,
-            )
+            let args_array = [item, JSValue::Number(i.to_double()), arr_val]
+            let value = self.call_function(callback, this_arg, args_array)
             mapped.push(value)
           }
           i += 1
@@ -1990,9 +1990,21 @@ fn JSInterpreter::array_method(
       JSValue::Array(arr)
     }
     "copyWithin" => {
-      let mut target = if args.length() > 0 { args[0].to_number().to_int() } else { 0 }
-      let mut start = if args.length() > 1 { args[1].to_number().to_int() } else { 0 }
-      let mut end = if args.length() > 2 { args[2].to_number().to_int() } else { len }
+      let mut target = if args.length() > 0 {
+        args[0].to_number().to_int()
+      } else {
+        0
+      }
+      let mut start = if args.length() > 1 {
+        args[1].to_number().to_int()
+      } else {
+        0
+      }
+      let mut end = if args.length() > 2 {
+        args[2].to_number().to_int()
+      } else {
+        len
+      }
       if target < 0 {
         target = len + target
       }
@@ -2020,7 +2032,11 @@ fn JSInterpreter::array_method(
       if end > len {
         end = len
       }
-      let count = if end - start < len - target { end - start } else { len - target }
+      let count = if end - start < len - target {
+        end - start
+      } else {
+        len - target
+      }
       if count > 0 {
         let temp : Array[JSValue] = []
         let temp_present : Array[Bool] = []

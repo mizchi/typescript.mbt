@@ -32,12 +32,24 @@ fn regexp_flags(value : JSValue) -> String {
 ///|
 fn normalize_regexp_flags(flags : String) -> String {
   let mut out = ""
-  if flags.contains("g") { out = out + "g" }
-  if flags.contains("i") { out = out + "i" }
-  if flags.contains("m") { out = out + "m" }
-  if flags.contains("s") { out = out + "s" }
-  if flags.contains("u") { out = out + "u" }
-  if flags.contains("y") { out = out + "y" }
+  if flags.contains("g") {
+    out = out + "g"
+  }
+  if flags.contains("i") {
+    out = out + "i"
+  }
+  if flags.contains("m") {
+    out = out + "m"
+  }
+  if flags.contains("s") {
+    out = out + "s"
+  }
+  if flags.contains("u") {
+    out = out + "u"
+  }
+  if flags.contains("y") {
+    out = out + "y"
+  }
   out
 }
 
@@ -81,9 +93,7 @@ fn sanitize_utf16(input : String) -> String {
 ///|
 fn regexp_compile(pattern : String, flags : String) -> @regexp.Regexp? {
   let safe_pattern = sanitize_utf16(pattern)
-  try {
-    Some(@regexp.compile(safe_pattern[:], flags=flags[:]))
-  } catch {
+  Some(@regexp.compile(safe_pattern[:], flags=flags[:])) catch {
     _ => None
   }
 }
@@ -101,12 +111,11 @@ fn regexp_exec_with_re(
   let view = if last_index == 0 {
     safe_input[:]
   } else {
-    let tail =
-      String::unsafe_substring(
-        safe_input,
-        start=last_index,
-        end=safe_input.length(),
-      )
+    let tail = String::unsafe_substring(
+      safe_input,
+      start=last_index,
+      end=safe_input.length(),
+    )
     tail[:]
   }
   match re.match_(view) {
@@ -187,7 +196,7 @@ fn regexp_split_simple(
       if limit >= 0 && result.length() >= limit {
         break
       }
-      result.push(String(try { input[i:i + 1].to_string() } catch { _ => "" }))
+      result.push(String(input[i:i + 1].to_string() catch { _ => "" }))
     }
     return result
   }
@@ -204,11 +213,19 @@ fn regexp_split_simple(
         }
         match regexp_exec_with_re(re, input, last_index) {
           None => {
-            result.push(String(try { input[last_index:input.length()].to_string() } catch { _ => "" }))
+            result.push(
+              String(
+                input[last_index:input.length()].to_string() catch {
+                  _ => ""
+                },
+              ),
+            )
             break
           }
           Some((_result, start, end)) => {
-            result.push(String(try { input[last_index:start].to_string() } catch { _ => "" }))
+            result.push(
+              String(input[last_index:start].to_string() catch { _ => "" }),
+            )
             let next = if end == last_index { end + 1 } else { end }
             last_index = next
             if last_index > input.length() {
@@ -226,7 +243,11 @@ fn regexp_split_simple(
 }
 
 ///|
-fn regexp_search_simple(pattern : String, flags : String, input : String) -> Int {
+fn regexp_search_simple(
+  pattern : String,
+  flags : String,
+  input : String,
+) -> Int {
   match regexp_first_match(pattern, flags, input, 0) {
     Some((start, _)) => start
     None => -1
@@ -249,7 +270,7 @@ fn regexp_match_simple(
         match regexp_exec_with_re(re, input, 0) {
           None => return Null
           Some((_result, start, end)) => {
-            matches.push(String(try { input[start:end].to_string() } catch { _ => "" }))
+            matches.push(String(input[start:end].to_string() catch { _ => "" }))
             return js_array_from(matches)
           }
         }
@@ -258,7 +279,7 @@ fn regexp_match_simple(
         match regexp_exec_with_re(re, input, last_index) {
           None => break
           Some((_result, start, end)) => {
-            matches.push(String(try { input[start:end].to_string() } catch { _ => "" }))
+            matches.push(String(input[start:end].to_string() catch { _ => "" }))
             let next = if end == last_index { end + 1 } else { end }
             last_index = next
           }
@@ -290,9 +311,10 @@ fn regexp_replace_simple(
         match regexp_exec_with_re(re, input, 0) {
           None => return input
           Some((_result, start, end)) => {
-            out = out + (try { input[0:start].to_string() } catch { _ => "" })
+            out = out + (input[0:start].to_string() catch { _ => "" })
             out = out + replace_with
-            out = out + (try { input[end:input.length()].to_string() } catch { _ => "" })
+            out = out +
+              (input[end:input.length()].to_string() catch { _ => "" })
             return out
           }
         }
@@ -300,11 +322,12 @@ fn regexp_replace_simple(
       while last_index <= input.length() {
         match regexp_exec_with_re(re, input, last_index) {
           None => {
-            out = out + (try { input[last_index:input.length()].to_string() } catch { _ => "" })
+            out = out +
+              (input[last_index:input.length()].to_string() catch { _ => "" })
             break
           }
           Some((_result, start, end)) => {
-            out = out + (try { input[last_index:start].to_string() } catch { _ => "" })
+            out = out + (input[last_index:start].to_string() catch { _ => "" })
             out = out + replace_with
             let next = if end == last_index { end + 1 } else { end }
             last_index = next

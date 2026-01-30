@@ -6,25 +6,74 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   // Object.prototype - all properties should be non-enumerable
   let has_own = self.make_native("Object.hasOwnProperty")
   self.set_function_length(has_own, 1.0)
-  let _ = js_define_data_prop(self.object_proto, "hasOwnProperty", has_own, true, false, true)
+  let _ = js_define_data_prop(
+    self.object_proto,
+    "hasOwnProperty",
+    has_own,
+    true,
+    false,
+    true,
+  )
   let to_string_fn = self.make_native("Object.prototype.toString")
   self.set_function_length(to_string_fn, 0.0)
-  let _ = js_define_data_prop(self.object_proto, "toString", to_string_fn, true, false, true)
+  let _ = js_define_data_prop(
+    self.object_proto,
+    "toString",
+    to_string_fn,
+    true,
+    false,
+    true,
+  )
   let is_proto_fn = self.make_native("Object.prototype.isPrototypeOf")
   self.set_function_length(is_proto_fn, 1.0)
-  let _ = js_define_data_prop(self.object_proto, "isPrototypeOf", is_proto_fn, true, false, true)
+  let _ = js_define_data_prop(
+    self.object_proto,
+    "isPrototypeOf",
+    is_proto_fn,
+    true,
+    false,
+    true,
+  )
   let value_of_fn = self.make_native("Object.prototype.valueOf")
   self.set_function_length(value_of_fn, 0.0)
-  let _ = js_define_data_prop(self.object_proto, "valueOf", value_of_fn, true, false, true)
+  let _ = js_define_data_prop(
+    self.object_proto,
+    "valueOf",
+    value_of_fn,
+    true,
+    false,
+    true,
+  )
   let prop_enum_fn = self.make_native("Object.prototype.propertyIsEnumerable")
   self.set_function_length(prop_enum_fn, 1.0)
-  let _ = js_define_data_prop(self.object_proto, "propertyIsEnumerable", prop_enum_fn, true, false, true)
+  let _ = js_define_data_prop(
+    self.object_proto,
+    "propertyIsEnumerable",
+    prop_enum_fn,
+    true,
+    false,
+    true,
+  )
 
   // Object
   let object_ctor = self.make_native("Object")
-  let _ = js_define_data_prop(object_ctor, "prototype", self.object_proto, true, false, true)
+  let _ = js_define_data_prop(
+    object_ctor,
+    "prototype",
+    self.object_proto,
+    true,
+    false,
+    true,
+  )
   let _ = js_set_prop(object_ctor, "name", JSValue::String("Object"))
-  let _ = js_define_data_prop(self.object_proto, "constructor", object_ctor, true, false, true)
+  let _ = js_define_data_prop(
+    self.object_proto,
+    "constructor",
+    object_ctor,
+    true,
+    false,
+    true,
+  )
   let get_own = self.make_native("Object.getOwnPropertyNames")
   self.set_function_length(get_own, 1.0)
   let _ = js_set_prop(object_ctor, "getOwnPropertyNames", get_own)
@@ -42,7 +91,9 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let _ = js_set_prop(object_ctor, "defineProperty", obj_define_prop)
   let obj_set_proto = self.make_native("Object.setPrototypeOf")
   self.set_function_length(obj_set_proto, 2.0)
-  let _ = js_define_data_prop(object_ctor, "setPrototypeOf", obj_set_proto, true, false, true)
+  let _ = js_define_data_prop(
+    object_ctor, "setPrototypeOf", obj_set_proto, true, false, true,
+  )
   let obj_is_ext = self.make_native("Object.isExtensible")
   self.set_function_length(obj_is_ext, 1.0)
   let _ = js_set_prop(object_ctor, "isExtensible", obj_is_ext)
@@ -127,13 +178,62 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let _ = js_set_prop(math, "clz32", self.make_native("Math.clz32"))
   let _ = js_set_prop(math, "imul", self.make_native("Math.imul"))
   let _ = js_define_data_prop(math, "PI", Number(@math.PI), false, false, false)
-  let _ = js_define_data_prop(math, "E", Number(@math.exp(1.0)), false, false, false)
-  let _ = js_define_data_prop(math, "LN2", Number(@math.ln(2.0)), false, false, false)
-  let _ = js_define_data_prop(math, "LN10", Number(@math.ln(10.0)), false, false, false)
-  let _ = js_define_data_prop(math, "LOG2E", Number(1.0 / @math.ln(2.0)), false, false, false)
-  let _ = js_define_data_prop(math, "LOG10E", Number(1.0 / @math.ln(10.0)), false, false, false)
-  let _ = js_define_data_prop(math, "SQRT2", Number(2.0.sqrt()), false, false, false)
-  let _ = js_define_data_prop(math, "SQRT1_2", Number(0.5.sqrt()), false, false, false)
+  let _ = js_define_data_prop(
+    math,
+    "E",
+    Number(@math.exp(1.0)),
+    false,
+    false,
+    false,
+  )
+  let _ = js_define_data_prop(
+    math,
+    "LN2",
+    Number(@math.ln(2.0)),
+    false,
+    false,
+    false,
+  )
+  let _ = js_define_data_prop(
+    math,
+    "LN10",
+    Number(@math.ln(10.0)),
+    false,
+    false,
+    false,
+  )
+  let _ = js_define_data_prop(
+    math,
+    "LOG2E",
+    Number(1.0 / @math.ln(2.0)),
+    false,
+    false,
+    false,
+  )
+  let _ = js_define_data_prop(
+    math,
+    "LOG10E",
+    Number(1.0 / @math.ln(10.0)),
+    false,
+    false,
+    false,
+  )
+  let _ = js_define_data_prop(
+    math,
+    "SQRT2",
+    Number(2.0.sqrt()),
+    false,
+    false,
+    false,
+  )
+  let _ = js_define_data_prop(
+    math,
+    "SQRT1_2",
+    Number(0.5.sqrt()),
+    false,
+    false,
+    false,
+  )
   self.global_env.define_var("Math", math)
   let _ = js_set_prop(global_obj, "Math", math)
 
@@ -170,7 +270,14 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let function_ctor = self.make_native("Function")
   self.set_function_length(function_ctor, 1.0)
   self.set_function_name(function_ctor, "Function")
-  let _ = js_define_data_prop(function_ctor, "prototype", self.function_proto, true, false, true)
+  let _ = js_define_data_prop(
+    function_ctor,
+    "prototype",
+    self.function_proto,
+    true,
+    false,
+    true,
+  )
   let _ = js_set_prop(self.function_proto, "constructor", function_ctor)
   self.global_env.define_var("Function", function_ctor)
   let _ = js_set_prop(global_obj, "Function", function_ctor)
@@ -180,7 +287,9 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let boolean_ctor = self.make_native("Boolean")
   self.set_function_length(boolean_ctor, 1.0)
   self.set_function_name(boolean_ctor, "Boolean")
-  let _ = js_define_data_prop(boolean_ctor, "prototype", boolean_proto, true, false, true)
+  let _ = js_define_data_prop(
+    boolean_ctor, "prototype", boolean_proto, true, false, true,
+  )
   let _ = js_set_prop(boolean_proto, "constructor", boolean_ctor)
   let _ = js_set_prop(boolean_proto, "value", Bool(false))
   let bool_value_of = self.make_native("Boolean.prototype.valueOf")
@@ -191,12 +300,13 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let _ = js_set_prop(boolean_proto, "toString", bool_to_string)
   self.global_env.define_var("Boolean", boolean_ctor)
   let _ = js_set_prop(global_obj, "Boolean", boolean_ctor)
-
   let number_proto = self.new_object()
   let number_ctor = self.make_native("Number")
   self.set_function_length(number_ctor, 1.0)
   self.set_function_name(number_ctor, "Number")
-  let _ = js_define_data_prop(number_ctor, "prototype", number_proto, true, false, true)
+  let _ = js_define_data_prop(
+    number_ctor, "prototype", number_proto, true, false, true,
+  )
   let _ = js_set_prop(number_proto, "constructor", number_ctor)
   let _ = js_set_prop(number_proto, "value", Number(0.0))
   let num_value_of = self.make_native("Number.prototype.valueOf")
@@ -208,35 +318,43 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let num_is_nan = self.make_native("Number.isNaN")
   self.set_function_length(num_is_nan, 1.0)
   let _ = js_set_prop(number_ctor, "isNaN", num_is_nan)
-  let _ = js_define_data_prop(number_ctor, "NaN", Number(js_nan), false, false, false)
-  let _ =
-    js_define_data_prop(
-      number_ctor,
-      "POSITIVE_INFINITY",
-      Number(1.0 / 0.0),
-      false,
-      false,
-      false,
-    )
-  let _ =
-    js_define_data_prop(
-      number_ctor,
-      "NEGATIVE_INFINITY",
-      Number(-1.0 / 0.0),
-      false,
-      false,
-      false,
-    )
+  let _ = js_define_data_prop(
+    number_ctor,
+    "NaN",
+    Number(js_nan),
+    false,
+    false,
+    false,
+  )
+  let _ = js_define_data_prop(
+    number_ctor,
+    "POSITIVE_INFINITY",
+    Number(1.0 / 0.0),
+    false,
+    false,
+    false,
+  )
+  let _ = js_define_data_prop(
+    number_ctor,
+    "NEGATIVE_INFINITY",
+    Number(-1.0 / 0.0),
+    false,
+    false,
+    false,
+  )
   let max_safe = JSValue::Number(9007199254740991.0)
-  let _ = js_define_data_prop(number_ctor, "MAX_SAFE_INTEGER", max_safe, false, false, false)
+  let _ = js_define_data_prop(
+    number_ctor, "MAX_SAFE_INTEGER", max_safe, false, false, false,
+  )
   self.global_env.define_var("Number", number_ctor)
   let _ = js_set_prop(global_obj, "Number", number_ctor)
-
   let string_proto = self.new_object()
   let string_ctor = self.make_native("String")
   self.set_function_length(string_ctor, 1.0)
   self.set_function_name(string_ctor, "String")
-  let _ = js_define_data_prop(string_ctor, "prototype", string_proto, true, false, true)
+  let _ = js_define_data_prop(
+    string_ctor, "prototype", string_proto, true, false, true,
+  )
   let _ = js_set_prop(string_proto, "constructor", string_ctor)
   let _ = js_set_prop(string_proto, "value", String(""))
   let str_value_of = self.make_native("String.prototype.valueOf")
@@ -308,10 +426,14 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let str_to_lower = self.make_native("String.prototype.toLowerCase")
   self.set_function_length(str_to_lower, 0.0)
   let _ = js_set_prop(string_proto, "toLowerCase", str_to_lower)
-  let str_to_locale_upper = self.make_native("String.prototype.toLocaleUpperCase")
+  let str_to_locale_upper = self.make_native(
+    "String.prototype.toLocaleUpperCase",
+  )
   self.set_function_length(str_to_locale_upper, 0.0)
   let _ = js_set_prop(string_proto, "toLocaleUpperCase", str_to_locale_upper)
-  let str_to_locale_lower = self.make_native("String.prototype.toLocaleLowerCase")
+  let str_to_locale_lower = self.make_native(
+    "String.prototype.toLocaleLowerCase",
+  )
   self.set_function_length(str_to_locale_lower, 0.0)
   let _ = js_set_prop(string_proto, "toLocaleLowerCase", str_to_locale_lower)
   let str_repeat = self.make_native("String.prototype.repeat")
@@ -376,7 +498,9 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let regexp_ctor = self.make_native("RegExp")
   self.set_function_length(regexp_ctor, 2.0)
   self.set_function_name(regexp_ctor, "RegExp")
-  let _ = js_define_data_prop(regexp_ctor, "prototype", regexp_proto, true, false, true)
+  let _ = js_define_data_prop(
+    regexp_ctor, "prototype", regexp_proto, true, false, true,
+  )
   let _ = js_set_prop(regexp_proto, "constructor", regexp_ctor)
   let re_exec = self.make_native("RegExp.prototype.exec")
   self.set_function_length(re_exec, 1.0)
@@ -395,7 +519,9 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let array_ctor = self.make_native("Array")
   self.set_function_length(array_ctor, 1.0)
   self.set_function_name(array_ctor, "Array")
-  let _ = js_define_data_prop(array_ctor, "prototype", array_proto, true, false, true)
+  let _ = js_define_data_prop(
+    array_ctor, "prototype", array_proto, true, false, true,
+  )
   let _ = js_set_prop(array_proto, "constructor", array_ctor)
   js_set_default_array_proto(array_proto)
   let array_to_string = self.make_native("Array.prototype.toString")
@@ -511,7 +637,9 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let date_ctor = self.make_native("Date")
   self.set_function_length(date_ctor, 7.0)
   self.set_function_name(date_ctor, "Date")
-  let _ = js_define_data_prop(date_ctor, "prototype", date_proto, true, false, true)
+  let _ = js_define_data_prop(
+    date_ctor, "prototype", date_proto, true, false, true,
+  )
   let _ = js_set_prop(date_proto, "constructor", date_ctor)
   let date_get_year = self.make_native("Date.prototype.getYear")
   self.set_function_length(date_get_year, 0.0)
@@ -537,42 +665,98 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   // Errors (minimal)
   let error_ctor = self.make_native("Error")
   self.set_function_name(error_ctor, "Error")
-  let _ = js_define_data_prop(error_ctor, "prototype", self.new_object(), true, false, true)
+  let _ = js_define_data_prop(
+    error_ctor,
+    "prototype",
+    self.new_object(),
+    true,
+    false,
+    true,
+  )
   self.global_env.define_var("Error", error_ctor)
   let _ = js_set_prop(global_obj, "Error", error_ctor)
   let syntax_ctor = self.make_native("SyntaxError")
   self.set_function_name(syntax_ctor, "SyntaxError")
-  let _ = js_define_data_prop(syntax_ctor, "prototype", self.new_object(), true, false, true)
+  let _ = js_define_data_prop(
+    syntax_ctor,
+    "prototype",
+    self.new_object(),
+    true,
+    false,
+    true,
+  )
   self.global_env.define_var("SyntaxError", syntax_ctor)
   let _ = js_set_prop(global_obj, "SyntaxError", syntax_ctor)
   let type_ctor = self.make_native("TypeError")
   self.set_function_name(type_ctor, "TypeError")
-  let _ = js_define_data_prop(type_ctor, "prototype", self.new_object(), true, false, true)
+  let _ = js_define_data_prop(
+    type_ctor,
+    "prototype",
+    self.new_object(),
+    true,
+    false,
+    true,
+  )
   self.global_env.define_var("TypeError", type_ctor)
   let _ = js_set_prop(global_obj, "TypeError", type_ctor)
   let ref_ctor = self.make_native("ReferenceError")
   self.set_function_name(ref_ctor, "ReferenceError")
-  let _ = js_define_data_prop(ref_ctor, "prototype", self.new_object(), true, false, true)
+  let _ = js_define_data_prop(
+    ref_ctor,
+    "prototype",
+    self.new_object(),
+    true,
+    false,
+    true,
+  )
   self.global_env.define_var("ReferenceError", ref_ctor)
   let _ = js_set_prop(global_obj, "ReferenceError", ref_ctor)
   let range_ctor = self.make_native("RangeError")
   self.set_function_name(range_ctor, "RangeError")
-  let _ = js_define_data_prop(range_ctor, "prototype", self.new_object(), true, false, true)
+  let _ = js_define_data_prop(
+    range_ctor,
+    "prototype",
+    self.new_object(),
+    true,
+    false,
+    true,
+  )
   self.global_env.define_var("RangeError", range_ctor)
   let _ = js_set_prop(global_obj, "RangeError", range_ctor)
   let aggregate_ctor = self.make_native("AggregateError")
   self.set_function_name(aggregate_ctor, "AggregateError")
-  let _ = js_define_data_prop(aggregate_ctor, "prototype", self.new_object(), true, false, true)
+  let _ = js_define_data_prop(
+    aggregate_ctor,
+    "prototype",
+    self.new_object(),
+    true,
+    false,
+    true,
+  )
   self.global_env.define_var("AggregateError", aggregate_ctor)
   let _ = js_set_prop(global_obj, "AggregateError", aggregate_ctor)
   let uri_ctor = self.make_native("URIError")
   self.set_function_name(uri_ctor, "URIError")
-  let _ = js_define_data_prop(uri_ctor, "prototype", self.new_object(), true, false, true)
+  let _ = js_define_data_prop(
+    uri_ctor,
+    "prototype",
+    self.new_object(),
+    true,
+    false,
+    true,
+  )
   self.global_env.define_var("URIError", uri_ctor)
   let _ = js_set_prop(global_obj, "URIError", uri_ctor)
   let eval_error_ctor = self.make_native("EvalError")
   self.set_function_name(eval_error_ctor, "EvalError")
-  let _ = js_define_data_prop(eval_error_ctor, "prototype", self.new_object(), true, false, true)
+  let _ = js_define_data_prop(
+    eval_error_ctor,
+    "prototype",
+    self.new_object(),
+    true,
+    false,
+    true,
+  )
   self.global_env.define_var("EvalError", eval_error_ctor)
   let _ = js_set_prop(global_obj, "EvalError", eval_error_ctor)
 
@@ -581,7 +765,9 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let promise_ctor = self.make_native("Promise")
   self.set_function_length(promise_ctor, 1.0)
   self.set_function_name(promise_ctor, "Promise")
-  let _ = js_define_data_prop(promise_ctor, "prototype", promise_proto, true, false, true)
+  let _ = js_define_data_prop(
+    promise_ctor, "prototype", promise_proto, true, false, true,
+  )
   let _ = js_set_prop(promise_ctor, "__default_proto__", promise_proto)
   let _ = js_set_prop(promise_proto, "constructor", promise_ctor)
   let promise_then = self.make_native("Promise.prototype.then")
@@ -648,95 +834,122 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let iterator_ctor = self.make_native("Iterator")
   self.set_function_length(iterator_ctor, 0.0)
   self.set_function_name(iterator_ctor, "Iterator")
-  let _ = js_define_data_prop(iterator_ctor, "prototype", iterator_proto, false, false, false)
+  let _ = js_define_data_prop(
+    iterator_ctor, "prototype", iterator_proto, false, false, false,
+  )
   let _ = js_set_prop(iterator_proto, "constructor", iterator_ctor)
-
   let iterator_iter = self.make_native("Iterator.prototype[@@iterator]")
   self.set_function_length(iterator_iter, 0.0)
-  let _ = js_define_data_prop(iterator_proto, "@@iterator", iterator_iter, true, false, true)
-
+  let _ = js_define_data_prop(
+    iterator_proto, "@@iterator", iterator_iter, true, false, true,
+  )
   let iterator_from = self.make_native("Iterator.from")
   self.set_function_length(iterator_from, 1.0)
   self.set_function_name(iterator_from, "from")
-  let _ = js_define_data_prop(iterator_ctor, "from", iterator_from, true, false, true)
-
+  let _ = js_define_data_prop(
+    iterator_ctor, "from", iterator_from, true, false, true,
+  )
   let iter_map = self.make_native("Iterator.prototype.map")
   self.set_function_length(iter_map, 1.0)
   self.set_function_name(iter_map, "map")
-  let _ = js_define_data_prop(iterator_proto, "map", iter_map, true, false, true)
-
+  let _ = js_define_data_prop(
+    iterator_proto, "map", iter_map, true, false, true,
+  )
   let iter_filter = self.make_native("Iterator.prototype.filter")
   self.set_function_length(iter_filter, 1.0)
   self.set_function_name(iter_filter, "filter")
-  let _ = js_define_data_prop(iterator_proto, "filter", iter_filter, true, false, true)
-
+  let _ = js_define_data_prop(
+    iterator_proto, "filter", iter_filter, true, false, true,
+  )
   let iter_take = self.make_native("Iterator.prototype.take")
   self.set_function_length(iter_take, 1.0)
   self.set_function_name(iter_take, "take")
-  let _ = js_define_data_prop(iterator_proto, "take", iter_take, true, false, true)
-
+  let _ = js_define_data_prop(
+    iterator_proto, "take", iter_take, true, false, true,
+  )
   let iter_drop = self.make_native("Iterator.prototype.drop")
   self.set_function_length(iter_drop, 1.0)
   self.set_function_name(iter_drop, "drop")
-  let _ = js_define_data_prop(iterator_proto, "drop", iter_drop, true, false, true)
-
+  let _ = js_define_data_prop(
+    iterator_proto, "drop", iter_drop, true, false, true,
+  )
   let iter_flat_map = self.make_native("Iterator.prototype.flatMap")
   self.set_function_length(iter_flat_map, 1.0)
   self.set_function_name(iter_flat_map, "flatMap")
-  let _ = js_define_data_prop(iterator_proto, "flatMap", iter_flat_map, true, false, true)
-
+  let _ = js_define_data_prop(
+    iterator_proto, "flatMap", iter_flat_map, true, false, true,
+  )
   let iter_for_each = self.make_native("Iterator.prototype.forEach")
   self.set_function_length(iter_for_each, 1.0)
   self.set_function_name(iter_for_each, "forEach")
-  let _ = js_define_data_prop(iterator_proto, "forEach", iter_for_each, true, false, true)
-
+  let _ = js_define_data_prop(
+    iterator_proto, "forEach", iter_for_each, true, false, true,
+  )
   let iter_to_array = self.make_native("Iterator.prototype.toArray")
   self.set_function_length(iter_to_array, 0.0)
   self.set_function_name(iter_to_array, "toArray")
-  let _ = js_define_data_prop(iterator_proto, "toArray", iter_to_array, true, false, true)
-
+  let _ = js_define_data_prop(
+    iterator_proto, "toArray", iter_to_array, true, false, true,
+  )
   let iter_reduce = self.make_native("Iterator.prototype.reduce")
   self.set_function_length(iter_reduce, 1.0)
   self.set_function_name(iter_reduce, "reduce")
-  let _ = js_define_data_prop(iterator_proto, "reduce", iter_reduce, true, false, true)
-
+  let _ = js_define_data_prop(
+    iterator_proto, "reduce", iter_reduce, true, false, true,
+  )
   let iter_every = self.make_native("Iterator.prototype.every")
   self.set_function_length(iter_every, 1.0)
   self.set_function_name(iter_every, "every")
-  let _ = js_define_data_prop(iterator_proto, "every", iter_every, true, false, true)
-
+  let _ = js_define_data_prop(
+    iterator_proto, "every", iter_every, true, false, true,
+  )
   let iter_some = self.make_native("Iterator.prototype.some")
   self.set_function_length(iter_some, 1.0)
   self.set_function_name(iter_some, "some")
-  let _ = js_define_data_prop(iterator_proto, "some", iter_some, true, false, true)
-
+  let _ = js_define_data_prop(
+    iterator_proto, "some", iter_some, true, false, true,
+  )
   let iter_find = self.make_native("Iterator.prototype.find")
   self.set_function_length(iter_find, 1.0)
   self.set_function_name(iter_find, "find")
-  let _ = js_define_data_prop(iterator_proto, "find", iter_find, true, false, true)
-
+  let _ = js_define_data_prop(
+    iterator_proto, "find", iter_find, true, false, true,
+  )
   let helper_proto = self.new_object()
   let helper_next = self.make_native("IteratorHelper.prototype.next")
   self.set_function_length(helper_next, 0.0)
   self.set_function_name(helper_next, "next")
-  let _ = js_define_data_prop(helper_proto, "next", helper_next, true, false, true)
+  let _ = js_define_data_prop(
+    helper_proto, "next", helper_next, true, false, true,
+  )
   let helper_return = self.make_native("IteratorHelper.prototype.return")
   self.set_function_length(helper_return, 0.0)
   self.set_function_name(helper_return, "return")
-  let _ = js_define_data_prop(helper_proto, "return", helper_return, true, false, true)
+  let _ = js_define_data_prop(
+    helper_proto, "return", helper_return, true, false, true,
+  )
   let helper_throw = self.make_native("IteratorHelper.prototype.throw")
   self.set_function_length(helper_throw, 0.0)
   self.set_function_name(helper_throw, "throw")
-  let _ = js_define_data_prop(helper_proto, "throw", helper_throw, true, false, true)
+  let _ = js_define_data_prop(
+    helper_proto, "throw", helper_throw, true, false, true,
+  )
   let _ = js_set_prop(helper_proto, "__proto__", iterator_proto)
   let _ = js_set_prop(iterator_ctor, "__helper_proto", helper_proto)
-
   self.global_env.define_var("Iterator", iterator_ctor)
-  let _ = js_define_data_prop(global_obj, "Iterator", iterator_ctor, true, false, true)
-
+  let _ = js_define_data_prop(
+    global_obj, "Iterator", iterator_ctor, true, false, true,
+  )
   let test262_ctor = self.make_native("Test262Error")
   self.set_function_name(test262_ctor, "Test262Error")
-  let _ = js_define_data_prop(test262_ctor, "prototype", self.new_object(), true, false, true)
+  let _ = js_define_data_prop(
+    test262_ctor,
+    "prototype",
+    self.new_object(),
+    true,
+    false,
+    true,
+  )
   let test262_thrower = self.make_native("Test262Error.thrower")
   self.set_function_length(test262_thrower, 0.0)
   let _ = js_set_prop(test262_ctor, "thrower", test262_thrower)
@@ -761,11 +974,7 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
     "compareArray",
     self.make_native("assert.compareArray"),
   )
-  let _ = js_set_prop(
-    assert_obj,
-    "throws",
-    self.make_native("assert.throws"),
-  )
+  let _ = js_set_prop(assert_obj, "throws", self.make_native("assert.throws"))
   self.global_env.define_var("assert", assert_obj)
   let _ = js_set_prop(global_obj, "assert", assert_obj)
 
@@ -837,17 +1046,14 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   self.set_function_length(is_nan_fn, 1.0)
   self.global_env.define_var("isNaN", is_nan_fn)
   let _ = js_set_prop(global_obj, "isNaN", is_nan_fn)
-
   let is_finite_fn = self.make_native("isFinite")
   self.set_function_length(is_finite_fn, 1.0)
   self.global_env.define_var("isFinite", is_finite_fn)
   let _ = js_set_prop(global_obj, "isFinite", is_finite_fn)
-
   let parse_int_fn = self.make_native("parseInt")
   self.set_function_length(parse_int_fn, 2.0)
   self.global_env.define_var("parseInt", parse_int_fn)
   let _ = js_set_prop(global_obj, "parseInt", parse_int_fn)
-
   let parse_float_fn = self.make_native("parseFloat")
   self.set_function_length(parse_float_fn, 1.0)
   self.global_env.define_var("parseFloat", parse_float_fn)
@@ -858,7 +1064,9 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   self.set_function_length(symbol_fn, 0.0)
   let string_ctor = self.global_env.get("String")
   let string_proto = js_get_prop(string_ctor, "prototype")
-  let _ = js_define_data_prop(symbol_fn, "prototype", string_proto, true, false, true)
+  let _ = js_define_data_prop(
+    symbol_fn, "prototype", string_proto, true, false, true,
+  )
   let _ = js_set_prop(symbol_fn, "hasInstance", String("@@hasInstance"))
   let _ = js_set_prop(symbol_fn, "iterator", String("@@iterator"))
   let _ = js_set_prop(symbol_fn, "species", String("@@species"))
@@ -869,13 +1077,24 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let proxy_ctor = self.make_native("Proxy")
   self.set_function_length(proxy_ctor, 2.0)
   self.set_function_name(proxy_ctor, "Proxy")
-  let _ = js_define_data_prop(proxy_ctor, "prototype", self.new_object(), true, false, true)
+  let _ = js_define_data_prop(
+    proxy_ctor,
+    "prototype",
+    self.new_object(),
+    true,
+    false,
+    true,
+  )
   self.global_env.define_var("Proxy", proxy_ctor)
   let _ = js_set_prop(global_obj, "Proxy", proxy_ctor)
 
   // Reflect
   let reflect = self.new_object()
-  let _ = js_set_prop(reflect, "construct", self.make_native("Reflect.construct"))
+  let _ = js_set_prop(
+    reflect,
+    "construct",
+    self.make_native("Reflect.construct"),
+  )
   let reflect_get = self.make_native("Reflect.get")
   self.set_function_length(reflect_get, 2.0)
   self.set_function_name(reflect_get, "get")
@@ -907,7 +1126,14 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let map_ctor = self.make_native("Map")
   self.set_function_length(map_ctor, 0.0)
   self.set_function_name(map_ctor, "Map")
-  let _ = js_define_data_prop(map_ctor, "prototype", self.new_object(), true, false, true)
+  let _ = js_define_data_prop(
+    map_ctor,
+    "prototype",
+    self.new_object(),
+    true,
+    false,
+    true,
+  )
   self.global_env.define_var("Map", map_ctor)
   let _ = js_set_prop(global_obj, "Map", map_ctor)
 
@@ -915,7 +1141,14 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let set_ctor = self.make_native("Set")
   self.set_function_length(set_ctor, 0.0)
   self.set_function_name(set_ctor, "Set")
-  let _ = js_define_data_prop(set_ctor, "prototype", self.new_object(), true, false, true)
+  let _ = js_define_data_prop(
+    set_ctor,
+    "prototype",
+    self.new_object(),
+    true,
+    false,
+    true,
+  )
   self.global_env.define_var("Set", set_ctor)
   let _ = js_set_prop(global_obj, "Set", set_ctor)
 
@@ -923,7 +1156,14 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let weakmap_ctor = self.make_native("WeakMap")
   self.set_function_length(weakmap_ctor, 0.0)
   self.set_function_name(weakmap_ctor, "WeakMap")
-  let _ = js_define_data_prop(weakmap_ctor, "prototype", self.new_object(), true, false, true)
+  let _ = js_define_data_prop(
+    weakmap_ctor,
+    "prototype",
+    self.new_object(),
+    true,
+    false,
+    true,
+  )
   self.global_env.define_var("WeakMap", weakmap_ctor)
   let _ = js_set_prop(global_obj, "WeakMap", weakmap_ctor)
 
@@ -931,7 +1171,14 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let weakset_ctor = self.make_native("WeakSet")
   self.set_function_length(weakset_ctor, 0.0)
   self.set_function_name(weakset_ctor, "WeakSet")
-  let _ = js_define_data_prop(weakset_ctor, "prototype", self.new_object(), true, false, true)
+  let _ = js_define_data_prop(
+    weakset_ctor,
+    "prototype",
+    self.new_object(),
+    true,
+    false,
+    true,
+  )
   self.global_env.define_var("WeakSet", weakset_ctor)
   let _ = js_set_prop(global_obj, "WeakSet", weakset_ctor)
 
@@ -939,7 +1186,14 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let arraybuffer_ctor = self.make_native("ArrayBuffer")
   self.set_function_length(arraybuffer_ctor, 1.0)
   self.set_function_name(arraybuffer_ctor, "ArrayBuffer")
-  let _ = js_define_data_prop(arraybuffer_ctor, "prototype", self.new_object(), true, false, true)
+  let _ = js_define_data_prop(
+    arraybuffer_ctor,
+    "prototype",
+    self.new_object(),
+    true,
+    false,
+    true,
+  )
   self.global_env.define_var("ArrayBuffer", arraybuffer_ctor)
   let _ = js_set_prop(global_obj, "ArrayBuffer", arraybuffer_ctor)
 
@@ -947,22 +1201,38 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let dataview_ctor = self.make_native("DataView")
   self.set_function_length(dataview_ctor, 1.0)
   self.set_function_name(dataview_ctor, "DataView")
-  let _ = js_define_data_prop(dataview_ctor, "prototype", self.new_object(), true, false, true)
+  let _ = js_define_data_prop(
+    dataview_ctor,
+    "prototype",
+    self.new_object(),
+    true,
+    false,
+    true,
+  )
   self.global_env.define_var("DataView", dataview_ctor)
   let _ = js_set_prop(global_obj, "DataView", dataview_ctor)
 
   // TypedArrays (stubs)
   let typed_arrays = [
     "Int8Array", "Uint8Array", "Uint8ClampedArray", "Int16Array", "Uint16Array",
-    "Int32Array", "Uint32Array", "Float32Array", "Float64Array", "BigInt64Array", "BigUint64Array",
+    "Int32Array", "Uint32Array", "Float32Array", "Float64Array", "BigInt64Array",
+    "BigUint64Array",
   ]
   for name in typed_arrays {
     let ctor = self.make_native(name)
     self.set_function_length(ctor, 3.0)
     self.set_function_name(ctor, name)
-    let _ = js_define_data_prop(ctor, "prototype", self.new_object(), true, false, true)
+    let _ = js_define_data_prop(
+      ctor,
+      "prototype",
+      self.new_object(),
+      true,
+      false,
+      true,
+    )
     self.global_env.define_var(name, ctor)
     let _ = js_set_prop(global_obj, name, ctor)
+
   }
 }
 
@@ -1002,18 +1272,16 @@ fn JSInterpreter::array_like_method(
       for i in 0..<len {
         let key = i.to_string()
         let has_prop = js_has_prop(receiver, key)
-        let use_string =
-          match str_value {
-            Some(s) => not(has_prop) && i >= 0 && i < s.length()
-            None => false
-          }
+        let use_string = match str_value {
+          Some(s) => not(has_prop) && i >= 0 && i < s.length()
+          None => false
+        }
         if has_prop {
           let value = self.get_prop_value(receiver, key)
           parts.push(value.to_js_string())
         } else if use_string {
           match str_value {
-            Some(s) =>
-              parts.push(try { s[i:i + 1].to_string() } catch { _ => "" })
+            Some(s) => parts.push(s[i:i + 1].to_string() catch { _ => "" })
             None => parts.push("")
           }
         } else {
@@ -1041,24 +1309,21 @@ fn JSInterpreter::array_like_method(
       for i in start_idx..<len {
         let key = i.to_string()
         let has_prop = js_has_prop(receiver, key)
-        let use_string =
-          match str_value {
-            Some(s) => not(has_prop) && i >= 0 && i < s.length()
-            None => false
-          }
+        let use_string = match str_value {
+          Some(s) => not(has_prop) && i >= 0 && i < s.length()
+          None => false
+        }
         if not(has_prop) && not(use_string) {
           continue
         }
-        let value =
-          if has_prop {
-            self.get_prop_value(receiver, key)
-          } else {
-            match str_value {
-              Some(s) =>
-                String(try { s[i:i + 1].to_string() } catch { _ => "" })
-              None => Undefined
-            }
+        let value = if has_prop {
+          self.get_prop_value(receiver, key)
+        } else {
+          match str_value {
+            Some(s) => String(s[i:i + 1].to_string() catch { _ => "" })
+            None => Undefined
           }
+        }
         match js_strict_eq(value, target) {
           Bool(true) => return Number(i.to_double())
           _ => ()
@@ -1086,22 +1351,19 @@ fn JSInterpreter::array_like_method(
       while i >= 0 {
         let key = i.to_string()
         let has_prop = js_has_prop(receiver, key)
-        let use_string =
-          match str_value {
-            Some(s) => not(has_prop) && i >= 0 && i < s.length()
-            None => false
-          }
+        let use_string = match str_value {
+          Some(s) => not(has_prop) && i >= 0 && i < s.length()
+          None => false
+        }
         if has_prop || use_string {
-          let value =
-            if has_prop {
-              self.get_prop_value(receiver, key)
-            } else {
-              match str_value {
-                Some(s) =>
-                  String(try { s[i:i + 1].to_string() } catch { _ => "" })
-                None => Undefined
-              }
+          let value = if has_prop {
+            self.get_prop_value(receiver, key)
+          } else {
+            match str_value {
+              Some(s) => String(s[i:i + 1].to_string() catch { _ => "" })
+              None => Undefined
             }
+          }
           match js_strict_eq(value, target) {
             Bool(true) => return Number(i.to_double())
             _ => ()
@@ -1129,16 +1391,15 @@ fn JSInterpreter::array_like_method(
       }
       for i in start_idx..<len {
         let key = i.to_string()
-        let value =
-          if js_has_prop(receiver, key) {
-            self.get_prop_value(receiver, key)
-          } else {
-            match str_value {
-              Some(s) if i >= 0 && i < s.length() =>
-                String(try { s[i:i + 1].to_string() } catch { _ => "" })
-              _ => Undefined
-            }
+        let value = if js_has_prop(receiver, key) {
+          self.get_prop_value(receiver, key)
+        } else {
+          match str_value {
+            Some(s) if i >= 0 && i < s.length() =>
+              String(s[i:i + 1].to_string() catch { _ => "" })
+            _ => Undefined
           }
+        }
         if self.same_value_zero(value, target) {
           return Bool(true)
         }
@@ -1147,13 +1408,14 @@ fn JSInterpreter::array_like_method(
     }
     "map" =>
       if args.length() == 0 {
-        self.set_error_kind("TypeError", "Array.prototype.map requires a callback")
+        self.set_error_kind(
+          "TypeError", "Array.prototype.map requires a callback",
+        )
       } else {
         let callback = args[0]
         if not(self.is_callable(callback)) {
           return self.set_error_kind(
-            "TypeError",
-            "Array.prototype.map requires a callback",
+            "TypeError", "Array.prototype.map requires a callback",
           )
         }
         let this_arg = if args.length() > 1 { args[1] } else { Undefined }
@@ -1165,27 +1427,20 @@ fn JSInterpreter::array_like_method(
             while i < map_len {
               let key = i.to_string()
               let has_prop = js_has_prop(receiver, key)
-              let use_string =
-                match str_value {
-                  Some(s) => not(has_prop) && i >= 0 && i < s.length()
-                  None => false
-                }
+              let use_string = match str_value {
+                Some(s) => not(has_prop) && i >= 0 && i < s.length()
+                None => false
+              }
               if has_prop || use_string {
-                let value =
-                  if has_prop {
-                    self.get_prop_value(receiver, key)
-                  } else {
-                    match str_value {
-                      Some(s) =>
-                        String(try { s[i:i + 1].to_string() } catch { _ => "" })
-                      None => Undefined
-                    }
+                let value = if has_prop {
+                  self.get_prop_value(receiver, key)
+                } else {
+                  match str_value {
+                    Some(s) => String(s[i:i + 1].to_string() catch { _ => "" })
+                    None => Undefined
                   }
-                let args_array = [
-                  value,
-                  Number(i.to_double()),
-                  receiver,
-                ]
+                }
+                let args_array = [value, Number(i.to_double()), receiver]
                 let mapped = self.call_function(callback, this_arg, args_array)
                 out_arr.items.push(mapped)
                 out_arr.present.push(true)
@@ -1203,13 +1458,14 @@ fn JSInterpreter::array_like_method(
       }
     "filter" =>
       if args.length() == 0 {
-        self.set_error_kind("TypeError", "Array.prototype.filter requires a callback")
+        self.set_error_kind(
+          "TypeError", "Array.prototype.filter requires a callback",
+        )
       } else {
         let callback = args[0]
         if not(self.is_callable(callback)) {
           return self.set_error_kind(
-            "TypeError",
-            "Array.prototype.filter requires a callback",
+            "TypeError", "Array.prototype.filter requires a callback",
           )
         }
         let this_arg = if args.length() > 1 { args[1] } else { Undefined }
@@ -1218,32 +1474,21 @@ fn JSInterpreter::array_like_method(
         while i < len {
           let key = i.to_string()
           let has_prop = js_has_prop(receiver, key)
-          let use_string =
-            match str_value {
-              Some(s) => not(has_prop) && i >= 0 && i < s.length()
-              None => false
-            }
+          let use_string = match str_value {
+            Some(s) => not(has_prop) && i >= 0 && i < s.length()
+            None => false
+          }
           if has_prop || use_string {
-            let item =
-              if has_prop {
-                self.get_prop_value(receiver, key)
-              } else {
-                match str_value {
-                  Some(s) =>
-                    String(try { s[i:i + 1].to_string() } catch { _ => "" })
-                  None => Undefined
-                }
+            let item = if has_prop {
+              self.get_prop_value(receiver, key)
+            } else {
+              match str_value {
+                Some(s) => String(s[i:i + 1].to_string() catch { _ => "" })
+                None => Undefined
               }
-            let args_array = [
-              item,
-              Number(i.to_double()),
-              receiver,
-            ]
-            let filtered = self.call_function(
-              callback,
-              this_arg,
-              args_array,
-            )
+            }
+            let args_array = [item, Number(i.to_double()), receiver]
+            let filtered = self.call_function(callback, this_arg, args_array)
             if filtered.to_boolean() {
               result.push(item)
             }
@@ -1254,13 +1499,14 @@ fn JSInterpreter::array_like_method(
       }
     "reduce" =>
       if args.length() == 0 {
-        self.set_error_kind("TypeError", "Array.prototype.reduce requires a callback")
+        self.set_error_kind(
+          "TypeError", "Array.prototype.reduce requires a callback",
+        )
       } else {
         let callback = args[0]
         if not(self.is_callable(callback)) {
           return self.set_error_kind(
-            "TypeError",
-            "Array.prototype.reduce requires a callback",
+            "TypeError", "Array.prototype.reduce requires a callback",
           )
         }
         let has_init = args.length() > 1
@@ -1273,22 +1519,19 @@ fn JSInterpreter::array_like_method(
           while i < len {
             let key = i.to_string()
             let has_prop = js_has_prop(receiver, key)
-            let use_string =
-              match str_value {
-                Some(s) => not(has_prop) && i >= 0 && i < s.length()
-                None => false
-              }
+            let use_string = match str_value {
+              Some(s) => not(has_prop) && i >= 0 && i < s.length()
+              None => false
+            }
             if has_prop || use_string {
-              accumulator =
-                if has_prop {
-                  self.get_prop_value(receiver, key)
-                } else {
-                  match str_value {
-                    Some(s) =>
-                      String(try { s[i:i + 1].to_string() } catch { _ => "" })
-                    None => Undefined
-                  }
+              accumulator = if has_prop {
+                self.get_prop_value(receiver, key)
+              } else {
+                match str_value {
+                  Some(s) => String(s[i:i + 1].to_string() catch { _ => "" })
+                  None => Undefined
                 }
+              }
               found = true
               i += 1
               break
@@ -1297,41 +1540,33 @@ fn JSInterpreter::array_like_method(
           }
           if not(found) {
             return self.set_error_kind(
-              "TypeError",
-              "Reduce of empty array with no initial value",
+              "TypeError", "Reduce of empty array with no initial value",
             )
           }
         }
         while i < len {
           let key = i.to_string()
           let has_prop = js_has_prop(receiver, key)
-          let use_string =
-            match str_value {
-              Some(s) => not(has_prop) && i >= 0 && i < s.length()
-              None => false
-            }
+          let use_string = match str_value {
+            Some(s) => not(has_prop) && i >= 0 && i < s.length()
+            None => false
+          }
           if has_prop || use_string {
-            let value =
-              if has_prop {
-                self.get_prop_value(receiver, key)
-              } else {
-                match str_value {
-                  Some(s) =>
-                    String(try { s[i:i + 1].to_string() } catch { _ => "" })
-                  None => Undefined
-                }
+            let value = if has_prop {
+              self.get_prop_value(receiver, key)
+            } else {
+              match str_value {
+                Some(s) => String(s[i:i + 1].to_string() catch { _ => "" })
+                None => Undefined
               }
+            }
             let args_array = [
               accumulator,
               value,
               Number(i.to_double()),
               receiver,
             ]
-            accumulator = self.call_function(
-              callback,
-              Undefined,
-              args_array,
-            )
+            accumulator = self.call_function(callback, Undefined, args_array)
           }
           i += 1
         }
@@ -1339,13 +1574,14 @@ fn JSInterpreter::array_like_method(
       }
     "reduceRight" =>
       if args.length() == 0 {
-        self.set_error_kind("TypeError", "Array.prototype.reduceRight requires a callback")
+        self.set_error_kind(
+          "TypeError", "Array.prototype.reduceRight requires a callback",
+        )
       } else {
         let callback = args[0]
         if not(self.is_callable(callback)) {
           return self.set_error_kind(
-            "TypeError",
-            "Array.prototype.reduceRight requires a callback",
+            "TypeError", "Array.prototype.reduceRight requires a callback",
           )
         }
         let has_init = args.length() > 1
@@ -1358,22 +1594,19 @@ fn JSInterpreter::array_like_method(
           while i >= 0 {
             let key = i.to_string()
             let has_prop = js_has_prop(receiver, key)
-            let use_string =
-              match str_value {
-                Some(s) => not(has_prop) && i >= 0 && i < s.length()
-                None => false
-              }
+            let use_string = match str_value {
+              Some(s) => not(has_prop) && i >= 0 && i < s.length()
+              None => false
+            }
             if has_prop || use_string {
-              accumulator =
-                if has_prop {
-                  self.get_prop_value(receiver, key)
-                } else {
-                  match str_value {
-                    Some(s) =>
-                      String(try { s[i:i + 1].to_string() } catch { _ => "" })
-                    None => Undefined
-                  }
+              accumulator = if has_prop {
+                self.get_prop_value(receiver, key)
+              } else {
+                match str_value {
+                  Some(s) => String(s[i:i + 1].to_string() catch { _ => "" })
+                  None => Undefined
                 }
+              }
               found = true
               i = i - 1
               break
@@ -1385,41 +1618,33 @@ fn JSInterpreter::array_like_method(
           }
           if not(found) {
             return self.set_error_kind(
-              "TypeError",
-              "Reduce of empty array with no initial value",
+              "TypeError", "Reduce of empty array with no initial value",
             )
           }
         }
         while i >= 0 {
           let key = i.to_string()
           let has_prop = js_has_prop(receiver, key)
-          let use_string =
-            match str_value {
-              Some(s) => not(has_prop) && i >= 0 && i < s.length()
-              None => false
-            }
+          let use_string = match str_value {
+            Some(s) => not(has_prop) && i >= 0 && i < s.length()
+            None => false
+          }
           if has_prop || use_string {
-            let value =
-              if has_prop {
-                self.get_prop_value(receiver, key)
-              } else {
-                match str_value {
-                  Some(s) =>
-                    String(try { s[i:i + 1].to_string() } catch { _ => "" })
-                  None => Undefined
-                }
+            let value = if has_prop {
+              self.get_prop_value(receiver, key)
+            } else {
+              match str_value {
+                Some(s) => String(s[i:i + 1].to_string() catch { _ => "" })
+                None => Undefined
               }
+            }
             let args_array = [
               accumulator,
               value,
               Number(i.to_double()),
               receiver,
             ]
-            accumulator = self.call_function(
-              callback,
-              Undefined,
-              args_array,
-            )
+            accumulator = self.call_function(callback, Undefined, args_array)
           }
           if i == 0 {
             break
@@ -1430,13 +1655,14 @@ fn JSInterpreter::array_like_method(
       }
     "forEach" =>
       if args.length() == 0 {
-        self.set_error_kind("TypeError", "Array.prototype.forEach requires a callback")
+        self.set_error_kind(
+          "TypeError", "Array.prototype.forEach requires a callback",
+        )
       } else {
         let callback = args[0]
         if not(self.is_callable(callback)) {
           return self.set_error_kind(
-            "TypeError",
-            "Array.prototype.forEach requires a callback",
+            "TypeError", "Array.prototype.forEach requires a callback",
           )
         }
         let this_arg = if args.length() > 1 { args[1] } else { Undefined }
@@ -1444,32 +1670,22 @@ fn JSInterpreter::array_like_method(
         while i < len {
           let key = i.to_string()
           let has_prop = js_has_prop(receiver, key)
-          let use_string =
-            match str_value {
-              Some(s) => not(has_prop) && i >= 0 && i < s.length()
-              None => false
-            }
+          let use_string = match str_value {
+            Some(s) => not(has_prop) && i >= 0 && i < s.length()
+            None => false
+          }
           if has_prop || use_string {
-            let value =
-              if has_prop {
-                self.get_prop_value(receiver, key)
-              } else {
-                match str_value {
-                  Some(s) =>
-                    String(try { s[i:i + 1].to_string() } catch { _ => "" })
-                  None => Undefined
-                }
+            let value = if has_prop {
+              self.get_prop_value(receiver, key)
+            } else {
+              match str_value {
+                Some(s) => String(s[i:i + 1].to_string() catch { _ => "" })
+                None => Undefined
               }
-            let args_array = [
-              value,
-              Number(i.to_double()),
-              receiver,
-            ]
-            let _ = self.call_function(
-              callback,
-              this_arg,
-              args_array,
-            )
+            }
+            let args_array = [value, Number(i.to_double()), receiver]
+            let _ = self.call_function(callback, this_arg, args_array)
+
           }
           i += 1
         }
@@ -1477,13 +1693,14 @@ fn JSInterpreter::array_like_method(
       }
     "every" =>
       if args.length() == 0 {
-        self.set_error_kind("TypeError", "Array.prototype.every requires a callback")
+        self.set_error_kind(
+          "TypeError", "Array.prototype.every requires a callback",
+        )
       } else {
         let callback = args[0]
         if not(self.is_callable(callback)) {
           return self.set_error_kind(
-            "TypeError",
-            "Array.prototype.every requires a callback",
+            "TypeError", "Array.prototype.every requires a callback",
           )
         }
         let this_arg = if args.length() > 1 { args[1] } else { Undefined }
@@ -1491,32 +1708,21 @@ fn JSInterpreter::array_like_method(
         while i < len {
           let key = i.to_string()
           let has_prop = js_has_prop(receiver, key)
-          let use_string =
-            match str_value {
-              Some(s) => not(has_prop) && i >= 0 && i < s.length()
-              None => false
-            }
+          let use_string = match str_value {
+            Some(s) => not(has_prop) && i >= 0 && i < s.length()
+            None => false
+          }
           if has_prop || use_string {
-            let value =
-              if has_prop {
-                self.get_prop_value(receiver, key)
-              } else {
-                match str_value {
-                  Some(s) =>
-                    String(try { s[i:i + 1].to_string() } catch { _ => "" })
-                  None => Undefined
-                }
+            let value = if has_prop {
+              self.get_prop_value(receiver, key)
+            } else {
+              match str_value {
+                Some(s) => String(s[i:i + 1].to_string() catch { _ => "" })
+                None => Undefined
               }
-            let args_array = [
-              value,
-              Number(i.to_double()),
-              receiver,
-            ]
-            let ok = self.call_function(
-              callback,
-              this_arg,
-              args_array,
-            )
+            }
+            let args_array = [value, Number(i.to_double()), receiver]
+            let ok = self.call_function(callback, this_arg, args_array)
             if not(ok.to_boolean()) {
               return Bool(false)
             }
@@ -1527,13 +1733,14 @@ fn JSInterpreter::array_like_method(
       }
     "some" =>
       if args.length() == 0 {
-        self.set_error_kind("TypeError", "Array.prototype.some requires a callback")
+        self.set_error_kind(
+          "TypeError", "Array.prototype.some requires a callback",
+        )
       } else {
         let callback = args[0]
         if not(self.is_callable(callback)) {
           return self.set_error_kind(
-            "TypeError",
-            "Array.prototype.some requires a callback",
+            "TypeError", "Array.prototype.some requires a callback",
           )
         }
         let this_arg = if args.length() > 1 { args[1] } else { Undefined }
@@ -1541,32 +1748,21 @@ fn JSInterpreter::array_like_method(
         while i < len {
           let key = i.to_string()
           let has_prop = js_has_prop(receiver, key)
-          let use_string =
-            match str_value {
-              Some(s) => not(has_prop) && i >= 0 && i < s.length()
-              None => false
-            }
+          let use_string = match str_value {
+            Some(s) => not(has_prop) && i >= 0 && i < s.length()
+            None => false
+          }
           if has_prop || use_string {
-            let value =
-              if has_prop {
-                self.get_prop_value(receiver, key)
-              } else {
-                match str_value {
-                  Some(s) =>
-                    String(try { s[i:i + 1].to_string() } catch { _ => "" })
-                  None => Undefined
-                }
+            let value = if has_prop {
+              self.get_prop_value(receiver, key)
+            } else {
+              match str_value {
+                Some(s) => String(s[i:i + 1].to_string() catch { _ => "" })
+                None => Undefined
               }
-            let args_array = [
-              value,
-              Number(i.to_double()),
-              receiver,
-            ]
-            let ok = self.call_function(
-              callback,
-              this_arg,
-              args_array,
-            )
+            }
+            let args_array = [value, Number(i.to_double()), receiver]
+            let ok = self.call_function(callback, this_arg, args_array)
             if ok.to_boolean() {
               return Bool(true)
             }
@@ -1586,32 +1782,21 @@ fn JSInterpreter::array_like_method(
         while i < len {
           let key = i.to_string()
           let has_prop = js_has_prop(receiver, key)
-          let use_string =
-            match str_value {
-              Some(s) => not(has_prop) && i >= 0 && i < s.length()
-              None => false
-            }
+          let use_string = match str_value {
+            Some(s) => not(has_prop) && i >= 0 && i < s.length()
+            None => false
+          }
           if has_prop || use_string {
-            let item =
-              if has_prop {
-                self.get_prop_value(receiver, key)
-              } else {
-                match str_value {
-                  Some(s) =>
-                    String(try { s[i:i + 1].to_string() } catch { _ => "" })
-                  None => Undefined
-                }
+            let item = if has_prop {
+              self.get_prop_value(receiver, key)
+            } else {
+              match str_value {
+                Some(s) => String(s[i:i + 1].to_string() catch { _ => "" })
+                None => Undefined
               }
-            let args_array = [
-              item,
-              Number(i.to_double()),
-              receiver,
-            ]
-            let found = self.call_function(
-              callback,
-              this_arg,
-              args_array,
-            )
+            }
+            let args_array = [item, Number(i.to_double()), receiver]
+            let found = self.call_function(callback, this_arg, args_array)
             match found {
               Bool(true) => return item
               _ => ()
@@ -1634,32 +1819,21 @@ fn JSInterpreter::array_like_method(
         while i < len {
           let key = i.to_string()
           let has_prop = js_has_prop(receiver, key)
-          let use_string =
-            match str_value {
-              Some(s) => not(has_prop) && i >= 0 && i < s.length()
-              None => false
-            }
+          let use_string = match str_value {
+            Some(s) => not(has_prop) && i >= 0 && i < s.length()
+            None => false
+          }
           if has_prop || use_string {
-            let item =
-              if has_prop {
-                self.get_prop_value(receiver, key)
-              } else {
-                match str_value {
-                  Some(s) =>
-                    String(try { s[i:i + 1].to_string() } catch { _ => "" })
-                  None => Undefined
-                }
+            let item = if has_prop {
+              self.get_prop_value(receiver, key)
+            } else {
+              match str_value {
+                Some(s) => String(s[i:i + 1].to_string() catch { _ => "" })
+                None => Undefined
               }
-            let args_array = [
-              item,
-              Number(i.to_double()),
-              receiver,
-            ]
-            let found = self.call_function(
-              callback,
-              this_arg,
-              args_array,
-            )
+            }
+            let args_array = [item, Number(i.to_double()), receiver]
+            let found = self.call_function(callback, this_arg, args_array)
             match found {
               Bool(true) => return Number(i.to_double())
               _ => ()
@@ -1682,32 +1856,21 @@ fn JSInterpreter::array_like_method(
         while i >= 0 {
           let key = i.to_string()
           let has_prop = js_has_prop(receiver, key)
-          let use_string =
-            match str_value {
-              Some(s) => not(has_prop) && i >= 0 && i < s.length()
-              None => false
-            }
+          let use_string = match str_value {
+            Some(s) => not(has_prop) && i >= 0 && i < s.length()
+            None => false
+          }
           if has_prop || use_string {
-            let item =
-              if has_prop {
-                self.get_prop_value(receiver, key)
-              } else {
-                match str_value {
-                  Some(s) =>
-                    String(try { s[i:i + 1].to_string() } catch { _ => "" })
-                  None => Undefined
-                }
+            let item = if has_prop {
+              self.get_prop_value(receiver, key)
+            } else {
+              match str_value {
+                Some(s) => String(s[i:i + 1].to_string() catch { _ => "" })
+                None => Undefined
               }
-            let args_array = [
-              item,
-              Number(i.to_double()),
-              receiver,
-            ]
-            let found = self.call_function(
-              callback,
-              this_arg,
-              args_array,
-            )
+            }
+            let args_array = [item, Number(i.to_double()), receiver]
+            let found = self.call_function(callback, this_arg, args_array)
             match found {
               Bool(true) => return item
               _ => ()
@@ -1733,32 +1896,21 @@ fn JSInterpreter::array_like_method(
         while i >= 0 {
           let key = i.to_string()
           let has_prop = js_has_prop(receiver, key)
-          let use_string =
-            match str_value {
-              Some(s) => not(has_prop) && i >= 0 && i < s.length()
-              None => false
-            }
+          let use_string = match str_value {
+            Some(s) => not(has_prop) && i >= 0 && i < s.length()
+            None => false
+          }
           if has_prop || use_string {
-            let item =
-              if has_prop {
-                self.get_prop_value(receiver, key)
-              } else {
-                match str_value {
-                  Some(s) =>
-                    String(try { s[i:i + 1].to_string() } catch { _ => "" })
-                  None => Undefined
-                }
+            let item = if has_prop {
+              self.get_prop_value(receiver, key)
+            } else {
+              match str_value {
+                Some(s) => String(s[i:i + 1].to_string() catch { _ => "" })
+                None => Undefined
               }
-            let args_array = [
-              item,
-              Number(i.to_double()),
-              receiver,
-            ]
-            let found = self.call_function(
-              callback,
-              this_arg,
-              args_array,
-            )
+            }
+            let args_array = [item, Number(i.to_double()), receiver]
+            let found = self.call_function(callback, this_arg, args_array)
             match found {
               Bool(true) => return Number(i.to_double())
               _ => ()
@@ -1810,6 +1962,7 @@ fn JSInterpreter::array_like_method(
             self.set_prop_value(receiver, to_key, value)
           } else {
             let _ = js_delete_prop(receiver, to_key)
+
           }
           k += 1
         }
@@ -1832,6 +1985,7 @@ fn JSInterpreter::array_like_method(
           self.set_prop_value(receiver, to_key, value)
         } else {
           let _ = js_delete_prop(receiver, to_key)
+
         }
         if k == 0 {
           break
@@ -1846,8 +2000,16 @@ fn JSInterpreter::array_like_method(
       Number(new_len.to_double())
     }
     "slice" => {
-      let mut start = if args.length() > 0 { args[0].to_number().to_int() } else { 0 }
-      let mut end = if args.length() > 1 { args[1].to_number().to_int() } else { len }
+      let mut start = if args.length() > 0 {
+        args[0].to_number().to_int()
+      } else {
+        0
+      }
+      let mut end = if args.length() > 1 {
+        args[1].to_number().to_int()
+      } else {
+        len
+      }
       if start < 0 {
         start = len + start
         if start < 0 {
@@ -1875,22 +2037,19 @@ fn JSInterpreter::array_like_method(
           for i in start..<end {
             let key = i.to_string()
             let has_prop = js_has_prop(receiver, key)
-            let use_string =
-              match str_value {
-                Some(s) => not(has_prop) && i >= 0 && i < s.length()
-                None => false
-              }
+            let use_string = match str_value {
+              Some(s) => not(has_prop) && i >= 0 && i < s.length()
+              None => false
+            }
             if has_prop || use_string {
-              let value =
-                if has_prop {
-                  self.get_prop_value(receiver, key)
-                } else {
-                  match str_value {
-                    Some(s) =>
-                      String(try { s[i:i + 1].to_string() } catch { _ => "" })
-                    None => Undefined
-                  }
+              let value = if has_prop {
+                self.get_prop_value(receiver, key)
+              } else {
+                match str_value {
+                  Some(s) => String(s[i:i + 1].to_string() catch { _ => "" })
+                  None => Undefined
                 }
+              }
               out_arr.items.push(value)
               out_arr.present.push(true)
             } else {
@@ -1939,8 +2098,16 @@ fn JSInterpreter::array_like_method(
     }
     "fill" => {
       let value = if args.length() > 0 { args[0] } else { Undefined }
-      let mut start = if args.length() > 1 { args[1].to_number().to_int() } else { 0 }
-      let mut end = if args.length() > 2 { args[2].to_number().to_int() } else { len }
+      let mut start = if args.length() > 1 {
+        args[1].to_number().to_int()
+      } else {
+        0
+      }
+      let mut end = if args.length() > 2 {
+        args[2].to_number().to_int()
+      } else {
+        len
+      }
       if start < 0 {
         start = len + start
         if start < 0 {
@@ -1966,7 +2133,11 @@ fn JSInterpreter::array_like_method(
       receiver
     }
     "flat" => {
-      let depth = if args.length() > 0 { args[0].to_number().to_int() } else { 1 }
+      let depth = if args.length() > 0 {
+        args[0].to_number().to_int()
+      } else {
+        1
+      }
       if len <= 0 {
         return js_new_array()
       }
@@ -1974,22 +2145,19 @@ fn JSInterpreter::array_like_method(
       for i in 0..<len {
         let key = i.to_string()
         let has_prop = js_has_prop(receiver, key)
-        let use_string =
-          match str_value {
-            Some(s) => not(has_prop) && i >= 0 && i < s.length()
-            None => false
-          }
+        let use_string = match str_value {
+          Some(s) => not(has_prop) && i >= 0 && i < s.length()
+          None => false
+        }
         if has_prop || use_string {
-          let value =
-            if has_prop {
-              self.get_prop_value(receiver, key)
-            } else {
-              match str_value {
-                Some(s) =>
-                  String(try { s[i:i + 1].to_string() } catch { _ => "" })
-                None => Undefined
-              }
+          let value = if has_prop {
+            self.get_prop_value(receiver, key)
+          } else {
+            match str_value {
+              Some(s) => String(s[i:i + 1].to_string() catch { _ => "" })
+              None => Undefined
             }
+          }
           items.push(value)
         }
       }
@@ -2004,7 +2172,11 @@ fn JSInterpreter::array_like_method(
       js_array_from(result)
     }
     "at" => {
-      let mut idx = if args.length() > 0 { args[0].to_number().to_int() } else { 0 }
+      let mut idx = if args.length() > 0 {
+        args[0].to_number().to_int()
+      } else {
+        0
+      }
       if idx < 0 {
         idx = len + idx
       }
@@ -2017,7 +2189,7 @@ fn JSInterpreter::array_like_method(
         } else {
           match str_value {
             Some(s) if idx >= 0 && idx < s.length() =>
-              String(try { s[idx:idx + 1].to_string() } catch { _ => "" })
+              String(s[idx:idx + 1].to_string() catch { _ => "" })
             _ => Undefined
           }
         }
@@ -2028,15 +2200,20 @@ fn JSInterpreter::array_like_method(
 }
 
 ///|
-fn JSInterpreter::eval_script_source(self : JSInterpreter, source : String) -> JSValue {
+fn JSInterpreter::eval_script_source(
+  self : JSInterpreter,
+  source : String,
+) -> JSValue {
   self.eval_script_source_with_strict(source, false)
 }
 
 ///|
-fn JSInterpreter::eval_script_source_with_strict(self : JSInterpreter, source : String, inherit_strict : Bool) -> JSValue {
-  let block = try {
-    @parser.parse_block_from_source_strict(source, inherit_strict)
-  } catch {
+fn JSInterpreter::eval_script_source_with_strict(
+  self : JSInterpreter,
+  source : String,
+  inherit_strict : Bool,
+) -> JSValue {
+  let block = @parser.parse_block_from_source_strict(source, inherit_strict) catch {
     @parser.ParseError::ParseError(msg) => {
       let _ = self.set_error_kind("SyntaxError", msg)
       return Undefined
@@ -2044,37 +2221,42 @@ fn JSInterpreter::eval_script_source_with_strict(self : JSInterpreter, source : 
   }
   self.hoist_block(block, self.global_env)
   // Use exec_block_for_eval to properly track completion values
-  let result =
-    match self.exec_block_for_eval(block, self.global_env) {
-      // For break/continue signals, use the completion value with UpdateEmpty
-      (Some(BreakSignal(_)), completion) | (Some(ContinueSignal(_)), completion) =>
-        match completion {
-          Empty => JSValue::Undefined
-          _ => completion
-        }
-      // For other signals (errors, return), return the value
-      (Some(val), _) => val
-      // Normal completion
-      (None, completion) =>
-        // Convert Empty to Undefined for final result
-        match completion {
-          Empty => JSValue::Undefined
-          _ => completion
-        }
-    }
+  let result = match self.exec_block_for_eval(block, self.global_env) {
+    // For break/continue signals, use the completion value with UpdateEmpty
+    (Some(BreakSignal(_)), completion)
+    | (Some(ContinueSignal(_)), completion) =>
+      match completion {
+        Empty => JSValue::Undefined
+        _ => completion
+      }
+    // For other signals (errors, return), return the value
+    (Some(val), _) => val
+    // Normal completion
+    (None, completion) =>
+      // Convert Empty to Undefined for final result
+      match completion {
+        Empty => JSValue::Undefined
+        _ => completion
+      }
+  }
   self.drain_microtasks()
   result
 }
 
 ///|
+
 ///|
-fn JSInterpreter::new_array_iterator(self : JSInterpreter, receiver : JSValue) -> JSValue {
+fn JSInterpreter::new_array_iterator(
+  self : JSInterpreter,
+  receiver : JSValue,
+) -> JSValue {
   let iter = self.new_object()
   let iterator_ctor = self.global_env.get("Iterator")
   let iterator_proto = js_get_prop(iterator_ctor, "prototype")
   match iterator_proto {
     Object(_) | Function(_) | Array(_) => {
       let _ = js_set_prop(iter, "__proto__", iterator_proto)
+
     }
     _ => ()
   }
@@ -2090,13 +2272,17 @@ fn JSInterpreter::new_array_iterator(self : JSInterpreter, receiver : JSValue) -
 }
 
 ///|
-fn JSInterpreter::new_string_iterator(self : JSInterpreter, value : String) -> JSValue {
+fn JSInterpreter::new_string_iterator(
+  self : JSInterpreter,
+  value : String,
+) -> JSValue {
   let iter = self.new_object()
   let iterator_ctor = self.global_env.get("Iterator")
   let iterator_proto = js_get_prop(iterator_ctor, "prototype")
   match iterator_proto {
     Object(_) | Function(_) | Array(_) => {
       let _ = js_set_prop(iter, "__proto__", iterator_proto)
+
     }
     _ => ()
   }
@@ -2112,7 +2298,10 @@ fn JSInterpreter::new_string_iterator(self : JSInterpreter, value : String) -> J
 }
 
 ///|
-fn JSInterpreter::own_property_keys(_self : JSInterpreter, obj : JSValue) -> Array[String] {
+fn JSInterpreter::own_property_keys(
+  _self : JSInterpreter,
+  obj : JSValue,
+) -> Array[String] {
   let keys : Array[String] = []
   match obj {
     Function(closure) =>
@@ -2218,7 +2407,7 @@ fn JSInterpreter::lookup_own_prop(
       } else {
         let idx = @strconv.parse_int(key) catch { _ => -1 }
         if idx >= 0 && idx < s.length() {
-          let ch = JSValue::String(try { s[idx:idx + 1].to_string() } catch { _ => "" })
+          let ch = JSValue::String(s[idx:idx + 1].to_string() catch { _ => "" })
           Some({
             key,
             value: ch,
@@ -2252,8 +2441,7 @@ fn JSInterpreter::define_property(
   }
   if not(is_obj) {
     return self.set_error_kind(
-      "TypeError",
-      "Property description must be an object",
+      "TypeError", "Property description must be an object",
     )
   }
   let has_get = self.has_own_prop(desc, "get")
@@ -2261,10 +2449,7 @@ fn JSInterpreter::define_property(
   let has_value = self.has_own_prop(desc, "value")
   let has_writable = self.has_own_prop(desc, "writable")
   if (has_get || has_set) && (has_value || has_writable) {
-    return self.set_error_kind(
-      "TypeError",
-      "Invalid property descriptor",
-    )
+    return self.set_error_kind("TypeError", "Invalid property descriptor")
   }
   let current = self.lookup_own_prop(target, key)
   let enumerable = if self.has_own_prop(desc, "enumerable") {
@@ -2284,30 +2469,30 @@ fn JSInterpreter::define_property(
     }
   }
   if has_get || has_set {
-    let get_val =
-      if has_get {
-        self.get_prop_value(desc, "get")
-      } else {
-        match current {
-          Some(prop) => match prop.get {
+    let get_val = if has_get {
+      self.get_prop_value(desc, "get")
+    } else {
+      match current {
+        Some(prop) =>
+          match prop.get {
             Some(g) => g
             None => Undefined
           }
-          None => Undefined
-        }
+        None => Undefined
       }
-    let set_val =
-      if has_set {
-        self.get_prop_value(desc, "set")
-      } else {
-        match current {
-          Some(prop) => match prop.set {
+    }
+    let set_val = if has_set {
+      self.get_prop_value(desc, "set")
+    } else {
+      match current {
+        Some(prop) =>
+          match prop.set {
             Some(s) => s
             None => Undefined
           }
-          None => Undefined
-        }
+        None => Undefined
       }
+    }
     if not(get_val.is_undefined()) && not(self.is_callable(get_val)) {
       return self.set_error_kind("TypeError", "Getter must be callable")
     }
@@ -2322,26 +2507,19 @@ fn JSInterpreter::define_property(
       Undefined => None
       _ => Some(set_val)
     }
-    let _ =
-      js_define_accessor_prop(
-        target,
-        key,
-        getter,
-        setter,
-        enumerable,
-        configurable,
-      )
+    let _ = js_define_accessor_prop(
+      target, key, getter, setter, enumerable, configurable,
+    )
     target
   } else {
-    let value =
-      if has_value {
-        self.get_prop_value(desc, "value")
-      } else {
-        match current {
-          Some(prop) => prop.value
-          None => Undefined
-        }
+    let value = if has_value {
+      self.get_prop_value(desc, "value")
+    } else {
+      match current {
+        Some(prop) => prop.value
+        None => Undefined
       }
+    }
     let writable = if has_writable {
       self.get_prop_value(desc, "writable").to_boolean()
     } else {
@@ -2350,8 +2528,9 @@ fn JSInterpreter::define_property(
         None => false
       }
     }
-    let _ =
-      js_define_data_prop(target, key, value, writable, enumerable, configurable)
+    let _ = js_define_data_prop(
+      target, key, value, writable, enumerable, configurable,
+    )
     target
   }
 }
@@ -2444,12 +2623,13 @@ fn unescape_string_value(value : String) -> String {
     let unit = value[k]
     if unit == percent {
       if k + 5 < len && value[k + 1] == u_char {
-        match (
-          hex_value(value[k + 2]),
-          hex_value(value[k + 3]),
-          hex_value(value[k + 4]),
-          hex_value(value[k + 5]),
-        ) {
+        match
+          (
+            hex_value(value[k + 2]),
+            hex_value(value[k + 3]),
+            hex_value(value[k + 4]),
+            hex_value(value[k + 5]),
+          ) {
           (Some(a), Some(b), Some(c), Some(d)) => {
             let code = (a << 12) | (b << 8) | (c << 4) | d
             let ch = code.to_uint16().unsafe_to_char()
@@ -2484,12 +2664,16 @@ fn unescape_string_value(value : String) -> String {
 
 ///|
 fn is_leap_year(year : Int) -> Bool {
-  (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
+  (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
 }
 
 ///|
 fn days_in_year(year : Int) -> Int {
-  if is_leap_year(year) { 366 } else { 365 }
+  if is_leap_year(year) {
+    366
+  } else {
+    365
+  }
 }
 
 ///|
@@ -2518,7 +2702,7 @@ fn floor_div(a : Int, b : Int) -> Int {
   } else if a >= 0 {
     a / b
   } else {
-    -(((-a + b - 1) / b))
+    -((-a + b - 1) / b)
   }
 }
 
@@ -2570,8 +2754,7 @@ fn make_date_time(
     y -= 1
   }
   let day = days_before_year(y) + days_before_month(y, m) + (date - 1)
-  let time_ms =
-    (((hour * 60 + minute) * 60 + second) * 1000 + ms)
+  let time_ms = ((hour * 60 + minute) * 60 + second) * 1000 + ms
   day.to_double() * 86400000.0 + time_ms.to_double()
 }
 
@@ -2624,7 +2807,10 @@ fn time_clip(t : Double) -> Double {
 }
 
 ///|
-fn JSInterpreter::date_time_value(self : JSInterpreter, this_arg : JSValue) -> Double? {
+fn JSInterpreter::date_time_value(
+  self : JSInterpreter,
+  this_arg : JSValue,
+) -> Double? {
   match this_arg {
     Object(_) | Array(_) | Function(_) => ()
     _ => {
@@ -2653,9 +2839,9 @@ fn JSInterpreter::call_native(
   args : Array[JSValue],
 ) -> JSValue {
   if name.has_prefix("Array.prototype") {
-    let mut method_name = (try { name[15:] } catch { _ => "" }).to_string()
+    let mut method_name = (name[15:] catch { _ => "" }).to_string()
     if method_name.has_prefix(".") {
-      method_name = (try { method_name[1:] } catch { _ => "" }).to_string()
+      method_name = (method_name[1:] catch { _ => "" }).to_string()
     }
     if method_name == "[@@iterator]" {
       method_name = "@@iterator"
@@ -2666,7 +2852,8 @@ fn JSInterpreter::call_native(
           "TypeError",
           "Array.prototype." + method_name + " called on null or undefined",
         )
-      Bool(_) | Number(_) | String(_) => self.wrap_primitive(self.global_env, this_arg)
+      Bool(_) | Number(_) | String(_) =>
+        self.wrap_primitive(self.global_env, this_arg)
       _ => this_arg
     }
     if method_name == "@@iterator" {
@@ -2678,9 +2865,9 @@ fn JSInterpreter::call_native(
     }
   }
   if name.has_prefix("String.prototype") {
-    let mut method_name = (try { name[16:] } catch { _ => "" }).to_string()
+    let mut method_name = (name[16:] catch { _ => "" }).to_string()
     if method_name.has_prefix(".") {
-      method_name = (try { method_name[1:] } catch { _ => "" }).to_string()
+      method_name = (method_name[1:] catch { _ => "" }).to_string()
     }
     if method_name == "[@@iterator]" {
       method_name = "@@iterator"
@@ -2692,19 +2879,18 @@ fn JSInterpreter::call_native(
           "String.prototype." + method_name + " called on null or undefined",
         )
       _ => {
-        let s =
-          match this_arg {
-            String(value) => value
-            Object(_) | Array(_) | Function(_) =>
-              match js_get_prop(this_arg, "value") {
-                String(value) => value
-                Number(n) => n.to_string()
-                Bool(true) => "true"
-                Bool(false) => "false"
-                _ => self.to_string_value(this_arg)
-              }
-            _ => this_arg.to_js_string()
-          }
+        let s = match this_arg {
+          String(value) => value
+          Object(_) | Array(_) | Function(_) =>
+            match js_get_prop(this_arg, "value") {
+              String(value) => value
+              Number(n) => n.to_string()
+              Bool(true) => "true"
+              Bool(false) => "false"
+              _ => self.to_string_value(this_arg)
+            }
+          _ => this_arg.to_js_string()
+        }
         if method_name == "@@iterator" {
           return self.new_string_iterator(s)
         }
@@ -2715,36 +2901,34 @@ fn JSInterpreter::call_native(
   match name {
     "Promise" =>
       self.set_error_kind(
-        "TypeError",
-        "Promise constructor must be called with new",
+        "TypeError", "Promise constructor must be called with new",
       )
     "Promise.resolve" => {
       let value = if args.length() > 0 { args[0] } else { Undefined }
       match this_arg {
-        Object(_) | Function(_) => self.promise_static_resolve_with_ctor(this_arg, value)
+        Object(_) | Function(_) =>
+          self.promise_static_resolve_with_ctor(this_arg, value)
         _ =>
           self.set_error_kind(
-            "TypeError",
-            "Promise.resolve called on non-object",
+            "TypeError", "Promise.resolve called on non-object",
           )
       }
     }
     "Promise.reject" => {
       let reason = if args.length() > 0 { args[0] } else { Undefined }
       match this_arg {
-        Object(_) | Function(_) => self.promise_static_reject_with_ctor(this_arg, reason)
+        Object(_) | Function(_) =>
+          self.promise_static_reject_with_ctor(this_arg, reason)
         _ =>
           self.set_error_kind(
-            "TypeError",
-            "Promise.reject called on non-object",
+            "TypeError", "Promise.reject called on non-object",
           )
       }
     }
     "Promise.prototype.then" => {
       if not(self.is_promise(this_arg)) {
         return self.set_error_kind(
-          "TypeError",
-          "Promise.prototype.then called on non-Promise",
+          "TypeError", "Promise.prototype.then called on non-Promise",
         )
       }
       let on_fulfilled = if args.length() > 0 { args[0] } else { Undefined }
@@ -2754,22 +2938,26 @@ fn JSInterpreter::call_native(
         Some(err) => return err
         None => ()
       }
-      let (result_promise, _resolve, _reject) = self.promise_new_capability(ctor)
+      let (result_promise, _resolve, _reject) = self.promise_new_capability(
+        ctor,
+      )
       match self.peek_error() {
         Some(err) => return err
         None => ()
       }
-      self.perform_promise_then(this_arg, on_fulfilled, on_rejected, result_promise)
+      self.perform_promise_then(
+        this_arg, on_fulfilled, on_rejected, result_promise,
+      )
     }
     "Promise.prototype.catch" => {
       let on_rejected = if args.length() > 0 { args[0] } else { Undefined }
       let target = match this_arg {
         Undefined | Null =>
           return self.set_error_kind(
-            "TypeError",
-            "Promise.prototype.catch called on null or undefined",
+            "TypeError", "Promise.prototype.catch called on null or undefined",
           )
-        Bool(_) | Number(_) | String(_) => self.wrap_primitive(self.global_env, this_arg)
+        Bool(_) | Number(_) | String(_) =>
+          self.wrap_primitive(self.global_env, this_arg)
         _ => this_arg
       }
       let then_method = self.get_prop_value(target, "then")
@@ -2778,7 +2966,9 @@ fn JSInterpreter::call_native(
         None => ()
       }
       if not(self.is_callable(then_method)) {
-        return self.set_error_kind("TypeError", "Promise.prototype.catch called on non-callable then")
+        return self.set_error_kind(
+          "TypeError", "Promise.prototype.catch called on non-callable then",
+        )
       }
       self.call_function(then_method, this_arg, [Undefined, on_rejected])
     }
@@ -2787,10 +2977,10 @@ fn JSInterpreter::call_native(
       let target = match this_arg {
         Undefined | Null =>
           return self.set_error_kind(
-            "TypeError",
-            "Promise.prototype.finally called on null or undefined",
+            "TypeError", "Promise.prototype.finally called on null or undefined",
           )
-        Bool(_) | Number(_) | String(_) => self.wrap_primitive(self.global_env, this_arg)
+        Bool(_) | Number(_) | String(_) =>
+          self.wrap_primitive(self.global_env, this_arg)
         _ => this_arg
       }
       let then_method = self.get_prop_value(target, "then")
@@ -2799,10 +2989,14 @@ fn JSInterpreter::call_native(
         None => ()
       }
       if not(self.is_callable(then_method)) {
-        return self.set_error_kind("TypeError", "Promise.prototype.finally called on non-callable then")
+        return self.set_error_kind(
+          "TypeError", "Promise.prototype.finally called on non-callable then",
+        )
       }
       if not(self.is_callable(on_finally)) {
-        return self.call_function(then_method, this_arg, [on_finally, on_finally])
+        return self.call_function(then_method, this_arg, [
+          on_finally, on_finally,
+        ])
       }
       let ctor = self.promise_species_constructor(this_arg)
       match self.peek_error() {
@@ -2817,18 +3011,18 @@ fn JSInterpreter::call_native(
         "Promise.__finally_reject__",
         [on_finally, ctor],
       )
-      self.call_function(then_method, this_arg, [fulfill_handler, reject_handler])
+      self.call_function(then_method, this_arg, [
+        fulfill_handler, reject_handler,
+      ])
     }
-    "Promise.withResolvers" => {
+    "Promise.withResolvers" =>
       match this_arg {
         Object(_) | Function(_) => self.promise_with_resolvers(this_arg)
         _ =>
           self.set_error_kind(
-            "TypeError",
-            "Promise.withResolvers called on non-object",
+            "TypeError", "Promise.withResolvers called on non-object",
           )
       }
-    }
     "Promise.try" => {
       let callback = if args.length() > 0 { args[0] } else { Undefined }
       let rest_args : Array[JSValue] = []
@@ -2842,11 +3036,14 @@ fn JSInterpreter::call_native(
       match this_arg {
         Object(_) | Function(_) =>
           if not(self.is_constructor(this_arg)) {
-            self.set_error_kind("TypeError", "Promise.try called on non-constructor")
+            self.set_error_kind(
+              "TypeError", "Promise.try called on non-constructor",
+            )
           } else {
             self.promise_try(this_arg, callback, rest_args)
           }
-        _ => self.set_error_kind("TypeError", "Promise.try called on non-object")
+        _ =>
+          self.set_error_kind("TypeError", "Promise.try called on non-object")
       }
     }
     "Promise[@@species]" => this_arg
@@ -2917,18 +3114,24 @@ fn JSInterpreter::call_native(
           let cur_resolve = js_get_prop(cap, "resolve")
           let cur_reject = js_get_prop(cap, "reject")
           if not(cur_resolve.is_undefined()) || not(cur_reject.is_undefined()) {
-            return self.set_error_kind("TypeError", "Promise capability already initialized")
+            return self.set_error_kind(
+              "TypeError", "Promise capability already initialized",
+            )
           }
           let _ = js_set_prop(cap, "resolve", resolve)
           let _ = js_set_prop(cap, "reject", reject)
+
         }
         _ => ()
       }
       Undefined
     }
-    "Promise.__return_value__" => {
-      if args.length() > 0 { args[0] } else { Undefined }
-    }
+    "Promise.__return_value__" =>
+      if args.length() > 0 {
+        args[0]
+      } else {
+        Undefined
+      }
     "Promise.__throw_reason__" => {
       let reason = if args.length() > 0 { args[0] } else { Undefined }
       self.last_error = Some(reason)
@@ -2936,7 +3139,11 @@ fn JSInterpreter::call_native(
     }
     "Promise.__finally_fulfill__" => {
       let on_finally = if args.length() > 0 { args[0] } else { Undefined }
-      let ctor = if args.length() > 1 { args[1] } else { self.global_env.get("Promise") }
+      let ctor = if args.length() > 1 {
+        args[1]
+      } else {
+        self.global_env.get("Promise")
+      }
       let value = if args.length() > 2 { args[2] } else { Undefined }
       if self.is_callable(on_finally) {
         let result = self.call_function(on_finally, Undefined, [])
@@ -2947,8 +3154,12 @@ fn JSInterpreter::call_native(
             return err
           }
           None => {
-            let result_promise = self.promise_static_resolve_with_ctor(ctor, result)
-            let returner = self.make_bound_native("Promise.__return_value__", [value])
+            let result_promise = self.promise_static_resolve_with_ctor(
+              ctor, result,
+            )
+            let returner = self.make_bound_native("Promise.__return_value__", [
+              value,
+            ])
             return self.promise_then(result_promise, returner, Undefined)
           }
         }
@@ -2957,7 +3168,11 @@ fn JSInterpreter::call_native(
     }
     "Promise.__finally_reject__" => {
       let on_finally = if args.length() > 0 { args[0] } else { Undefined }
-      let ctor = if args.length() > 1 { args[1] } else { self.global_env.get("Promise") }
+      let ctor = if args.length() > 1 {
+        args[1]
+      } else {
+        self.global_env.get("Promise")
+      }
       let reason = if args.length() > 2 { args[2] } else { Undefined }
       if self.is_callable(on_finally) {
         let result = self.call_function(on_finally, Undefined, [])
@@ -2968,8 +3183,12 @@ fn JSInterpreter::call_native(
             return err
           }
           None => {
-            let result_promise = self.promise_static_resolve_with_ctor(ctor, result)
-            let thrower = self.make_bound_native("Promise.__throw_reason__", [reason])
+            let result_promise = self.promise_static_resolve_with_ctor(
+              ctor, result,
+            )
+            let thrower = self.make_bound_native("Promise.__throw_reason__", [
+              reason,
+            ])
             return self.promise_then(result_promise, thrower, Undefined)
           }
         }
@@ -2979,7 +3198,11 @@ fn JSInterpreter::call_native(
     }
     "Promise.__all_fulfill__" => {
       let state = if args.length() > 0 { args[0] } else { Undefined }
-      let index = if args.length() > 1 { args[1].to_number().to_int() } else { 0 }
+      let index = if args.length() > 1 {
+        args[1].to_number().to_int()
+      } else {
+        0
+      }
       let already = if args.length() > 2 { args[2] } else { Undefined }
       let value = if args.length() > 3 { args[3] } else { Undefined }
       match already {
@@ -2988,6 +3211,7 @@ fn JSInterpreter::call_native(
             Bool(true) => return Undefined
             _ => {
               let _ = js_set_prop(already, "__promise_once", Bool(true))
+
             }
           }
         _ => ()
@@ -3006,6 +3230,7 @@ fn JSInterpreter::call_native(
       if next == 0 {
         let resolve = js_get_prop(state, "__all_resolve")
         let _ = self.call_function(resolve, Undefined, [results])
+
       }
       Undefined
     }
@@ -3019,6 +3244,7 @@ fn JSInterpreter::call_native(
             Bool(true) => return Undefined
             _ => {
               let _ = js_set_prop(already, "__promise_once", Bool(true))
+
             }
           }
         _ => ()
@@ -3037,7 +3263,11 @@ fn JSInterpreter::call_native(
     }
     "Promise.__all_settled_fulfill__" => {
       let state = if args.length() > 0 { args[0] } else { Undefined }
-      let index = if args.length() > 1 { args[1].to_number().to_int() } else { 0 }
+      let index = if args.length() > 1 {
+        args[1].to_number().to_int()
+      } else {
+        0
+      }
       let already = if args.length() > 2 { args[2] } else { Undefined }
       let value = if args.length() > 3 { args[3] } else { Undefined }
       match already {
@@ -3046,6 +3276,7 @@ fn JSInterpreter::call_native(
             Bool(true) => return Undefined
             _ => {
               let _ = js_set_prop(already, "__promise_once", Bool(true))
+
             }
           }
         _ => ()
@@ -3067,12 +3298,17 @@ fn JSInterpreter::call_native(
       if next == 0 {
         let resolve = js_get_prop(state, "__all_resolve")
         let _ = self.call_function(resolve, Undefined, [results])
+
       }
       Undefined
     }
     "Promise.__all_settled_reject__" => {
       let state = if args.length() > 0 { args[0] } else { Undefined }
-      let index = if args.length() > 1 { args[1].to_number().to_int() } else { 0 }
+      let index = if args.length() > 1 {
+        args[1].to_number().to_int()
+      } else {
+        0
+      }
       let already = if args.length() > 2 { args[2] } else { Undefined }
       let reason = if args.length() > 3 { args[3] } else { Undefined }
       match already {
@@ -3081,6 +3317,7 @@ fn JSInterpreter::call_native(
             Bool(true) => return Undefined
             _ => {
               let _ = js_set_prop(already, "__promise_once", Bool(true))
+
             }
           }
         _ => ()
@@ -3102,12 +3339,17 @@ fn JSInterpreter::call_native(
       if next == 0 {
         let resolve = js_get_prop(state, "__all_resolve")
         let _ = self.call_function(resolve, Undefined, [results])
+
       }
       Undefined
     }
     "Promise.__any_reject__" => {
       let state = if args.length() > 0 { args[0] } else { Undefined }
-      let index = if args.length() > 1 { args[1].to_number().to_int() } else { 0 }
+      let index = if args.length() > 1 {
+        args[1].to_number().to_int()
+      } else {
+        0
+      }
       let already = if args.length() > 2 { args[2] } else { Undefined }
       let reason = if args.length() > 3 { args[3] } else { Undefined }
       match already {
@@ -3116,6 +3358,7 @@ fn JSInterpreter::call_native(
             Bool(true) => return Undefined
             _ => {
               let _ = js_set_prop(already, "__promise_once", Bool(true))
+
             }
           }
         _ => ()
@@ -3135,6 +3378,7 @@ fn JSInterpreter::call_native(
         let reject = js_get_prop(state, "__any_reject")
         let err = self.make_aggregate_error(errors)
         let _ = self.call_function(reject, Undefined, [err])
+
       }
       Undefined
     }
@@ -3157,12 +3401,10 @@ fn JSInterpreter::call_native(
     "Promise.all" => {
       let iter = if args.length() > 0 { args[0] } else { Undefined }
       match this_arg {
-        Object(_) | Function(_) => self.promise_all_with_ctor(this_arg, iter, false)
+        Object(_) | Function(_) =>
+          self.promise_all_with_ctor(this_arg, iter, false)
         _ =>
-          self.set_error_kind(
-            "TypeError",
-            "Promise.all called on non-object",
-          )
+          self.set_error_kind("TypeError", "Promise.all called on non-object")
       }
     }
     "Promise.race" => {
@@ -3170,20 +3412,17 @@ fn JSInterpreter::call_native(
       match this_arg {
         Object(_) | Function(_) => self.promise_race_with_ctor(this_arg, iter)
         _ =>
-          self.set_error_kind(
-            "TypeError",
-            "Promise.race called on non-object",
-          )
+          self.set_error_kind("TypeError", "Promise.race called on non-object")
       }
     }
     "Promise.allSettled" => {
       let iter = if args.length() > 0 { args[0] } else { Undefined }
       match this_arg {
-        Object(_) | Function(_) => self.promise_all_with_ctor(this_arg, iter, true)
+        Object(_) | Function(_) =>
+          self.promise_all_with_ctor(this_arg, iter, true)
         _ =>
           self.set_error_kind(
-            "TypeError",
-            "Promise.allSettled called on non-object",
+            "TypeError", "Promise.allSettled called on non-object",
           )
       }
     }
@@ -3192,16 +3431,15 @@ fn JSInterpreter::call_native(
       match this_arg {
         Object(_) | Function(_) => self.promise_any_with_ctor(this_arg, iter)
         _ =>
-          self.set_error_kind(
-            "TypeError",
-            "Promise.any called on non-object",
-          )
+          self.set_error_kind("TypeError", "Promise.any called on non-object")
       }
     }
     "queueMicrotask" => {
       let callback = if args.length() > 0 { args[0] } else { Undefined }
       if not(self.is_callable(callback)) {
-        return self.set_error_kind("TypeError", "queueMicrotask callback is not callable")
+        return self.set_error_kind(
+          "TypeError", "queueMicrotask callback is not callable",
+        )
       }
       self.microtasks.push({
         handler: callback,
@@ -3229,7 +3467,8 @@ fn JSInterpreter::call_native(
       let proto = if args.length() > 0 { args[0] } else { Undefined }
       match proto {
         Null => js_new_object_with_proto(None)
-        Object(_) | Function(_) | Array(_) => js_new_object_with_proto(Some(proto))
+        Object(_) | Function(_) | Array(_) =>
+          js_new_object_with_proto(Some(proto))
         _ => self.new_object()
       }
     }
@@ -3239,18 +3478,21 @@ fn JSInterpreter::call_native(
         return self.proxy_get_prototype_of(target)
       }
       match target {
-        Object(map) => match map.prototype {
-          Some(p) => p
-          None => Null
-        }
-        Function(closure) => match closure.object_proto {
-          Some(p) => p
-          None => Null
-        }
-        Array(arr) => match arr.prototype {
-          Some(p) => p
-          None => Null
-        }
+        Object(map) =>
+          match map.prototype {
+            Some(p) => p
+            None => Null
+          }
+        Function(closure) =>
+          match closure.object_proto {
+            Some(p) => p
+            None => Null
+          }
+        Array(arr) =>
+          match arr.prototype {
+            Some(p) => p
+            None => Null
+          }
         _ => Undefined
       }
     }
@@ -3352,7 +3594,11 @@ fn JSInterpreter::call_native(
           } else {
             let idx = @strconv.parse_int(key) catch { _ => -1 }
             if idx >= 0 && idx < s.length() {
-              let ch = JSValue::String(try { s[idx:idx + 1].to_string() } catch { _ => "" })
+              let ch = JSValue::String(
+                s[idx:idx + 1].to_string() catch {
+                  _ => ""
+                },
+              )
               self.make_data_descriptor(ch, false, true, false)
             } else {
               Undefined
@@ -3367,14 +3613,12 @@ fn JSInterpreter::call_native(
       let receiver = match target {
         Undefined | Null =>
           return self.set_error_kind(
-            "TypeError",
-            "Object.defineProperties called on null or undefined",
+            "TypeError", "Object.defineProperties called on null or undefined",
           )
         Object(_) | Function(_) | Array(_) => target
         _ =>
           return self.set_error_kind(
-            "TypeError",
-            "Object.defineProperties called on non-object",
+            "TypeError", "Object.defineProperties called on non-object",
           )
       }
       match props {
@@ -3405,14 +3649,12 @@ fn JSInterpreter::call_native(
       let receiver = match target {
         Undefined | Null =>
           return self.set_error_kind(
-            "TypeError",
-            "Object.defineProperty called on null or undefined",
+            "TypeError", "Object.defineProperty called on null or undefined",
           )
         Object(_) | Function(_) | Array(_) => target
         _ =>
           return self.set_error_kind(
-            "TypeError",
-            "Object.defineProperty called on non-object",
+            "TypeError", "Object.defineProperty called on non-object",
           )
       }
       let _ = self.define_property(receiver, key, desc)
@@ -3428,16 +3670,14 @@ fn JSInterpreter::call_native(
         Object(_) | Function(_) | Array(_) => ()
         _ =>
           return self.set_error_kind(
-            "TypeError",
-            "Object.setPrototypeOf called on non-object",
+            "TypeError", "Object.setPrototypeOf called on non-object",
           )
       }
       match proto {
         Object(_) | Function(_) | Array(_) | Null => ()
         _ =>
           return self.set_error_kind(
-            "TypeError",
-            "Object.setPrototypeOf called with invalid prototype",
+            "TypeError", "Object.setPrototypeOf called with invalid prototype",
           )
       }
       let _ = js_set_prop(target, "__proto__", proto)
@@ -3457,8 +3697,10 @@ fn JSInterpreter::call_native(
     "Iterator.prototype.some" => self.iterator_some(this_arg, args)
     "Iterator.prototype.find" => self.iterator_find(this_arg, args)
     "IteratorHelper.prototype.next" => self.iterator_helper_next(this_arg, args)
-    "IteratorHelper.prototype.return" => self.iterator_helper_return(this_arg, args)
-    "IteratorHelper.prototype.throw" => self.iterator_helper_throw(this_arg, args)
+    "IteratorHelper.prototype.return" =>
+      self.iterator_helper_return(this_arg, args)
+    "IteratorHelper.prototype.throw" =>
+      self.iterator_helper_throw(this_arg, args)
     "ArrayIterator.prototype.next" => {
       let target = js_get_prop(this_arg, "__iter_target")
       let idx_val = js_get_prop(this_arg, "__iter_index")
@@ -3469,7 +3711,11 @@ fn JSInterpreter::call_native(
         self.make_iter_result(Undefined, true)
       } else {
         let value = self.get_prop_value(target, idx.to_string())
-        let _ = js_set_prop(this_arg, "__iter_index", Number((idx + 1).to_double()))
+        let _ = js_set_prop(
+          this_arg,
+          "__iter_index",
+          Number((idx + 1).to_double()),
+        )
         self.make_iter_result(value, false)
       }
     }
@@ -3482,25 +3728,33 @@ fn JSInterpreter::call_native(
       let idx_val = js_get_prop(this_arg, "__iter_index")
       let idx = idx_val.to_number().to_int()
       if idx >= s.length() {
-        let _ = js_set_prop(this_arg, "__iter_index", Number(s.length().to_double()))
+        let _ = js_set_prop(
+          this_arg,
+          "__iter_index",
+          Number(s.length().to_double()),
+        )
         self.make_iter_result(Undefined, true)
       } else {
         let cu1 = s[idx]
-        let (next_idx, chunk) =
-          if cu1.is_leading_surrogate() && idx + 1 < s.length() {
-            let cu2 = s[idx + 1]
-            if cu2.is_trailing_surrogate() {
-              let str = try { s[idx:idx + 2].to_string() } catch { _ => "" }
-              (idx + 2, str)
-            } else {
-              let str = try { s[idx:idx + 1].to_string() } catch { _ => "" }
-              (idx + 1, str)
-            }
+        let (next_idx, chunk) = if cu1.is_leading_surrogate() &&
+          idx + 1 < s.length() {
+          let cu2 = s[idx + 1]
+          if cu2.is_trailing_surrogate() {
+            let str = s[idx:idx + 2].to_string() catch { _ => "" }
+            (idx + 2, str)
           } else {
-            let str = try { s[idx:idx + 1].to_string() } catch { _ => "" }
+            let str = s[idx:idx + 1].to_string() catch { _ => "" }
             (idx + 1, str)
           }
-        let _ = js_set_prop(this_arg, "__iter_index", Number(next_idx.to_double()))
+        } else {
+          let str = s[idx:idx + 1].to_string() catch { _ => "" }
+          (idx + 1, str)
+        }
+        let _ = js_set_prop(
+          this_arg,
+          "__iter_index",
+          Number(next_idx.to_double()),
+        )
         self.make_iter_result(JSValue::String(chunk), false)
       }
     }
@@ -3714,8 +3968,7 @@ fn JSInterpreter::call_native(
       match target {
         Undefined | Null => {
           let err = self.set_error_kind(
-            "TypeError",
-            "Cannot convert undefined or null to object",
+            "TypeError", "Cannot convert undefined or null to object",
           )
           return err
         }
@@ -3729,17 +3982,20 @@ fn JSInterpreter::call_native(
             for prop in map.props {
               if prop.enumerable {
                 let _ = js_set_prop(target, prop.key, prop.value)
+
               }
             }
           Array(arr) => {
             for j in 0..<arr.items.length() {
               if arr.present[j] {
                 let _ = js_set_prop(target, j.to_string(), arr.items[j])
+
               }
             }
             for prop in arr.props {
               if prop.enumerable {
                 let _ = js_set_prop(target, prop.key, prop.value)
+
               }
             }
           }
@@ -3747,6 +4003,7 @@ fn JSInterpreter::call_native(
             for prop in closure.props {
               if prop.enumerable {
                 let _ = js_set_prop(target, prop.key, prop.value)
+
               }
             }
           _ => ()
@@ -3758,21 +4015,23 @@ fn JSInterpreter::call_native(
       let iterable = if args.length() > 0 { args[0] } else { Undefined }
       let obj = js_new_object_with_proto(Some(self.object_proto))
       match iterable {
-        Array(arr) => {
+        Array(arr) =>
           for i in 0..<arr.items.length() {
             if arr.present[i] {
               match arr.items[i] {
                 Array(entry) =>
-                  if entry.items.length() >= 2 && entry.present[0] && entry.present[1] {
+                  if entry.items.length() >= 2 &&
+                    entry.present[0] &&
+                    entry.present[1] {
                     let key = entry.items[0].to_js_string()
                     let value = entry.items[1]
                     let _ = js_set_prop(obj, key, value)
+
                   }
                 _ => ()
               }
             }
           }
-        }
         _ => ()
       }
       obj
@@ -3780,13 +4039,12 @@ fn JSInterpreter::call_native(
     "Object.isExtensible" => {
       let target = if args.length() > 0 { args[0] } else { Undefined }
       match target {
-        Object(_) | Function(_) | Array(_) => {
+        Object(_) | Function(_) | Array(_) =>
           // Check if object has been marked as non-extensible
           match js_get_prop(target, "__non_extensible") {
             Bool(true) => Bool(false)
             _ => Bool(true)
           }
-        }
         _ => Bool(false)
       }
     }
@@ -3795,7 +4053,14 @@ fn JSInterpreter::call_native(
       match target {
         Object(_) | Function(_) | Array(_) => {
           // Mark object as non-extensible (non-enumerable internal property)
-          let _ = js_define_data_prop(target, "__non_extensible", Bool(true), false, false, false)
+          let _ = js_define_data_prop(
+            target,
+            "__non_extensible",
+            Bool(true),
+            false,
+            false,
+            false,
+          )
           target
         }
         _ => target
@@ -3806,8 +4071,22 @@ fn JSInterpreter::call_native(
       match target {
         Object(_) | Function(_) | Array(_) => {
           // Mark object as frozen (non-enumerable internal properties)
-          let _ = js_define_data_prop(target, "__non_extensible", Bool(true), false, false, false)
-          let _ = js_define_data_prop(target, "__frozen", Bool(true), false, false, false)
+          let _ = js_define_data_prop(
+            target,
+            "__non_extensible",
+            Bool(true),
+            false,
+            false,
+            false,
+          )
+          let _ = js_define_data_prop(
+            target,
+            "__frozen",
+            Bool(true),
+            false,
+            false,
+            false,
+          )
           target
         }
         _ => target
@@ -3818,8 +4097,22 @@ fn JSInterpreter::call_native(
       match target {
         Object(_) | Function(_) | Array(_) => {
           // Mark object as sealed (non-enumerable internal properties)
-          let _ = js_define_data_prop(target, "__non_extensible", Bool(true), false, false, false)
-          let _ = js_define_data_prop(target, "__sealed", Bool(true), false, false, false)
+          let _ = js_define_data_prop(
+            target,
+            "__non_extensible",
+            Bool(true),
+            false,
+            false,
+            false,
+          )
+          let _ = js_define_data_prop(
+            target,
+            "__sealed",
+            Bool(true),
+            false,
+            false,
+            false,
+          )
           target
         }
         _ => target
@@ -3885,7 +4178,7 @@ fn JSInterpreter::call_native(
       }
       String("[object " + tag + "]")
     }
-    "Object.prototype.isPrototypeOf" => {
+    "Object.prototype.isPrototypeOf" =>
       if args.length() == 0 {
         Bool(false)
       } else {
@@ -3900,7 +4193,6 @@ fn JSInterpreter::call_native(
         }
         Bool(false)
       }
-    }
     "Object.prototype.valueOf" => this_arg
     "Boolean.prototype.valueOf" => js_get_prop(this_arg, "value")
     "Boolean.prototype.toString" => {
@@ -3943,8 +4235,12 @@ fn JSInterpreter::call_native(
         Bool(true)
       } else if trimmed == "false" {
         Bool(false)
-      } else if trimmed.length() >= 2 && trimmed.has_prefix("\"") && trimmed.has_suffix("\"") {
-        let inner = try { trimmed[1:trimmed.length() - 1].to_string() } catch { _ => "" }
+      } else if trimmed.length() >= 2 &&
+        trimmed.has_prefix("\"") &&
+        trimmed.has_suffix("\"") {
+        let inner = trimmed[1:trimmed.length() - 1].to_string() catch {
+          _ => ""
+        }
         String(self.json_unescape(inner))
       } else {
         let num = @strconv.parse_double(trimmed) catch {
@@ -3953,7 +4249,7 @@ fn JSInterpreter::call_native(
         Number(num)
       }
     }
-    "JSON.stringify" => {
+    "JSON.stringify" =>
       if args.length() == 0 {
         Undefined
       } else {
@@ -3963,7 +4259,6 @@ fn JSInterpreter::call_native(
           None => Undefined
         }
       }
-    }
     "SyntaxError" => {
       let msg = if args.length() > 0 { args[0].to_js_string() } else { "" }
       self.make_error_obj("SyntaxError", msg)
@@ -4005,8 +4300,7 @@ fn JSInterpreter::call_native(
           None => ()
         }
       }
-      let source =
-        "function __f__(" + params_src + ") {\n" + body_src + "\n}"
+      let source = "function __f__(" + params_src + ") {\n" + body_src + "\n}"
       let func_value = try {
         let parser = @parser.Parser::from_source(source)
         let module_ = parser.parse_module()
@@ -4032,26 +4326,30 @@ fn JSInterpreter::call_native(
           self.set_function_length(closure, param_names.length().to_double())
           let proto = self.new_object()
           let _ = js_set_prop(proto, "constructor", closure)
-          let _ = js_define_data_prop(closure, "prototype", proto, true, false, true)
+          let _ = js_define_data_prop(
+            closure, "prototype", proto, true, false, true,
+          )
           closure
         }
       } catch {
         @parser.ParseError::ParseError(msg) => {
-          let _ = self.set_error_kind("SyntaxError", "Function parse error: " + msg)
+          let _ = self.set_error_kind(
+            "SyntaxError",
+            "Function parse error: " + msg,
+          )
           JSValue::Undefined
         }
       }
       func_value
     }
     "Function.prototype" => Undefined
-    "Function.prototype[@@hasInstance]" => {
+    "Function.prototype[@@hasInstance]" =>
       if args.length() == 0 {
         Bool(false)
       } else {
         Bool(self.ordinary_has_instance(this_arg, args[0]))
       }
-    }
-    "Function.prototype.toString" => {
+    "Function.prototype.toString" =>
       match this_arg {
         Function(closure) => {
           let name_prop = js_get_prop(this_arg, "name")
@@ -4060,12 +4358,8 @@ fn JSInterpreter::call_native(
             _ => ""
           }
           match closure.body {
-            Native(_) => {
-              js_string("function \{name}() { [native code] }")
-            }
-            Bound(_, _, _) => {
-              js_string("function \{name}() { [native code] }")
-            }
+            Native(_) => js_string("function \{name}() { [native code] }")
+            Bound(_, _, _) => js_string("function \{name}() { [native code] }")
             Ast(func) => {
               let params_arr : Array[String] = []
               for p in func.params {
@@ -4091,15 +4385,17 @@ fn JSInterpreter::call_native(
             }
           }
         }
-        _ => {
-          self.set_error_kind("TypeError", "Function.prototype.toString requires that 'this' be a Function")
-        }
+        _ =>
+          self.set_error_kind(
+            "TypeError", "Function.prototype.toString requires that 'this' be a Function",
+          )
       }
-    }
     "Function.call" => {
       let target = this_arg
       if not(self.is_callable(target)) {
-        return self.set_error_kind("TypeError", "Function.prototype.call called on non-callable")
+        return self.set_error_kind(
+          "TypeError", "Function.prototype.call called on non-callable",
+        )
       }
       let call_this = if args.length() > 0 { args[0] } else { Undefined }
       let call_args : Array[JSValue] = []
@@ -4111,7 +4407,9 @@ fn JSInterpreter::call_native(
     "Function.apply" => {
       let target = this_arg
       if not(self.is_callable(target)) {
-        return self.set_error_kind("TypeError", "Function.prototype.apply called on non-callable")
+        return self.set_error_kind(
+          "TypeError", "Function.prototype.apply called on non-callable",
+        )
       }
       let call_this = if args.length() > 0 { args[0] } else { Undefined }
       let call_args : Array[JSValue] = []
@@ -4129,7 +4427,9 @@ fn JSInterpreter::call_native(
     "Function.bind" => {
       let target = this_arg
       if not(self.is_callable(target)) {
-        return self.set_error_kind("TypeError", "Function.prototype.bind called on non-callable")
+        return self.set_error_kind(
+          "TypeError", "Function.prototype.bind called on non-callable",
+        )
       }
       let bound_this = if args.length() > 0 { args[0] } else { Undefined }
       let bound_args : Array[JSValue] = []
@@ -4161,37 +4461,40 @@ fn JSInterpreter::call_native(
       self.set_function_name(bound, "bound " + target_name)
       bound
     }
-    "Generator.prototype.next" => {
+    "Generator.prototype.next" =>
       match self.get_generator_id(this_arg) {
         Some(gen_id) => {
           let sent = if args.length() > 0 { args[0] } else { Undefined }
           self.generator_next(gen_id, sent)
         }
         None =>
-          self.set_error_kind("TypeError", "Generator.prototype.next called on non-generator")
+          self.set_error_kind(
+            "TypeError", "Generator.prototype.next called on non-generator",
+          )
       }
-    }
-    "Generator.prototype.return" => {
+    "Generator.prototype.return" =>
       match self.get_generator_id(this_arg) {
         Some(gen_id) => {
           let sent = if args.length() > 0 { args[0] } else { Undefined }
           self.generator_return(gen_id, sent)
         }
         None =>
-          self.set_error_kind("TypeError", "Generator.prototype.return called on non-generator")
+          self.set_error_kind(
+            "TypeError", "Generator.prototype.return called on non-generator",
+          )
       }
-    }
-    "Generator.prototype.throw" => {
+    "Generator.prototype.throw" =>
       match self.get_generator_id(this_arg) {
         Some(gen_id) => {
           let sent = if args.length() > 0 { args[0] } else { Undefined }
           self.generator_throw(gen_id, sent)
         }
         None =>
-          self.set_error_kind("TypeError", "Generator.prototype.throw called on non-generator")
+          self.set_error_kind(
+            "TypeError", "Generator.prototype.throw called on non-generator",
+          )
       }
-    }
-    "Array" => {
+    "Array" =>
       if args.length() == 0 {
         js_new_array()
       } else if args.length() == 1 {
@@ -4201,6 +4504,7 @@ fn JSInterpreter::call_native(
             let arr = js_new_array()
             if len > 0 {
               let _ = js_set_prop(arr, "length", Number(n))
+
             }
             arr
           }
@@ -4213,7 +4517,6 @@ fn JSInterpreter::call_native(
         }
         js_array_from(items)
       }
-    }
     "Array.isArray" =>
       if args.length() > 0 {
         match args[0] {
@@ -4223,89 +4526,80 @@ fn JSInterpreter::call_native(
       } else {
         Bool(false)
       }
-    "Date" => {
+    "Date" =>
       match this_arg {
         Object(_) => {
           let _ = js_set_prop(this_arg, "__class", String("Date"))
-          let time_val =
-            if args.length() == 0 {
-              0.0
-            } else if args.length() == 1 {
-              let t = self.to_number_value(args[0])
-              match self.peek_error() {
-                Some(err) => return err
-                None => time_clip(t)
-              }
-            } else {
-              let y = self.to_number_value(args[0])
-              let m = self.to_number_value(args[1])
-              let dt =
-                if args.length() > 2 {
-                  self.to_number_value(args[2])
-                } else {
-                  1.0
-                }
-              let h =
-                if args.length() > 3 {
-                  self.to_number_value(args[3])
-                } else {
-                  0.0
-                }
-              let min =
-                if args.length() > 4 {
-                  self.to_number_value(args[4])
-                } else {
-                  0.0
-                }
-              let s =
-                if args.length() > 5 {
-                  self.to_number_value(args[5])
-                } else {
-                  0.0
-                }
-              let ms =
-                if args.length() > 6 {
-                  self.to_number_value(args[6])
-                } else {
-                  0.0
-                }
-              match self.peek_error() {
-                Some(err) => return err
-                None => {
-                  if y.is_nan() ||
-                    m.is_nan() ||
-                    dt.is_nan() ||
-                    h.is_nan() ||
-                    min.is_nan() ||
-                    s.is_nan() ||
-                    ms.is_nan() {
-                    js_nan
-                  } else {
-                    let mut year = y.to_int()
-                    if year >= 0 && year <= 99 {
-                      year += 1900
-                    }
-                    let time_val =
-                      make_date_time(
-                        year,
-                        m.to_int(),
-                        dt.to_int(),
-                        h.to_int(),
-                        min.to_int(),
-                        s.to_int(),
-                        ms.to_int(),
-                      )
-                    time_clip(time_val)
-                  }
-                }
-              }
+          let time_val = if args.length() == 0 {
+            0.0
+          } else if args.length() == 1 {
+            let t = self.to_number_value(args[0])
+            match self.peek_error() {
+              Some(err) => return err
+              None => time_clip(t)
             }
+          } else {
+            let y = self.to_number_value(args[0])
+            let m = self.to_number_value(args[1])
+            let dt = if args.length() > 2 {
+              self.to_number_value(args[2])
+            } else {
+              1.0
+            }
+            let h = if args.length() > 3 {
+              self.to_number_value(args[3])
+            } else {
+              0.0
+            }
+            let min = if args.length() > 4 {
+              self.to_number_value(args[4])
+            } else {
+              0.0
+            }
+            let s = if args.length() > 5 {
+              self.to_number_value(args[5])
+            } else {
+              0.0
+            }
+            let ms = if args.length() > 6 {
+              self.to_number_value(args[6])
+            } else {
+              0.0
+            }
+            match self.peek_error() {
+              Some(err) => return err
+              None =>
+                if y.is_nan() ||
+                  m.is_nan() ||
+                  dt.is_nan() ||
+                  h.is_nan() ||
+                  min.is_nan() ||
+                  s.is_nan() ||
+                  ms.is_nan() {
+                  js_nan
+                } else {
+                  let mut year = y.to_int()
+                  if year >= 0 && year <= 99 {
+                    year += 1900
+                  }
+                  let time_val = make_date_time(
+                    year,
+                    m.to_int(),
+                    dt.to_int(),
+                    h.to_int(),
+                    min.to_int(),
+                    s.to_int(),
+                    ms.to_int(),
+                  )
+                  time_clip(time_val)
+                }
+            }
+          }
           let _ = js_set_prop(this_arg, "__date_value", Number(time_val))
           this_arg
         }
         _ => String("Date")
       }
-    }
     "Date.prototype.getTime" =>
       match self.date_time_value(this_arg) {
         Some(t) => Number(t)
@@ -4317,7 +4611,11 @@ fn JSInterpreter::call_native(
         None => self.error_or_undefined()
       }
     "Date.prototype.setTime" => {
-      let t = if args.length() > 0 { self.to_number_value(args[0]) } else { js_nan }
+      let t = if args.length() > 0 {
+        self.to_number_value(args[0])
+      } else {
+        js_nan
+      }
       match self.peek_error() {
         Some(err) => err
         None => {
@@ -4352,12 +4650,15 @@ fn JSInterpreter::call_native(
       }
     "Date.prototype.setYear" => {
       let t_opt = self.date_time_value(this_arg)
-      let t =
-        match t_opt {
-          Some(v) => v
-          None => return self.error_or_undefined()
-        }
-      let y = if args.length() > 0 { self.to_number_value(args[0]) } else { js_nan }
+      let t = match t_opt {
+        Some(v) => v
+        None => return self.error_or_undefined()
+      }
+      let y = if args.length() > 0 {
+        self.to_number_value(args[0])
+      } else {
+        js_nan
+      }
       match self.peek_error() {
         Some(err) => err
         None => {
@@ -4370,10 +4671,12 @@ fn JSInterpreter::call_native(
             if year >= 0 && year <= 99 {
               year += 1900
             }
-            let (_cur_year, month, day, hour, minute, second, milli) =
-              break_time(base_time)
-            let new_time =
-              make_date_time(year, month, day, hour, minute, second, milli)
+            let (_cur_year, month, day, hour, minute, second, milli) = break_time(
+              base_time,
+            )
+            let new_time = make_date_time(
+              year, month, day, hour, minute, second, milli,
+            )
             let clipped = time_clip(new_time)
             let _ = js_set_prop(this_arg, "__date_value", Number(clipped))
             Number(clipped)
@@ -4381,13 +4684,12 @@ fn JSInterpreter::call_native(
         }
       }
     }
-    "Symbol" => {
+    "Symbol" =>
       if args.length() > 0 {
         String("Symbol(" + args[0].to_js_string() + ")")
       } else {
         String("Symbol()")
       }
-    }
     "Boolean" =>
       if args.length() > 0 {
         let prim = JSValue::Bool(args[0].to_boolean())
@@ -4536,9 +4838,15 @@ fn JSInterpreter::call_native(
     }
     "RegExp.prototype.exec" => {
       if not(is_regexp(this_arg)) {
-        return self.set_error_kind("TypeError", "RegExp.prototype.exec called on non-RegExp")
+        return self.set_error_kind(
+          "TypeError", "RegExp.prototype.exec called on non-RegExp",
+        )
       }
-      let input = if args.length() > 0 { self.to_string_value(args[0]) } else { "" }
+      let input = if args.length() > 0 {
+        self.to_string_value(args[0])
+      } else {
+        ""
+      }
       let pattern = regexp_source(this_arg)
       let flags = regexp_flags(this_arg)
       let mut last_index = 0
@@ -4564,34 +4872,52 @@ fn JSInterpreter::call_native(
     }
     "RegExp.prototype.compile" => {
       if not(is_regexp(this_arg)) {
-        return self.set_error_kind("TypeError", "RegExp.prototype.compile called on non-RegExp")
+        return self.set_error_kind(
+          "TypeError", "RegExp.prototype.compile called on non-RegExp",
+        )
       }
       let pattern_val = if args.length() > 0 { args[0] } else { String("") }
       let flags_val = if args.length() > 1 { args[1] } else { Undefined }
-      let (pattern, flags) =
-        if is_regexp(pattern_val) && flags_val is Undefined {
-          (regexp_source(pattern_val), regexp_flags(pattern_val))
+      let (pattern, flags) = if is_regexp(pattern_val) && flags_val is Undefined {
+        (regexp_source(pattern_val), regexp_flags(pattern_val))
+      } else {
+        let p = pattern_val.to_js_string()
+        let f = if flags_val is Undefined {
+          ""
         } else {
-          let p = pattern_val.to_js_string()
-          let f = if flags_val is Undefined { "" } else { flags_val.to_js_string() }
-          (p, f)
+          flags_val.to_js_string()
         }
+        (p, f)
+      }
       match regexp_compile(pattern, flags) {
-        None => return self.set_error_kind("SyntaxError", "Invalid regular expression")
+        None =>
+          return self.set_error_kind(
+            "SyntaxError", "Invalid regular expression",
+          )
         Some(_) => ()
       }
       let norm_flags = normalize_regexp_flags(flags)
       let _ = js_set_prop(this_arg, "source", String(pattern))
       let _ = js_set_prop(this_arg, "flags", String(norm_flags))
-      let _ = js_set_prop(this_arg, "global", Bool(regexp_has_global(norm_flags)))
+      let _ = js_set_prop(
+        this_arg,
+        "global",
+        Bool(regexp_has_global(norm_flags)),
+      )
       let _ = js_set_prop(this_arg, "lastIndex", Number(0.0))
       this_arg
     }
     "RegExp.prototype.test" => {
       if not(is_regexp(this_arg)) {
-        return self.set_error_kind("TypeError", "RegExp.prototype.test called on non-RegExp")
+        return self.set_error_kind(
+          "TypeError", "RegExp.prototype.test called on non-RegExp",
+        )
       }
-      let input = if args.length() > 0 { self.to_string_value(args[0]) } else { "" }
+      let input = if args.length() > 0 {
+        self.to_string_value(args[0])
+      } else {
+        ""
+      }
       let pattern = regexp_source(this_arg)
       let flags = regexp_flags(this_arg)
       let mut last_index = 0
@@ -4624,7 +4950,7 @@ fn JSInterpreter::call_native(
       let src = if args.length() > 0 { args[0].to_js_string() } else { "" }
       self.eval_script_source(src)
     }
-    "Reflect.construct" => {
+    "Reflect.construct" =>
       if args.length() == 0 {
         Undefined
       } else {
@@ -4643,13 +4969,13 @@ fn JSInterpreter::call_native(
         match target {
           Function(closure) =>
             match closure.body {
-              Native("Function") => self.call_native("Function", Undefined, call_args)
+              Native("Function") =>
+                self.call_native("Function", Undefined, call_args)
               _ => self.construct_with(target, new_target, call_args)
             }
           _ => Undefined
         }
       }
-    }
     "Reflect.get" => {
       let target = if args.length() > 0 { args[0] } else { Undefined }
       let key_val = if args.length() > 1 { args[1] } else { Undefined }
@@ -4669,58 +4995,53 @@ fn JSInterpreter::call_native(
       let key = self.normalize_prop_key(key_val.to_js_string())
       if self.is_proxy(target) {
         Bool(self.proxy_set(target, key, value, receiver))
-      } else {
-        if self.is_proxy(receiver) {
-          let desc = self.proxy_get_own_property_descriptor(receiver, key)
-          match self.peek_error() {
-            Some(_) => return Bool(false)
-            None => ()
-          }
-          let new_desc =
-            match desc {
-              Undefined => self.make_data_descriptor(value, true, true, true)
-              _ => {
-                let has_enum = self.has_own_prop(desc, "enumerable")
-                let enumerable =
-                  if has_enum {
-                    self.get_prop_value(desc, "enumerable").to_boolean()
-                  } else {
-                    true
-                  }
-                let has_config = self.has_own_prop(desc, "configurable")
-                let configurable =
-                  if has_config {
-                    self.get_prop_value(desc, "configurable").to_boolean()
-                  } else {
-                    true
-                  }
-                let has_value = self.has_own_prop(desc, "value")
-                if has_value {
-                  let _ = self.get_prop_value(desc, "value")
-                }
-                let has_writable = self.has_own_prop(desc, "writable")
-                let writable =
-                  if has_writable {
-                    self.get_prop_value(desc, "writable").to_boolean()
-                  } else {
-                    true
-                  }
-                let _ = self.has_own_prop(desc, "get")
-                let _ = self.has_own_prop(desc, "set")
-                self.make_data_descriptor(value, writable, enumerable, configurable)
-              }
+      } else if self.is_proxy(receiver) {
+        let desc = self.proxy_get_own_property_descriptor(receiver, key)
+        match self.peek_error() {
+          Some(_) => return Bool(false)
+          None => ()
+        }
+        let new_desc = match desc {
+          Undefined => self.make_data_descriptor(value, true, true, true)
+          _ => {
+            let has_enum = self.has_own_prop(desc, "enumerable")
+            let enumerable = if has_enum {
+              self.get_prop_value(desc, "enumerable").to_boolean()
+            } else {
+              true
             }
-          let _ = self.proxy_define_property(receiver, key, new_desc)
-          match self.peek_error() {
-            Some(_) => Bool(false)
-            None => Bool(true)
+            let has_config = self.has_own_prop(desc, "configurable")
+            let configurable = if has_config {
+              self.get_prop_value(desc, "configurable").to_boolean()
+            } else {
+              true
+            }
+            let has_value = self.has_own_prop(desc, "value")
+            if has_value {
+              let _ = self.get_prop_value(desc, "value")
+
+            }
+            let has_writable = self.has_own_prop(desc, "writable")
+            let writable = if has_writable {
+              self.get_prop_value(desc, "writable").to_boolean()
+            } else {
+              true
+            }
+            let _ = self.has_own_prop(desc, "get")
+            let _ = self.has_own_prop(desc, "set")
+            self.make_data_descriptor(value, writable, enumerable, configurable)
           }
-        } else {
-          self.set_prop_value(target, key, value)
-          match self.peek_error() {
-            Some(_) => Bool(false)
-            None => Bool(true)
-          }
+        }
+        let _ = self.proxy_define_property(receiver, key, new_desc)
+        match self.peek_error() {
+          Some(_) => Bool(false)
+          None => Bool(true)
+        }
+      } else {
+        self.set_prop_value(target, key, value)
+        match self.peek_error() {
+          Some(_) => Bool(false)
+          None => Bool(true)
         }
       }
     }
@@ -4759,18 +5080,21 @@ fn JSInterpreter::call_native(
         self.proxy_get_prototype_of(target)
       } else {
         match target {
-          Object(map) => match map.prototype {
-            Some(p) => p
-            None => Null
-          }
-          Function(closure) => match closure.object_proto {
-            Some(p) => p
-            None => Null
-          }
-          Array(arr) => match arr.prototype {
-            Some(p) => p
-            None => Null
-          }
+          Object(map) =>
+            match map.prototype {
+              Some(p) => p
+              None => Null
+            }
+          Function(closure) =>
+            match closure.object_proto {
+              Some(p) => p
+              None => Null
+            }
+          Array(arr) =>
+            match arr.prototype {
+              Some(p) => p
+              None => Null
+            }
           _ => Undefined
         }
       }
@@ -4934,7 +5258,7 @@ fn JSInterpreter::call_native(
         Number(@math.pow(x, 1.0 / 3.0))
       }
     }
-    "Math.hypot" => {
+    "Math.hypot" =>
       if args.length() == 0 {
         Number(0.0)
       } else {
@@ -4951,7 +5275,6 @@ fn JSInterpreter::call_native(
         }
         Number(sum.sqrt())
       }
-    }
     "Math.atan2" => {
       let y = if args.length() > 0 { args[0].to_number() } else { 0.0 / 0.0 }
       let x = if args.length() > 1 { args[1].to_number() } else { 0.0 / 0.0 }
@@ -5047,24 +5370,22 @@ fn JSInterpreter::call_native(
       Undefined
     }
     "escape" => {
-      let input =
-        if args.length() > 0 {
-          self.to_string_value(args[0])
-        } else {
-          "undefined"
-        }
+      let input = if args.length() > 0 {
+        self.to_string_value(args[0])
+      } else {
+        "undefined"
+      }
       match self.peek_error() {
         Some(err) => err
         None => String(escape_string_value(input))
       }
     }
     "unescape" => {
-      let input =
-        if args.length() > 0 {
-          self.to_string_value(args[0])
-        } else {
-          "undefined"
-        }
+      let input = if args.length() > 0 {
+        self.to_string_value(args[0])
+      } else {
+        "undefined"
+      }
       match self.peek_error() {
         Some(err) => err
         None => String(unescape_string_value(input))
@@ -5086,15 +5407,20 @@ fn JSInterpreter::call_native(
       }
       let radix = if args.length() > 1 {
         let r = args[1].to_number().to_int()
-        if r == 0 { 10 } else { r }
+        if r == 0 {
+          10
+        } else {
+          r
+        }
       } else {
         10
       }
       // Handle hex prefix
       let trimmed = input_str.trim_start().to_string()
-      let (actual_str, actual_radix) : (String, Int) = if radix == 16 || radix == 0 {
+      let (actual_str, actual_radix) : (String, Int) = if radix == 16 ||
+        radix == 0 {
         if trimmed.has_prefix("0x") || trimmed.has_prefix("0X") {
-          ((try { trimmed[2:] } catch { _ => trimmed }).to_string(), 16)
+          ((trimmed[2:] catch { _ => trimmed }).to_string(), 16)
         } else {
           (trimmed, if radix == 0 { 10 } else { radix })
         }
@@ -5104,17 +5430,18 @@ fn JSInterpreter::call_native(
       if actual_radix < 2 || actual_radix > 36 {
         Number(0.0 / 0.0) // NaN
       } else {
-        let result : Int = try {
-          @strconv.parse_int(actual_str, base=actual_radix)
-        } catch {
-          _ => {
+        let result : Int = @strconv.parse_int(actual_str, base=actual_radix) catch {
+          _ =>
             // Try without base if it fails
-            try { @strconv.parse_int(actual_str) } catch { _ => 0 }
-          }
+            @strconv.parse_int(actual_str) catch {
+              _ => 0
+            }
         }
-        // If parsing fails completely, return NaN
-        // For simplicity, just return the parsed value or 0
-        Number(result.to_double())
+        Number(
+          // If parsing fails completely, return NaN
+          // For simplicity, just return the parsed value or 0
+          result.to_double(),
+        )
       }
     }
     "parseFloat" => {
@@ -5124,9 +5451,7 @@ fn JSInterpreter::call_native(
         "NaN"
       }
       let trimmed = input_str.trim_start().to_string()
-      let result : Double = try {
-        @strconv.parse_double(trimmed)
-      } catch {
+      let result : Double = @strconv.parse_double(trimmed) catch {
         _ => 0.0 / 0.0 // NaN
       }
       Number(result)
@@ -5154,7 +5479,11 @@ fn JSInterpreter::call_native(
         let result = assert_same_value(
           actual,
           expected,
-          if args.length() > 2 { Some(args[2].to_js_string()) } else { None },
+          if args.length() > 2 {
+            Some(args[2].to_js_string())
+          } else {
+            None
+          },
         )
         match result {
           Success => Undefined
@@ -5170,7 +5499,11 @@ fn JSInterpreter::call_native(
         let result = assert_not_same_value(
           actual,
           unexpected,
-          if args.length() > 2 { Some(args[2].to_js_string()) } else { None },
+          if args.length() > 2 {
+            Some(args[2].to_js_string())
+          } else {
+            None
+          },
         )
         match result {
           Success => Undefined
@@ -5186,7 +5519,11 @@ fn JSInterpreter::call_native(
         let result = compare_array(
           actual,
           expected,
-          if args.length() > 2 { Some(args[2].to_js_string()) } else { None },
+          if args.length() > 2 {
+            Some(args[2].to_js_string())
+          } else {
+            None
+          },
         )
         match result {
           Success => Undefined
@@ -5203,7 +5540,10 @@ fn JSInterpreter::call_native(
       let thunk = args[1]
       match thunk {
         Function(_) => ()
-        _ => return self.set_error_kind("TypeError", "assert.throws requires a function")
+        _ =>
+          return self.set_error_kind(
+            "TypeError", "assert.throws requires a function",
+          )
       }
       let _ = self.take_error()
       let _ = self.call_function(thunk, Undefined, [])
@@ -5224,10 +5564,9 @@ fn JSInterpreter::call_native(
         }
       }
     }
-    "$DONOTEVALUATE" => {
+    "$DONOTEVALUATE" =>
       // This function should never be called in a passing test
       self.set_error("$DONOTEVALUATE was called")
-    }
     "$ERROR" => {
       let msg = if args.length() > 0 {
         args[0].to_js_string()
@@ -5248,7 +5587,11 @@ fn JSInterpreter::call_native(
         Undefined
       }
     "Test262Error.thrower" => {
-      let msg = if args.length() > 0 { args[0].to_js_string() } else { "Test262Error" }
+      let msg = if args.length() > 0 {
+        args[0].to_js_string()
+      } else {
+        "Test262Error"
+      }
       self.set_error_kind("Test262Error", msg)
     }
     "$262.evalScript" =>
@@ -5263,9 +5606,13 @@ fn JSInterpreter::call_native(
       let other = JSInterpreter::new()
       let other_global = other.global_env.get("globalThis")
       let _ = js_set_prop(realm, "global", other_global)
-      let current_array_proto = js_get_prop(self.global_env.get("Array"), "prototype")
+      let current_array_proto = js_get_prop(
+        self.global_env.get("Array"),
+        "prototype",
+      )
       match current_array_proto {
-        Object(_) | Function(_) | Array(_) => js_set_default_array_proto(current_array_proto)
+        Object(_) | Function(_) | Array(_) =>
+          js_set_default_array_proto(current_array_proto)
         _ => ()
       }
       realm
@@ -5284,11 +5631,7 @@ fn JSInterpreter::new_instance(
 ) -> JSValue {
   match class_name {
     "Test262Error" => {
-      let msg = if args.length() > 0 {
-        args[0].to_js_string()
-      } else {
-        ""
-      }
+      let msg = if args.length() > 0 { args[0].to_js_string() } else { "" }
       let obj = self.new_object()
       let _ = js_set_prop(obj, "name", JSValue::String("Test262Error"))
       let _ = js_set_prop(obj, "message", JSValue::String(msg))
@@ -5296,12 +5639,11 @@ fn JSInterpreter::new_instance(
     }
     "Function" => self.call_native("Function", Undefined, args)
     "Boolean" => {
-      let val =
-        if args.length() > 0 {
-          JSValue::Bool(args[0].to_boolean())
-        } else {
-          JSValue::Bool(false)
-        }
+      let val = if args.length() > 0 {
+        JSValue::Bool(args[0].to_boolean())
+      } else {
+        JSValue::Bool(false)
+      }
       let ctor = env.get("Boolean")
       let proto = js_get_prop(ctor, "prototype")
       let obj = match proto {
@@ -5312,12 +5654,11 @@ fn JSInterpreter::new_instance(
       obj
     }
     "Number" => {
-      let val =
-        if args.length() > 0 {
-          JSValue::Number(args[0].to_number())
-        } else {
-          JSValue::Number(0.0)
-        }
+      let val = if args.length() > 0 {
+        JSValue::Number(args[0].to_number())
+      } else {
+        JSValue::Number(0.0)
+      }
       let ctor = env.get("Number")
       let proto = js_get_prop(ctor, "prototype")
       let obj = match proto {
@@ -5328,12 +5669,11 @@ fn JSInterpreter::new_instance(
       obj
     }
     "String" => {
-      let val =
-        if args.length() > 0 {
-          JSValue::String(args[0].to_js_string())
-        } else {
-          JSValue::String("")
-        }
+      let val = if args.length() > 0 {
+        JSValue::String(args[0].to_js_string())
+      } else {
+        JSValue::String("")
+      }
       let ctor = env.get("String")
       let proto = js_get_prop(ctor, "prototype")
       let obj = match proto {
@@ -5351,6 +5691,7 @@ fn JSInterpreter::new_instance(
             let arr = js_new_array()
             if len > 0 {
               let _ = js_set_prop(arr, "length", Number(n))
+
             }
             arr
           }

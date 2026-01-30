@@ -3,26 +3,26 @@ fn make_large_source(funcs : Int) -> String {
   let sb = StringBuilder::new()
   let mut i = 0
   while i < funcs {
-    sb..write_string("function f")
-      ..write_string(i.to_string())
-      ..write_string("(x) { return x + ")
-      ..write_string(i.to_string())
-      ..write_string("; }\n")
+    sb
+    ..write_string("function f")
+    ..write_string(i.to_string())
+    ..write_string("(x) { return x + ")
+    ..write_string(i.to_string())
+    ..write_string("; }\n")
     i = i + 1
   }
-  sb..write_string("function main() {\n")
-    ..write_string("  let acc = 0;\n")
+  sb..write_string("function main() {\n")..write_string("  let acc = 0;\n")
   let mut j = 0
   while j < funcs {
-    sb..write_string("  acc += f")
-      ..write_string(j.to_string())
-      ..write_string("(")
-      ..write_string(j.to_string())
-      ..write_string(");\n")
+    sb
+    ..write_string("  acc += f")
+    ..write_string(j.to_string())
+    ..write_string("(")
+    ..write_string(j.to_string())
+    ..write_string(");\n")
     j = j + 1
   }
-  sb..write_string("  return acc;\n")
-    ..write_string("}\n")
+  sb..write_string("  return acc;\n")..write_string("}\n")
   sb.to_string()
 }
 
@@ -63,6 +63,7 @@ test "bench parser tokenize small" (b : @bench.T) {
     () => {
       let lexer = @parser.Lexer::new(parser_small_src)
       let _ = lexer.tokenize()
+
     },
     name="parser.tokenize.small",
     count=10,
@@ -75,6 +76,7 @@ test "bench parser module small" (b : @bench.T) {
     () => {
       let parser = @parser.Parser::from_source(parser_small_src)
       let _ = try! parser.parse_module()
+
     },
     name="parser.module.small",
     count=5,
@@ -87,6 +89,7 @@ test "bench parser module large" (b : @bench.T) {
     () => {
       let parser = @parser.Parser::from_source(parser_large_src)
       let _ = try! parser.parse_module()
+
     },
     name="parser.module.large",
     count=1,
@@ -99,6 +102,7 @@ test "bench runtime run small" (b : @bench.T) {
     () => {
       let interp = @runtime.JSInterpreter::new()
       let _ = try! interp.run(runtime_small_src)
+
     },
     name="runtime.run.small",
     count=1,
@@ -111,6 +115,7 @@ test "bench runtime run large" (b : @bench.T) {
     () => {
       let interp = @runtime.JSInterpreter::new()
       let _ = try! interp.run(runtime_large_src)
+
     },
     name="runtime.run.large",
     count=1,
@@ -170,6 +175,7 @@ test "bench parser typescript dts" (b : @bench.T) {
     () => {
       let parser = @parser.Parser::from_source(ts_dts_src)
       let _ = try! parser.parse_module()
+
     },
     name="parser.typescript.dts",
     count=5,
