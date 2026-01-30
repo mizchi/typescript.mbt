@@ -506,6 +506,16 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let _ = js_define_data_prop(aggregate_ctor, "prototype", self.new_object(), true, false, true)
   self.global_env.define_var("AggregateError", aggregate_ctor)
   let _ = js_set_prop(global_obj, "AggregateError", aggregate_ctor)
+  let uri_ctor = self.make_native("URIError")
+  self.set_function_name(uri_ctor, "URIError")
+  let _ = js_define_data_prop(uri_ctor, "prototype", self.new_object(), true, false, true)
+  self.global_env.define_var("URIError", uri_ctor)
+  let _ = js_set_prop(global_obj, "URIError", uri_ctor)
+  let eval_error_ctor = self.make_native("EvalError")
+  self.set_function_name(eval_error_ctor, "EvalError")
+  let _ = js_define_data_prop(eval_error_ctor, "prototype", self.new_object(), true, false, true)
+  self.global_env.define_var("EvalError", eval_error_ctor)
+  let _ = js_set_prop(global_obj, "EvalError", eval_error_ctor)
 
   // Promise (minimal)
   let promise_proto = self.new_object()
@@ -833,6 +843,68 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let _ = js_set_prop(reflect, "getOwnPropertyDescriptor", reflect_get_desc)
   self.global_env.define_var("Reflect", reflect)
   let _ = js_set_prop(global_obj, "Reflect", reflect)
+
+  // Map (stub)
+  let map_ctor = self.make_native("Map")
+  self.set_function_length(map_ctor, 0.0)
+  self.set_function_name(map_ctor, "Map")
+  let _ = js_define_data_prop(map_ctor, "prototype", self.new_object(), true, false, true)
+  self.global_env.define_var("Map", map_ctor)
+  let _ = js_set_prop(global_obj, "Map", map_ctor)
+
+  // Set (stub)
+  let set_ctor = self.make_native("Set")
+  self.set_function_length(set_ctor, 0.0)
+  self.set_function_name(set_ctor, "Set")
+  let _ = js_define_data_prop(set_ctor, "prototype", self.new_object(), true, false, true)
+  self.global_env.define_var("Set", set_ctor)
+  let _ = js_set_prop(global_obj, "Set", set_ctor)
+
+  // WeakMap (stub)
+  let weakmap_ctor = self.make_native("WeakMap")
+  self.set_function_length(weakmap_ctor, 0.0)
+  self.set_function_name(weakmap_ctor, "WeakMap")
+  let _ = js_define_data_prop(weakmap_ctor, "prototype", self.new_object(), true, false, true)
+  self.global_env.define_var("WeakMap", weakmap_ctor)
+  let _ = js_set_prop(global_obj, "WeakMap", weakmap_ctor)
+
+  // WeakSet (stub)
+  let weakset_ctor = self.make_native("WeakSet")
+  self.set_function_length(weakset_ctor, 0.0)
+  self.set_function_name(weakset_ctor, "WeakSet")
+  let _ = js_define_data_prop(weakset_ctor, "prototype", self.new_object(), true, false, true)
+  self.global_env.define_var("WeakSet", weakset_ctor)
+  let _ = js_set_prop(global_obj, "WeakSet", weakset_ctor)
+
+  // ArrayBuffer (stub)
+  let arraybuffer_ctor = self.make_native("ArrayBuffer")
+  self.set_function_length(arraybuffer_ctor, 1.0)
+  self.set_function_name(arraybuffer_ctor, "ArrayBuffer")
+  let _ = js_define_data_prop(arraybuffer_ctor, "prototype", self.new_object(), true, false, true)
+  self.global_env.define_var("ArrayBuffer", arraybuffer_ctor)
+  let _ = js_set_prop(global_obj, "ArrayBuffer", arraybuffer_ctor)
+
+  // DataView (stub)
+  let dataview_ctor = self.make_native("DataView")
+  self.set_function_length(dataview_ctor, 1.0)
+  self.set_function_name(dataview_ctor, "DataView")
+  let _ = js_define_data_prop(dataview_ctor, "prototype", self.new_object(), true, false, true)
+  self.global_env.define_var("DataView", dataview_ctor)
+  let _ = js_set_prop(global_obj, "DataView", dataview_ctor)
+
+  // TypedArrays (stubs)
+  let typed_arrays = [
+    "Int8Array", "Uint8Array", "Uint8ClampedArray", "Int16Array", "Uint16Array",
+    "Int32Array", "Uint32Array", "Float32Array", "Float64Array", "BigInt64Array", "BigUint64Array",
+  ]
+  for name in typed_arrays {
+    let ctor = self.make_native(name)
+    self.set_function_length(ctor, 3.0)
+    self.set_function_name(ctor, name)
+    let _ = js_define_data_prop(ctor, "prototype", self.new_object(), true, false, true)
+    self.global_env.define_var(name, ctor)
+    let _ = js_set_prop(global_obj, name, ctor)
+  }
 }
 
 ///|
