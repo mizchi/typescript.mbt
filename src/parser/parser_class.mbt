@@ -654,6 +654,24 @@ fn Parser::parse_class_decl(self : Parser) -> @ast.TsStmt raise ParseError {
   if stmts.length() == 1 {
     stmts[0]
   } else {
-    Block({ stmts, })
+    // Use IIFE pattern to avoid scope issues with let
+    // The first statement is always Let(name, ...) which we convert to internal temp
+    // Then wrap everything in an IIFE that returns the class
+    let internal_stmts : Array[@ast.TsStmt] = []
+    for stmt in stmts {
+      internal_stmts.push(stmt)
+    }
+    internal_stmts.push(Return(Some(@ast.TsExpr::Var(name))))
+    let iife = @ast.TsExpr::CallExpr(
+      @ast.TsExpr::FuncExpr(@ast.TsFunc::{
+        name: "<class>",
+        params: [],
+        return_type: @ast.TsType::Any,
+        body: @ast.TsBlock::{ stmts: internal_stmts },
+        is_generator: false,
+      }),
+      [],
+    )
+    Let(@ast.TsBinding::Ident(name), Any, iife)
   }
 }
