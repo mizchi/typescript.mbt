@@ -740,9 +740,24 @@ fn JSInterpreter::get_prop_value_with_receiver(
         if idx >= 0 && idx < s.length() {
           String(s[idx:idx + 1].to_string() catch { _ => "" })
         } else {
-          Undefined
+          // Look up on String.prototype
+          let string_ctor = self.global_env.get("String")
+          let string_proto = js_get_prop(string_ctor, "prototype")
+          self.get_prop_value_with_receiver(string_proto, receiver, key)
         }
       }
+    Number(_) => {
+      // Look up on Number.prototype
+      let number_ctor = self.global_env.get("Number")
+      let number_proto = js_get_prop(number_ctor, "prototype")
+      self.get_prop_value_with_receiver(number_proto, receiver, key)
+    }
+    Bool(_) => {
+      // Look up on Boolean.prototype
+      let boolean_ctor = self.global_env.get("Boolean")
+      let boolean_proto = js_get_prop(boolean_ctor, "prototype")
+      self.get_prop_value_with_receiver(boolean_proto, receiver, key)
+    }
     _ => Undefined
   }
 }
