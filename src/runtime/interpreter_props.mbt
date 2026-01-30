@@ -38,6 +38,177 @@ fn JSInterpreter::normalize_prop_key(
 }
 
 ///|
+/// Extract the original private name from a mangled private key (e.g. "__private_brand_0__#field" -> "#field")
+fn extract_private_name(key : String) -> String {
+  let len = key.length()
+  let mut idx = 0
+  while idx < len - 2 {
+    if key[idx] == '_' && key[idx + 1] == '_' && key[idx + 2] == '#' {
+      return key[(idx + 2):].to_string() catch { _ => key }
+    }
+    idx += 1
+  }
+  key
+}
+
+/// Check if a private property is a method or getter-only accessor (cannot be assigned)
+/// Returns true if assignment should throw TypeError
+fn is_private_readonly(obj : JSValue, key : String) -> Bool {
+  // Check own property and prototype chain for getter-only accessor or method
+  is_private_readonly_on_chain(obj, key)
+}
+
+/// Find a setter for a property on the prototype chain
+fn find_setter_on_chain(obj : JSValue, key : String) -> JSValue? {
+  match obj {
+    Object(map) =>
+      for prop in map.props {
+        if prop.key == key {
+          return prop.set
+        }
+      }
+    Function(closure) =>
+      for prop in closure.props {
+        if prop.key == key {
+          return prop.set
+        }
+      }
+    _ => ()
+  }
+  // Check prototype chain
+  match obj {
+    Object(map) =>
+      match map.prototype {
+        Some(proto) => find_setter_on_chain(proto, key)
+        None => None
+      }
+    Function(closure) =>
+      match closure.object_proto {
+        Some(proto) => find_setter_on_chain(proto, key)
+        None => None
+      }
+    _ => None
+  }
+}
+
+/// Recursively check if a property is readonly on the prototype chain
+fn is_private_readonly_on_chain(obj : JSValue, key : String) -> Bool {
+  // Check own properties first
+  match obj {
+    Object(map) =>
+      for prop in map.props {
+        if prop.key == key {
+          // Accessor with getter but no setter
+          if prop.get is Some(_) && prop.set is None {
+            return true
+          }
+          // Method (function value)
+          match prop.value {
+            Function(_) => return true
+            _ => ()
+          }
+          return false
+        }
+      }
+    Function(closure) =>
+      for prop in closure.props {
+        if prop.key == key {
+          // Accessor with getter but no setter
+          if prop.get is Some(_) && prop.set is None {
+            return true
+          }
+          // Method (function value)
+          match prop.value {
+            Function(_) => return true
+            _ => ()
+          }
+          return false
+        }
+      }
+    _ => ()
+  }
+  // Check prototype chain
+  match obj {
+    Object(map) =>
+      match map.prototype {
+        Some(proto) => is_private_readonly_on_chain(proto, key)
+        None => false
+      }
+    Function(closure) =>
+      match closure.object_proto {
+        Some(proto) => is_private_readonly_on_chain(proto, key)
+        None => false
+      }
+    _ => false
+  }
+}
+
+
+///|
+/// Check if a property name is a mangled private field (e.g. __private_brand_0__#field)
+/// and extract the brand name if so.
+fn extract_private_brand(key : String) -> String? {
+  // Pattern: __private_brand_N__#fieldname
+  if key.has_prefix("__private_brand_") {
+    // Find the position of "__#" by checking key contains it
+    if key.contains("__#") {
+      // Find the index where "__#" starts
+      let len = key.length()
+      let mut idx = 0
+      while idx < len - 2 {
+        if key[idx] == '_' && key[idx + 1] == '_' && key[idx + 2] == '#' {
+          // Brand is everything before "__#"
+          let brand = key[:idx].to_string() catch { _ => "" }
+          return Some(brand)
+        }
+        idx += 1
+      }
+    }
+    None
+  } else {
+    None
+  }
+}
+
+///|
+/// Check if the target object has the required brand for private field access.
+/// Returns true if access is allowed, false if brand check fails.
+fn JSInterpreter::check_private_brand(
+  self : JSInterpreter,
+  obj : JSValue,
+  brand : String,
+  key : String,
+) -> Bool {
+  // Check if obj has the brand property set to true
+  let brand_value = js_get_prop(obj, brand)
+  match brand_value {
+    Bool(true) => true
+    _ => {
+      // Extract the original private field name (part after "__#")
+      let original_name = if key.contains("__#") {
+        let len = key.length()
+        let mut idx = 0
+        while idx < len - 2 {
+          if key[idx] == '_' && key[idx + 1] == '_' && key[idx + 2] == '#' {
+            // Return everything after "__" (so including the #)
+            break
+          }
+          idx += 1
+        }
+        key[idx + 2:].to_string() catch { _ => key }
+      } else {
+        key
+      }
+      let _ = self.set_error_kind(
+        "TypeError",
+        "Cannot read private member \{original_name} from an object whose class did not declare it",
+      )
+      false
+    }
+  }
+}
+
+///|
 fn JSInterpreter::proxy_key_value(
   _self : JSInterpreter,
   key : String,
@@ -340,6 +511,34 @@ fn JSInterpreter::set_prop_value(
     let _ = self.proxy_set(obj, key, value, obj)
     return
   }
+  // Check private field brand before access
+  match extract_private_brand(key) {
+    Some(brand) => {
+      if not(self.check_private_brand(obj, brand, key)) {
+        return
+      }
+      // PrivateSet throws TypeError when:
+      //   - the private element is a method (entry.[[Kind]] is ~method~)
+      //   - the private element is an accessor with no setter (entry.[[Set]] is undefined)
+      if is_private_readonly(obj, key) {
+        let original_name = extract_private_name(key)
+        let _ = self.set_error_kind(
+          "TypeError",
+          "Cannot assign to private member \{original_name}",
+        )
+        return
+      }
+      // For private properties with setters on the prototype chain, call the setter
+      match find_setter_on_chain(obj, key) {
+        Some(setter) => {
+          let _ = self.call_function(setter, obj, [value])
+          return
+        }
+        None => ()
+      }
+    }
+    None => ()
+  }
   // Setting a property on null/undefined always throws TypeError (regardless of strict mode)
   match obj {
     Null => {
@@ -460,6 +659,14 @@ fn JSInterpreter::get_prop_value_with_receiver(
   let key = self.normalize_prop_key(key)
   if self.is_proxy(target) {
     return self.proxy_get(target, key, receiver)
+  }
+  // Check private field brand before access
+  match extract_private_brand(key) {
+    Some(brand) =>
+      if not(self.check_private_brand(receiver, brand, key)) {
+        return Undefined
+      }
+    None => ()
   }
   match target {
     Null => {

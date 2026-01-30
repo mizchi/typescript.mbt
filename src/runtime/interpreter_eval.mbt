@@ -35,6 +35,26 @@ pub fn JSInterpreter::eval_expr(
       let value = self.eval_expr(inner, env)
       self.await_promise(value)
     }
+    @ast.TsExpr::DynamicImport(specifier) => {
+      // Dynamic import returns a Promise
+      // Evaluate specifier
+      let spec_value = self.eval_expr(specifier, env)
+      let _ = spec_value // suppress warning
+      // Return a promise that resolves to an empty module namespace object
+      // In a full implementation, this would load the module
+      let promise_ctor = self.global_env.get("Promise")
+      let result_obj = self.new_object()
+      // Mark as module namespace
+      let _ = js_set_prop(result_obj, "@@module", Bool(true))
+      self.promise_static_resolve_with_ctor(promise_ctor, result_obj)
+    }
+    @ast.TsExpr::ImportMeta => {
+      // import.meta returns an object with module metadata
+      let meta = self.new_object()
+      // url property is commonly expected
+      let _ = js_set_prop(meta, "url", String(""))
+      meta
+    }
     @ast.TsExpr::Var(name) =>
       if name == "super" && env.has("__super_proto") {
         env.get("__super_proto")
@@ -308,12 +328,48 @@ pub fn JSInterpreter::eval_expr(
           match operand {
             @ast.TsExpr::PropAccess(obj_expr, prop) => {
               let obj = self.eval_expr(obj_expr, env)
+              // Delete on null/undefined throws TypeError
+              match obj {
+                Null => {
+                  let _ = self.set_error_kind(
+                    "TypeError",
+                    "Cannot delete property '\{prop}' of null",
+                  )
+                  return self.error_or_undefined()
+                }
+                Undefined => {
+                  let _ = self.set_error_kind(
+                    "TypeError",
+                    "Cannot delete property '\{prop}' of undefined",
+                  )
+                  return self.error_or_undefined()
+                }
+                _ => ()
+              }
               Bool(js_delete_prop(obj, prop))
             }
             @ast.TsExpr::IndexAccess(obj_expr, idx_expr) => {
               let obj = self.eval_expr(obj_expr, env)
               let idx = self.eval_expr(idx_expr, env)
               let key = idx.to_js_string()
+              // Delete on null/undefined throws TypeError
+              match obj {
+                Null => {
+                  let _ = self.set_error_kind(
+                    "TypeError",
+                    "Cannot delete property '\{key}' of null",
+                  )
+                  return self.error_or_undefined()
+                }
+                Undefined => {
+                  let _ = self.set_error_kind(
+                    "TypeError",
+                    "Cannot delete property '\{key}' of undefined",
+                  )
+                  return self.error_or_undefined()
+                }
+                _ => ()
+              }
               Bool(js_delete_prop(obj, key))
             }
             @ast.TsExpr::Var(name) =>

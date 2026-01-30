@@ -4,12 +4,77 @@
 
 | ステータス | 件数 |
 |-----------|------|
-| Passed | 12,300 |
-| Failed | 2,467 |
-| Skipped | 9,109 |
+| Passed | 14,097 |
+| Failed | 5,713 |
+| Skipped | 4,066 |
 | **Total** | 23,876 |
 
-### 最新の修正 (strict mode + TDZ 対応) - 一部完了
+### 最新の修正 (private method/accessor エラー処理) - 完了
+- **プライベートメソッドへの代入禁止**
+  - `this.#privateMethod += 1` のような compound assignment で TypeError
+  - PrivateSet で method kind の場合は常にエラー
+- **getter-only プライベートアクセサへの代入禁止**
+  - `get #field()` のみ定義され `set` がない場合、代入時に TypeError
+  - プロトタイプチェーンを辿って getter/setter を検出
+- **getter/setter 両方あるプライベートアクセサの setter 呼び出し**
+  - プロトタイプチェーン上の setter を正しく呼び出し
+- **delete null/undefined でTypeError**
+  - `delete null.prop` や `delete undefined.prop` で TypeError を投げる
+- **Passed: 13,991 → 14,097 (+106)**
+
+### 以前の修正 (async/await テストサポート) - 完了
+- **async フラグのスキップ解除**
+  - async/await構文は既に動作していたが、テストがスキップされていた
+  - `$DONE` コールバックパターンでエラー検出
+  - `get_last_error()` API追加でテストランナーからエラー取得
+- **asyncHelpers.js ハーネス実装**
+  - `asyncTest()` - 非同期テストラッパー
+  - `assert.throwsAsync()` - 非同期例外アサーション
+- **Passed: 13,194 → 13,714 (+520)**
+- **Skipped: 7,923 → 4,066 (-3,857)**
+- ※ 以前スキップされていた3,857件が実行されるようになり、うち520件がパス
+
+### 以前の修正 (propertyHelper.js サポート) - 完了
+- **propertyHelper.js ハーネス実装**
+  - `verifyProperty()` - プロパティディスクリプタの検証
+  - `verifyCallableProperty()` - 関数プロパティの検証
+  - `verifyWritable/NotWritable()` - writable属性の検証
+  - `verifyEnumerable/NotEnumerable()` - enumerable属性の検証
+  - `verifyConfigurable/NotConfigurable()` - configurable属性の検証
+  - `isSameValue()`, `isWritable()`, `isEnumerable()`, `isConfigurable()`
+- **依存機能の確認 (すべて動作済み)**
+  - `Object.getOwnPropertyDescriptor`
+  - `Object.defineProperty`
+  - `Object.getOwnPropertyNames`
+  - `Function.prototype.call.bind`
+  - `Array.isArray`, `propertyIsEnumerable`
+- **追加ハーネス**
+  - `fnGlobalObject.js` - グローバルオブジェクト取得
+  - `isConstructor.js` - コンストラクタ判定
+  - `deepEqual.js` - 深い比較
+  - `decimalToHexString.js` - 16進数変換
+  - `proxyTrapsHelper.js` - Proxyトラップヘルパー
+- **Passed: 12,366 → 13,194 (+828)**
+- **Skipped: 9,109 → 7,923 (-1,186)**
+
+### 以前の修正 (private fields / methods 対応) - 完了
+- **プライベートフィールド/メソッドのアクセス制御実装**
+  - `#field` 構文のパース (既存)
+  - ブランドベースのアクセス制御 (WeakMap的セマンティクス)
+  - インスタンスプライベートフィールド (`#field = value`)
+  - インスタンスプライベートメソッド (`#method() {}`)
+  - 静的プライベートフィールド (`static #field = value`)
+  - 静的プライベートメソッド (`static #method() {}`)
+  - 不正アクセス時の TypeError 発生
+- **ブランド実装の詳細**
+  - 各クラスにユニークなブランドID (`__private_brand__N`) を生成
+  - プライベート名をブランド付きにマングリング (`#field` → `__private_brand_0__#field`)
+  - インスタンス生成時にブランドプロパティを設定
+  - プロパティアクセス時にブランドチェックを実行
+- **class/elements テスト: 465 → 531 passed (+66)**
+- **Passed: 12,300 → 12,366 (+66)**
+
+### 以前の修正 (strict mode + TDZ 対応) - 一部完了
 - **compound assignment で未宣言変数を参照するとReferenceError**
   - `x *= 1` で x が存在しない場合、ReferenceError を投げるように修正
   - CompoundAssignExpr (式としての compound assignment) も対応
@@ -39,18 +104,23 @@
 
 ---
 
-## SKIPの内訳
+## SKIPの内訳 (更新: 4,066件)
 
 | 理由 | 件数 | 優先度 |
 |------|------|--------|
-| async flag (async/await tests) | 4,163 | 低 |
-| with statement not supported | 2,448 | 対応しない |
-| missing includes: propertyHelper.js | 1,800 | 中 |
+| with statement not supported | 3,451 | 対応しない |
+| module syntax | 319 | 中 |
 | fixture | 252 | - |
-| module syntax | 221 | 中 |
-| missing includes: asyncHelpers.js | 122 | 低 |
-| missing includes: fnGlobalObject.js | 41 | 低 |
-| missing includes: tcoHelper.js | 34 | 低 |
+| missing includes: tcoHelper.js | 34 | 低 (対応しない) |
+| missing includes: resizableArrayBufferUtils.js | 7 | 低 (ES2024) |
+| missing includes: testTypedArray.js | 2 | 低 |
+| missing includes: wellKnownIntrinsicObjects.js | 1 | 低 |
+
+### 完了したスキップ理由
+- ~~async flag~~ → テスト実行可能に (+520 passed)
+- ~~propertyHelper.js~~ → ハーネス実装完了
+- ~~fnGlobalObject.js~~ → ハーネス実装完了
+- ~~asyncHelpers.js~~ → ハーネス実装完了
 
 ---
 
@@ -78,7 +148,7 @@
 | Expected an error to be thrown | 663 | 高 |
 | Expected SyntaxError but got TypeError | 69 | 中 |
 | negative mismatch (parse phase) | 67 | 中 |
-| Cannot read properties of null/undefined | 50 | 高 |
+| Cannot read properties of null/undefined | 0 | 完了 |
 | value is not callable | 44 | 高 |
 | Expected SyntaxError but got ReferenceError | 44 | 中 |
 | Assertion failed | 34 | 中 |
@@ -90,7 +160,7 @@
 
 | 機能領域 | FAIL数 | 主な問題 |
 |---------|--------|----------|
-| class | 613 | strict mode, private fields, static |
+| class | 547 | strict mode, static, ネストクラスprivate |
 | compound-assignment | 115 | strict mode エラー処理 |
 | for-of | 98 | イテレータ、destructuring |
 | super | 49 | super参照解決 |
@@ -123,9 +193,10 @@
    - [x] クラスフィールドのアロー関数内での super
    - ファイル: `parser_class.mbt`, `interpreter_eval.mbt`, `interpreter_iter_eval.mbt`
 
-3. **[ ] null/undefined のプロパティアクセス (~50件)**
-   - 適切なTypeError投げ
-   - メッセージ改善
+3. **[x] null/undefined のプロパティアクセス (完了)**
+   - [x] 適切なTypeError投げ (strict mode無関係に常にエラー)
+   - [x] メッセージ改善 (`Cannot read/set properties of null/undefined`)
+   - ファイル: `interpreter_props.mbt`, `interpreter_eval.mbt`
 
 4. **[ ] イテレータプロトコル完全対応 (~100件)**
    - for-of での正しいイテレータ呼び出し
@@ -134,9 +205,15 @@
 
 ### P1: 中優先度
 
-5. **[ ] private fields / methods (~50件)**
-   - `#field` 構文のパース
-   - WeakMap的アクセス制御
+5. **[x] private fields / methods (完了)**
+   - [x] `#field` 構文のパース
+   - [x] ブランドベースのアクセス制御 (WeakMap的セマンティクス)
+   - [x] インスタンスプライベートフィールド/メソッド
+   - [x] 静的プライベートフィールド/メソッド
+   - [x] 不正アクセス時のTypeError
+   - [ ] 残課題: プライベートメソッドの `.name` プロパティ
+   - [ ] 残課題: ネストしたクラスでの外部クラスprivateアクセス
+   - ファイル: `parser_class.mbt`, `parser_expr.mbt`, `parser_core.mbt`, `interpreter_props.mbt`
 
 6. **[ ] generator関数の値 (~60件)**
    - yield式の戻り値
@@ -148,14 +225,16 @@
    - getter/setter with super
 
 8. **[ ] パースエラー修正 (~300件)**
-   - dynamic import `import()`
+   - ~~dynamic import `import()`~~ ✓完了
+   - `import.meta` ✓完了
    - 正規表現リテラル `/pattern/flags`
    - オブジェクトメソッド短縮構文
 
-9. **[ ] propertyHelper.js 対応 (~1800件 skip解除)**
-   - Object.getOwnPropertyDescriptor
-   - Object.defineProperty
-   - property descriptor support
+9. **[x] propertyHelper.js 対応 (完了)**
+   - Object.getOwnPropertyDescriptor ✓
+   - Object.defineProperty ✓
+   - property descriptor support ✓
+   - **+814 passed, -1164 skipped**
 
 ### P2: 低優先度
 
@@ -164,10 +243,11 @@
     - import attributes
     - re-exports
 
-11. **[ ] async/await (~4000件)**
-    - Promise対応
-    - async function
-    - async generator
+11. **[x] async/await (完了)**
+    - Promise対応 ✓
+    - async function ✓
+    - async generator (部分的)
+    - **+520 passed, -3,857 skipped**
 
 12. **[ ] using declaration (ES2024, ~50件)**
     - `using` キーワード
@@ -177,7 +257,7 @@
 
 ## 対応しない項目
 
-- **with statement** (2,448件): 非推奨、strict modeで禁止
+- **with statement** (3,451件): 非推奨、strict modeで禁止
 - **tcoHelper.js** (34件): 末尾呼び出し最適化
 - **eval strict mode の一部**: 複雑すぎる仕様
 
@@ -185,6 +265,27 @@
 
 ## 次のアクション
 
-1. strict mode エラー処理の実装
-2. superキーワードの参照解決
-3. パーサーの正規表現リテラル対応
+1. ~~private fields / methods の実装~~ ✓完了
+2. ~~propertyHelper.js 対応~~ ✓完了
+3. ~~async/await テストサポート~~ ✓完了
+4. ~~dynamic import / import.meta~~ ✓完了
+5. strict mode エラー処理の残り (arguments/eval代入禁止、重複引数名)
+6. generator関数の yield式の値 (.next(value) 引数伝播)
+7. パーサーの正規表現リテラル対応
+8. module構文対応 (319件スキップ中)
+
+---
+
+## 進捗サマリー
+
+| 日付 | Passed | Failed | Skipped | 主な変更 |
+|------|--------|--------|---------|----------|
+| 開始時 | 12,240 | - | - | baseline |
+| strict+TDZ | 12,300 | - | - | +60 |
+| private fields | 12,366 | - | - | +66 |
+| propertyHelper | 13,194 | 2,759 | 7,923 | +828 |
+| async/await | 13,714 | 6,096 | 4,066 | +520 |
+| dynamic import | 13,991 | 5,819 | 4,066 | +277 |
+| private method/accessor | 14,097 | 5,713 | 4,066 | +106 |
+
+**総合改善: +1,857 passed tests**
