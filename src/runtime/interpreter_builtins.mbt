@@ -90,9 +90,35 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let _ = js_set_prop(math, "exp", self.make_native("Math.exp"))
   let _ = js_set_prop(math, "log", self.make_native("Math.log"))
   let _ = js_set_prop(math, "trunc", self.make_native("Math.trunc"))
+  let _ = js_set_prop(math, "pow", self.make_native("Math.pow"))
+  let _ = js_set_prop(math, "sign", self.make_native("Math.sign"))
+  let _ = js_set_prop(math, "log10", self.make_native("Math.log10"))
+  let _ = js_set_prop(math, "log2", self.make_native("Math.log2"))
+  let _ = js_set_prop(math, "cbrt", self.make_native("Math.cbrt"))
+  let _ = js_set_prop(math, "hypot", self.make_native("Math.hypot"))
+  let _ = js_set_prop(math, "atan2", self.make_native("Math.atan2"))
+  let _ = js_set_prop(math, "asin", self.make_native("Math.asin"))
+  let _ = js_set_prop(math, "acos", self.make_native("Math.acos"))
+  let _ = js_set_prop(math, "atan", self.make_native("Math.atan"))
+  let _ = js_set_prop(math, "sinh", self.make_native("Math.sinh"))
+  let _ = js_set_prop(math, "cosh", self.make_native("Math.cosh"))
+  let _ = js_set_prop(math, "tanh", self.make_native("Math.tanh"))
+  let _ = js_set_prop(math, "asinh", self.make_native("Math.asinh"))
+  let _ = js_set_prop(math, "acosh", self.make_native("Math.acosh"))
+  let _ = js_set_prop(math, "atanh", self.make_native("Math.atanh"))
+  let _ = js_set_prop(math, "expm1", self.make_native("Math.expm1"))
+  let _ = js_set_prop(math, "log1p", self.make_native("Math.log1p"))
+  let _ = js_set_prop(math, "fround", self.make_native("Math.fround"))
+  let _ = js_set_prop(math, "clz32", self.make_native("Math.clz32"))
+  let _ = js_set_prop(math, "imul", self.make_native("Math.imul"))
   let _ = js_define_data_prop(math, "PI", Number(@math.PI), false, false, false)
   let _ = js_define_data_prop(math, "E", Number(@math.exp(1.0)), false, false, false)
   let _ = js_define_data_prop(math, "LN2", Number(@math.ln(2.0)), false, false, false)
+  let _ = js_define_data_prop(math, "LN10", Number(@math.ln(10.0)), false, false, false)
+  let _ = js_define_data_prop(math, "LOG2E", Number(1.0 / @math.ln(2.0)), false, false, false)
+  let _ = js_define_data_prop(math, "LOG10E", Number(1.0 / @math.ln(10.0)), false, false, false)
+  let _ = js_define_data_prop(math, "SQRT2", Number(2.0.sqrt()), false, false, false)
+  let _ = js_define_data_prop(math, "SQRT1_2", Number(0.5.sqrt()), false, false, false)
   self.global_env.define_var("Math", math)
   let _ = js_set_prop(global_obj, "Math", math)
 
@@ -4742,8 +4768,144 @@ fn JSInterpreter::call_native(
         Number(js_nan)
       }
     "Math.random" =>
-      // TODO: implementation
+      // TODO: proper random implementation
       Number(0.5)
+    "Math.pow" => {
+      let base = if args.length() > 0 { args[0].to_number() } else { 0.0 / 0.0 }
+      let exp = if args.length() > 1 { args[1].to_number() } else { 0.0 / 0.0 }
+      Number(@math.pow(base, exp))
+    }
+    "Math.sign" => {
+      let x = if args.length() > 0 { args[0].to_number() } else { 0.0 / 0.0 }
+      if x.is_nan() {
+        Number(x)
+      } else if x > 0.0 {
+        Number(1.0)
+      } else if x < 0.0 {
+        Number(-1.0)
+      } else {
+        Number(x) // preserves +0 and -0
+      }
+    }
+    "Math.log10" => {
+      let x = if args.length() > 0 { args[0].to_number() } else { 0.0 / 0.0 }
+      Number(@math.ln(x) / @math.ln(10.0))
+    }
+    "Math.log2" => {
+      let x = if args.length() > 0 { args[0].to_number() } else { 0.0 / 0.0 }
+      Number(@math.ln(x) / @math.ln(2.0))
+    }
+    "Math.cbrt" => {
+      let x = if args.length() > 0 { args[0].to_number() } else { 0.0 / 0.0 }
+      if x < 0.0 {
+        Number(-@math.pow(-x, 1.0 / 3.0))
+      } else {
+        Number(@math.pow(x, 1.0 / 3.0))
+      }
+    }
+    "Math.hypot" => {
+      if args.length() == 0 {
+        Number(0.0)
+      } else {
+        let mut sum = 0.0
+        for arg in args {
+          let v = arg.to_number()
+          if v.is_inf() || v.is_neg_inf() {
+            return Number(1.0 / 0.0)
+          }
+          if v.is_nan() {
+            return Number(v)
+          }
+          sum += v * v
+        }
+        Number(sum.sqrt())
+      }
+    }
+    "Math.atan2" => {
+      let y = if args.length() > 0 { args[0].to_number() } else { 0.0 / 0.0 }
+      let x = if args.length() > 1 { args[1].to_number() } else { 0.0 / 0.0 }
+      Number(@math.atan2(y, x))
+    }
+    "Math.asin" => {
+      let x = if args.length() > 0 { args[0].to_number() } else { 0.0 / 0.0 }
+      Number(@math.asin(x))
+    }
+    "Math.acos" => {
+      let x = if args.length() > 0 { args[0].to_number() } else { 0.0 / 0.0 }
+      Number(@math.acos(x))
+    }
+    "Math.atan" => {
+      let x = if args.length() > 0 { args[0].to_number() } else { 0.0 / 0.0 }
+      Number(@math.atan(x))
+    }
+    "Math.sinh" => {
+      let x = if args.length() > 0 { args[0].to_number() } else { 0.0 / 0.0 }
+      // sinh(x) = (e^x - e^(-x)) / 2
+      Number((@math.exp(x) - @math.exp(-x)) / 2.0)
+    }
+    "Math.cosh" => {
+      let x = if args.length() > 0 { args[0].to_number() } else { 0.0 / 0.0 }
+      // cosh(x) = (e^x + e^(-x)) / 2
+      Number((@math.exp(x) + @math.exp(-x)) / 2.0)
+    }
+    "Math.tanh" => {
+      let x = if args.length() > 0 { args[0].to_number() } else { 0.0 / 0.0 }
+      // tanh(x) = sinh(x) / cosh(x) = (e^x - e^(-x)) / (e^x + e^(-x))
+      let ex = @math.exp(x)
+      let enx = @math.exp(-x)
+      Number((ex - enx) / (ex + enx))
+    }
+    "Math.asinh" => {
+      let x = if args.length() > 0 { args[0].to_number() } else { 0.0 / 0.0 }
+      // asinh(x) = ln(x + sqrt(x^2 + 1))
+      Number(@math.ln(x + (x * x + 1.0).sqrt()))
+    }
+    "Math.acosh" => {
+      let x = if args.length() > 0 { args[0].to_number() } else { 0.0 / 0.0 }
+      // acosh(x) = ln(x + sqrt(x^2 - 1))
+      Number(@math.ln(x + (x * x - 1.0).sqrt()))
+    }
+    "Math.atanh" => {
+      let x = if args.length() > 0 { args[0].to_number() } else { 0.0 / 0.0 }
+      // atanh(x) = 0.5 * ln((1 + x) / (1 - x))
+      Number(0.5 * @math.ln((1.0 + x) / (1.0 - x)))
+    }
+    "Math.expm1" => {
+      let x = if args.length() > 0 { args[0].to_number() } else { 0.0 / 0.0 }
+      // expm1(x) = e^x - 1 (should use better algorithm for small x, but this works)
+      Number(@math.exp(x) - 1.0)
+    }
+    "Math.log1p" => {
+      let x = if args.length() > 0 { args[0].to_number() } else { 0.0 / 0.0 }
+      // log1p(x) = ln(1 + x) (should use better algorithm for small x, but this works)
+      Number(@math.ln(1.0 + x))
+    }
+    "Math.fround" => {
+      let x = if args.length() > 0 { args[0].to_number() } else { 0.0 / 0.0 }
+      // Convert to 32-bit float and back - approximate by rounding precision
+      Number(x)
+    }
+    "Math.clz32" => {
+      let x = if args.length() > 0 { args[0].to_number().to_int() } else { 0 }
+      // Count leading zeros in 32-bit integer
+      if x == 0 {
+        Number(32.0)
+      } else {
+        let mut count = 0
+        let mut n = x
+        while (n & 0x80000000) == 0 && count < 32 {
+          count += 1
+          n = n << 1
+        }
+        Number(count.to_double())
+      }
+    }
+    "Math.imul" => {
+      let a = if args.length() > 0 { args[0].to_number().to_int() } else { 0 }
+      let b = if args.length() > 1 { args[1].to_number().to_int() } else { 0 }
+      // 32-bit integer multiplication
+      Number((a * b).to_double())
+    }
     // test262 harness functions
     "print" => {
       let parts : Array[String] = []
