@@ -4099,6 +4099,16 @@ fn JSInterpreter::exec_stmt_gen(
           }
       })
     @ast.TsStmt::Block(block) => self.exec_block_gen(block, env)
+    @ast.TsStmt::Var(binding, _, init)
+    | @ast.TsStmt::Let(binding, _, init)
+    | @ast.TsStmt::Const(binding, _, init) =>
+      gen_to_signal(self.eval_expr_gen(init, env), val => {
+        self.bind_pattern(binding, val, env)
+        match self.peek_error() {
+          Some(err) => GenSignal::Return(err)
+          None => GenSignal::Continue
+        }
+      })
     _ =>
       match self.exec_stmt(stmt, env) {
         Some(BreakSignal(_)) | Some(ContinueSignal(_)) => GenSignal::Continue
