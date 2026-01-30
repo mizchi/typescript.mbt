@@ -1110,9 +1110,9 @@ fn JSInterpreter::to_string_value(
 ) -> String {
   match value {
     String(s) =>
-      if is_symbol_string(s) {
+      if s.has_prefix("Symbol(") {
         let _ = self.set_error_kind(
-          "TypeError", "Cannot convert a Symbol value to a string",
+          "TypeError", "Cannot convert Symbol to string",
         )
         ""
       } else {
