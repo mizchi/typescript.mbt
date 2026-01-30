@@ -1,4 +1,393 @@
 ///|
+fn JSInterpreter::install_collections(
+  self : JSInterpreter,
+  global_obj : JSValue,
+) -> Unit {
+  // Map
+  let map_ctor = self.make_native("Map")
+  self.set_function_length(map_ctor, 0.0)
+  self.set_function_name(map_ctor, "Map")
+  let map_proto = self.new_object()
+  let _ = js_set_prop(map_proto, "get", self.make_native("Map.prototype.get"))
+  let _ = js_set_prop(map_proto, "set", self.make_native("Map.prototype.set"))
+  let _ = js_set_prop(map_proto, "has", self.make_native("Map.prototype.has"))
+  let _ = js_set_prop(
+    map_proto,
+    "delete",
+    self.make_native("Map.prototype.delete"),
+  )
+  let _ = js_set_prop(
+    map_proto,
+    "clear",
+    self.make_native("Map.prototype.clear"),
+  )
+  let _ = js_set_prop(map_proto, "keys", self.make_native("Map.prototype.keys"))
+  let _ = js_set_prop(
+    map_proto,
+    "values",
+    self.make_native("Map.prototype.values"),
+  )
+  let _ = js_set_prop(
+    map_proto,
+    "entries",
+    self.make_native("Map.prototype.entries"),
+  )
+  let _ = js_set_prop(
+    map_proto,
+    "forEach",
+    self.make_native("Map.prototype.forEach"),
+  )
+  let _ = js_set_prop(
+    map_proto,
+    "@@iterator",
+    self.make_native("Map.prototype.entries"),
+  )
+  let _ = js_define_data_prop(
+    map_ctor, "prototype", map_proto, true, false, true,
+  )
+  self.global_env.define_var("Map", map_ctor)
+  let _ = js_set_prop(global_obj, "Map", map_ctor)
+
+  // Set
+  let set_ctor = self.make_native("Set")
+  self.set_function_length(set_ctor, 0.0)
+  self.set_function_name(set_ctor, "Set")
+  let set_proto = self.new_object()
+  let _ = js_set_prop(set_proto, "add", self.make_native("Set.prototype.add"))
+  let _ = js_set_prop(set_proto, "has", self.make_native("Set.prototype.has"))
+  let _ = js_set_prop(
+    set_proto,
+    "delete",
+    self.make_native("Set.prototype.delete"),
+  )
+  let _ = js_set_prop(
+    set_proto,
+    "clear",
+    self.make_native("Set.prototype.clear"),
+  )
+  let _ = js_set_prop(
+    set_proto,
+    "keys",
+    self.make_native("Set.prototype.values"),
+  )
+  let _ = js_set_prop(
+    set_proto,
+    "values",
+    self.make_native("Set.prototype.values"),
+  )
+  let _ = js_set_prop(
+    set_proto,
+    "entries",
+    self.make_native("Set.prototype.entries"),
+  )
+  let _ = js_set_prop(
+    set_proto,
+    "forEach",
+    self.make_native("Set.prototype.forEach"),
+  )
+  let _ = js_set_prop(
+    set_proto,
+    "@@iterator",
+    self.make_native("Set.prototype.values"),
+  )
+  let _ = js_define_data_prop(
+    set_ctor, "prototype", set_proto, true, false, true,
+  )
+  self.global_env.define_var("Set", set_ctor)
+  let _ = js_set_prop(global_obj, "Set", set_ctor)
+
+  // Stub constructors: WeakMap, WeakSet, ArrayBuffer, DataView
+  let stub_ctors = [
+    ("WeakMap", 0.0),
+    ("WeakSet", 0.0),
+    ("ArrayBuffer", 1.0),
+    ("DataView", 1.0),
+  ]
+  for pair in stub_ctors {
+    let (name, len) = pair
+    let ctor = self.make_native(name)
+    self.set_function_length(ctor, len)
+    self.set_function_name(ctor, name)
+    let _ = js_define_data_prop(
+      ctor,
+      "prototype",
+      self.new_object(),
+      true,
+      false,
+      true,
+    )
+    self.global_env.define_var(name, ctor)
+    let _ = js_set_prop(global_obj, name, ctor)
+
+  }
+
+  // TypedArrays (stubs)
+  let typed_arrays = [
+    "Int8Array", "Uint8Array", "Uint8ClampedArray", "Int16Array", "Uint16Array",
+    "Int32Array", "Uint32Array", "Float32Array", "Float64Array", "BigInt64Array",
+    "BigUint64Array",
+  ]
+  for name in typed_arrays {
+    let ctor = self.make_native(name)
+    self.set_function_length(ctor, 3.0)
+    self.set_function_name(ctor, name)
+    let _ = js_define_data_prop(
+      ctor,
+      "prototype",
+      self.new_object(),
+      true,
+      false,
+      true,
+    )
+    self.global_env.define_var(name, ctor)
+    let _ = js_set_prop(global_obj, name, ctor)
+
+  }
+}
+
+///|
+fn JSInterpreter::install_symbol(
+  self : JSInterpreter,
+  global_obj : JSValue,
+) -> Unit {
+  let symbol_fn = self.make_native("Symbol")
+  self.set_function_length(symbol_fn, 0.0)
+  // Create Symbol.prototype
+  let symbol_proto = self.new_object()
+  let _ = js_set_prop(symbol_proto, "__class", String("Symbol"))
+  // Symbol.prototype.description (getter)
+  let sym_desc_get = self.make_native("Symbol.prototype.description")
+  self.set_function_length(sym_desc_get, 0.0)
+  self.set_function_name(sym_desc_get, "get description")
+  let _ = js_define_accessor_prop(
+    symbol_proto,
+    "description",
+    Some(sym_desc_get),
+    None,
+    false,
+    true,
+  )
+  // Symbol.prototype.toString
+  let sym_to_str = self.make_native("Symbol.prototype.toString")
+  self.set_function_length(sym_to_str, 0.0)
+  self.set_function_name(sym_to_str, "toString")
+  let _ = js_define_data_prop(
+    symbol_proto, "toString", sym_to_str, true, false, true,
+  )
+  // Symbol.prototype.valueOf
+  let sym_value_of = self.make_native("Symbol.prototype.valueOf")
+  self.set_function_length(sym_value_of, 0.0)
+  self.set_function_name(sym_value_of, "valueOf")
+  let _ = js_define_data_prop(
+    symbol_proto, "valueOf", sym_value_of, true, false, true,
+  )
+  // Symbol.prototype[@@toPrimitive]
+  let sym_to_prim = self.make_native("Symbol.prototype[@@toPrimitive]")
+  self.set_function_length(sym_to_prim, 1.0)
+  self.set_function_name(sym_to_prim, "[Symbol.toPrimitive]")
+  let _ = js_define_data_prop(
+    symbol_proto, "@@toPrimitive", sym_to_prim, false, false, true,
+  )
+  // Symbol.prototype[@@toStringTag]
+  let _ = js_define_data_prop(
+    symbol_proto,
+    "@@toStringTag",
+    String("Symbol"),
+    false,
+    false,
+    true,
+  )
+  let _ = js_define_data_prop(
+    symbol_fn, "prototype", symbol_proto, false, false, false,
+  )
+  // Symbol.for
+  let symbol_for = self.make_native("Symbol.for")
+  self.set_function_length(symbol_for, 1.0)
+  self.set_function_name(symbol_for, "for")
+  let _ = js_define_data_prop(symbol_fn, "for", symbol_for, true, false, true)
+  // Symbol.keyFor
+  let symbol_key_for = self.make_native("Symbol.keyFor")
+  self.set_function_length(symbol_key_for, 1.0)
+  self.set_function_name(symbol_key_for, "keyFor")
+  let _ = js_define_data_prop(
+    symbol_fn, "keyFor", symbol_key_for, true, false, true,
+  )
+  // Well-known symbols (not enumerable, not writable, not configurable)
+  let well_known = [
+    ("asyncIterator", "@@asyncIterator"),
+    ("hasInstance", "@@hasInstance"),
+    ("isConcatSpreadable", "@@isConcatSpreadable"),
+    ("iterator", "@@iterator"),
+    ("match", "@@match"),
+    ("matchAll", "@@matchAll"),
+    ("replace", "@@replace"),
+    ("search", "@@search"),
+    ("species", "@@species"),
+    ("split", "@@split"),
+    ("toPrimitive", "@@toPrimitive"),
+    ("toStringTag", "@@toStringTag"),
+    ("unscopables", "@@unscopables"),
+    ("dispose", "@@dispose"),
+    ("asyncDispose", "@@asyncDispose"),
+  ]
+  for pair in well_known {
+    let (name, value) = pair
+    let _ = js_define_data_prop(
+      symbol_fn,
+      name,
+      String(value),
+      false,
+      false,
+      false,
+    )
+
+  }
+  self.global_env.define_var("Symbol", symbol_fn)
+  let _ = js_set_prop(global_obj, "Symbol", symbol_fn)
+
+}
+
+///|
+fn JSInterpreter::install_error_ctor(
+  self : JSInterpreter,
+  global_obj : JSValue,
+  name : String,
+) -> Unit {
+  let ctor = self.make_native(name)
+  self.set_function_name(ctor, name)
+  let _ = js_define_data_prop(
+    ctor,
+    "prototype",
+    self.new_object(),
+    true,
+    false,
+    true,
+  )
+  self.global_env.define_var(name, ctor)
+  let _ = js_set_prop(global_obj, name, ctor)
+
+}
+
+///|
+fn JSInterpreter::install_errors(
+  self : JSInterpreter,
+  global_obj : JSValue,
+) -> Unit {
+  self.install_error_ctor(global_obj, "Error")
+  self.install_error_ctor(global_obj, "SyntaxError")
+  self.install_error_ctor(global_obj, "TypeError")
+  self.install_error_ctor(global_obj, "ReferenceError")
+  self.install_error_ctor(global_obj, "RangeError")
+  self.install_error_ctor(global_obj, "AggregateError")
+  self.install_error_ctor(global_obj, "URIError")
+  self.install_error_ctor(global_obj, "EvalError")
+}
+
+///|
+fn JSInterpreter::install_math(
+  self : JSInterpreter,
+  global_obj : JSValue,
+) -> Unit {
+  let math = self.new_object()
+  let _ = js_set_prop(math, "__class", String("Math"))
+  let _ = js_set_prop(math, "floor", self.make_native("Math.floor"))
+  let _ = js_set_prop(math, "ceil", self.make_native("Math.ceil"))
+  let _ = js_set_prop(math, "abs", self.make_native("Math.abs"))
+  let _ = js_set_prop(math, "sqrt", self.make_native("Math.sqrt"))
+  let _ = js_set_prop(math, "min", self.make_native("Math.min"))
+  let _ = js_set_prop(math, "max", self.make_native("Math.max"))
+  let _ = js_set_prop(math, "round", self.make_native("Math.round"))
+  let _ = js_set_prop(math, "random", self.make_native("Math.random"))
+  let _ = js_set_prop(math, "cos", self.make_native("Math.cos"))
+  let _ = js_set_prop(math, "sin", self.make_native("Math.sin"))
+  let _ = js_set_prop(math, "tan", self.make_native("Math.tan"))
+  let _ = js_set_prop(math, "exp", self.make_native("Math.exp"))
+  let _ = js_set_prop(math, "log", self.make_native("Math.log"))
+  let _ = js_set_prop(math, "trunc", self.make_native("Math.trunc"))
+  let _ = js_set_prop(math, "pow", self.make_native("Math.pow"))
+  let _ = js_set_prop(math, "sign", self.make_native("Math.sign"))
+  let _ = js_set_prop(math, "log10", self.make_native("Math.log10"))
+  let _ = js_set_prop(math, "log2", self.make_native("Math.log2"))
+  let _ = js_set_prop(math, "cbrt", self.make_native("Math.cbrt"))
+  let _ = js_set_prop(math, "hypot", self.make_native("Math.hypot"))
+  let _ = js_set_prop(math, "atan2", self.make_native("Math.atan2"))
+  let _ = js_set_prop(math, "asin", self.make_native("Math.asin"))
+  let _ = js_set_prop(math, "acos", self.make_native("Math.acos"))
+  let _ = js_set_prop(math, "atan", self.make_native("Math.atan"))
+  let _ = js_set_prop(math, "sinh", self.make_native("Math.sinh"))
+  let _ = js_set_prop(math, "cosh", self.make_native("Math.cosh"))
+  let _ = js_set_prop(math, "tanh", self.make_native("Math.tanh"))
+  let _ = js_set_prop(math, "asinh", self.make_native("Math.asinh"))
+  let _ = js_set_prop(math, "acosh", self.make_native("Math.acosh"))
+  let _ = js_set_prop(math, "atanh", self.make_native("Math.atanh"))
+  let _ = js_set_prop(math, "expm1", self.make_native("Math.expm1"))
+  let _ = js_set_prop(math, "log1p", self.make_native("Math.log1p"))
+  let _ = js_set_prop(math, "fround", self.make_native("Math.fround"))
+  let _ = js_set_prop(math, "clz32", self.make_native("Math.clz32"))
+  let _ = js_set_prop(math, "imul", self.make_native("Math.imul"))
+  let _ = js_define_data_prop(math, "PI", Number(@math.PI), false, false, false)
+  let _ = js_define_data_prop(
+    math,
+    "E",
+    Number(@math.exp(1.0)),
+    false,
+    false,
+    false,
+  )
+  let _ = js_define_data_prop(
+    math,
+    "LN2",
+    Number(@math.ln(2.0)),
+    false,
+    false,
+    false,
+  )
+  let _ = js_define_data_prop(
+    math,
+    "LN10",
+    Number(@math.ln(10.0)),
+    false,
+    false,
+    false,
+  )
+  let _ = js_define_data_prop(
+    math,
+    "LOG2E",
+    Number(1.0 / @math.ln(2.0)),
+    false,
+    false,
+    false,
+  )
+  let _ = js_define_data_prop(
+    math,
+    "LOG10E",
+    Number(1.0 / @math.ln(10.0)),
+    false,
+    false,
+    false,
+  )
+  let _ = js_define_data_prop(
+    math,
+    "SQRT2",
+    Number(2.0.sqrt()),
+    false,
+    false,
+    false,
+  )
+  let _ = js_define_data_prop(
+    math,
+    "SQRT1_2",
+    Number(0.5.sqrt()),
+    false,
+    false,
+    false,
+  )
+  self.global_env.define_var("Math", math)
+  let _ = js_set_prop(global_obj, "Math", math)
+
+}
+
+///|
 // /
 fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let global_obj = self.new_object()
@@ -141,104 +530,7 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let _ = js_set_prop(console, "log", self.make_native("console.log"))
   self.global_env.define_var("console", console)
   let _ = js_set_prop(global_obj, "console", console)
-
-  // Math
-  let math = self.new_object()
-  let _ = js_set_prop(math, "__class", String("Math"))
-  let _ = js_set_prop(math, "floor", self.make_native("Math.floor"))
-  let _ = js_set_prop(math, "ceil", self.make_native("Math.ceil"))
-  let _ = js_set_prop(math, "abs", self.make_native("Math.abs"))
-  let _ = js_set_prop(math, "sqrt", self.make_native("Math.sqrt"))
-  let _ = js_set_prop(math, "min", self.make_native("Math.min"))
-  let _ = js_set_prop(math, "max", self.make_native("Math.max"))
-  let _ = js_set_prop(math, "round", self.make_native("Math.round"))
-  let _ = js_set_prop(math, "random", self.make_native("Math.random"))
-  let _ = js_set_prop(math, "cos", self.make_native("Math.cos"))
-  let _ = js_set_prop(math, "sin", self.make_native("Math.sin"))
-  let _ = js_set_prop(math, "tan", self.make_native("Math.tan"))
-  let _ = js_set_prop(math, "exp", self.make_native("Math.exp"))
-  let _ = js_set_prop(math, "log", self.make_native("Math.log"))
-  let _ = js_set_prop(math, "trunc", self.make_native("Math.trunc"))
-  let _ = js_set_prop(math, "pow", self.make_native("Math.pow"))
-  let _ = js_set_prop(math, "sign", self.make_native("Math.sign"))
-  let _ = js_set_prop(math, "log10", self.make_native("Math.log10"))
-  let _ = js_set_prop(math, "log2", self.make_native("Math.log2"))
-  let _ = js_set_prop(math, "cbrt", self.make_native("Math.cbrt"))
-  let _ = js_set_prop(math, "hypot", self.make_native("Math.hypot"))
-  let _ = js_set_prop(math, "atan2", self.make_native("Math.atan2"))
-  let _ = js_set_prop(math, "asin", self.make_native("Math.asin"))
-  let _ = js_set_prop(math, "acos", self.make_native("Math.acos"))
-  let _ = js_set_prop(math, "atan", self.make_native("Math.atan"))
-  let _ = js_set_prop(math, "sinh", self.make_native("Math.sinh"))
-  let _ = js_set_prop(math, "cosh", self.make_native("Math.cosh"))
-  let _ = js_set_prop(math, "tanh", self.make_native("Math.tanh"))
-  let _ = js_set_prop(math, "asinh", self.make_native("Math.asinh"))
-  let _ = js_set_prop(math, "acosh", self.make_native("Math.acosh"))
-  let _ = js_set_prop(math, "atanh", self.make_native("Math.atanh"))
-  let _ = js_set_prop(math, "expm1", self.make_native("Math.expm1"))
-  let _ = js_set_prop(math, "log1p", self.make_native("Math.log1p"))
-  let _ = js_set_prop(math, "fround", self.make_native("Math.fround"))
-  let _ = js_set_prop(math, "clz32", self.make_native("Math.clz32"))
-  let _ = js_set_prop(math, "imul", self.make_native("Math.imul"))
-  let _ = js_define_data_prop(math, "PI", Number(@math.PI), false, false, false)
-  let _ = js_define_data_prop(
-    math,
-    "E",
-    Number(@math.exp(1.0)),
-    false,
-    false,
-    false,
-  )
-  let _ = js_define_data_prop(
-    math,
-    "LN2",
-    Number(@math.ln(2.0)),
-    false,
-    false,
-    false,
-  )
-  let _ = js_define_data_prop(
-    math,
-    "LN10",
-    Number(@math.ln(10.0)),
-    false,
-    false,
-    false,
-  )
-  let _ = js_define_data_prop(
-    math,
-    "LOG2E",
-    Number(1.0 / @math.ln(2.0)),
-    false,
-    false,
-    false,
-  )
-  let _ = js_define_data_prop(
-    math,
-    "LOG10E",
-    Number(1.0 / @math.ln(10.0)),
-    false,
-    false,
-    false,
-  )
-  let _ = js_define_data_prop(
-    math,
-    "SQRT2",
-    Number(2.0.sqrt()),
-    false,
-    false,
-    false,
-  )
-  let _ = js_define_data_prop(
-    math,
-    "SQRT1_2",
-    Number(0.5.sqrt()),
-    false,
-    false,
-    false,
-  )
-  self.global_env.define_var("Math", math)
-  let _ = js_set_prop(global_obj, "Math", math)
+  self.install_math(global_obj)
 
   // JSON
   let json_obj = self.new_object()
@@ -683,104 +975,7 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let _ = js_set_prop(date_proto, "valueOf", date_value_of)
   self.global_env.define_var("Date", date_ctor)
   let _ = js_set_prop(global_obj, "Date", date_ctor)
-
-  // Errors (minimal)
-  let error_ctor = self.make_native("Error")
-  self.set_function_name(error_ctor, "Error")
-  let _ = js_define_data_prop(
-    error_ctor,
-    "prototype",
-    self.new_object(),
-    true,
-    false,
-    true,
-  )
-  self.global_env.define_var("Error", error_ctor)
-  let _ = js_set_prop(global_obj, "Error", error_ctor)
-  let syntax_ctor = self.make_native("SyntaxError")
-  self.set_function_name(syntax_ctor, "SyntaxError")
-  let _ = js_define_data_prop(
-    syntax_ctor,
-    "prototype",
-    self.new_object(),
-    true,
-    false,
-    true,
-  )
-  self.global_env.define_var("SyntaxError", syntax_ctor)
-  let _ = js_set_prop(global_obj, "SyntaxError", syntax_ctor)
-  let type_ctor = self.make_native("TypeError")
-  self.set_function_name(type_ctor, "TypeError")
-  let _ = js_define_data_prop(
-    type_ctor,
-    "prototype",
-    self.new_object(),
-    true,
-    false,
-    true,
-  )
-  self.global_env.define_var("TypeError", type_ctor)
-  let _ = js_set_prop(global_obj, "TypeError", type_ctor)
-  let ref_ctor = self.make_native("ReferenceError")
-  self.set_function_name(ref_ctor, "ReferenceError")
-  let _ = js_define_data_prop(
-    ref_ctor,
-    "prototype",
-    self.new_object(),
-    true,
-    false,
-    true,
-  )
-  self.global_env.define_var("ReferenceError", ref_ctor)
-  let _ = js_set_prop(global_obj, "ReferenceError", ref_ctor)
-  let range_ctor = self.make_native("RangeError")
-  self.set_function_name(range_ctor, "RangeError")
-  let _ = js_define_data_prop(
-    range_ctor,
-    "prototype",
-    self.new_object(),
-    true,
-    false,
-    true,
-  )
-  self.global_env.define_var("RangeError", range_ctor)
-  let _ = js_set_prop(global_obj, "RangeError", range_ctor)
-  let aggregate_ctor = self.make_native("AggregateError")
-  self.set_function_name(aggregate_ctor, "AggregateError")
-  let _ = js_define_data_prop(
-    aggregate_ctor,
-    "prototype",
-    self.new_object(),
-    true,
-    false,
-    true,
-  )
-  self.global_env.define_var("AggregateError", aggregate_ctor)
-  let _ = js_set_prop(global_obj, "AggregateError", aggregate_ctor)
-  let uri_ctor = self.make_native("URIError")
-  self.set_function_name(uri_ctor, "URIError")
-  let _ = js_define_data_prop(
-    uri_ctor,
-    "prototype",
-    self.new_object(),
-    true,
-    false,
-    true,
-  )
-  self.global_env.define_var("URIError", uri_ctor)
-  let _ = js_set_prop(global_obj, "URIError", uri_ctor)
-  let eval_error_ctor = self.make_native("EvalError")
-  self.set_function_name(eval_error_ctor, "EvalError")
-  let _ = js_define_data_prop(
-    eval_error_ctor,
-    "prototype",
-    self.new_object(),
-    true,
-    false,
-    true,
-  )
-  self.global_env.define_var("EvalError", eval_error_ctor)
-  let _ = js_set_prop(global_obj, "EvalError", eval_error_ctor)
+  self.install_errors(global_obj)
 
   // Promise (minimal)
   let promise_proto = self.new_object()
@@ -1061,7 +1256,14 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   self.global_env.define_var("this", global_obj)
   self.global_env.define_var("undefined", Undefined)
   // Global constants: writable:false, enumerable:false, configurable:false (ES5.1 15.1.1)
-  let _ = js_define_data_prop(global_obj, "undefined", Undefined, false, false, false)
+  let _ = js_define_data_prop(
+    global_obj,
+    "undefined",
+    Undefined,
+    false,
+    false,
+    false,
+  )
   let nan = JSValue::Number(0.0 / 0.0)
   let inf = JSValue::Number(1.0 / 0.0)
   self.global_env.define_var("NaN", nan)
@@ -1086,68 +1288,7 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   self.set_function_length(parse_float_fn, 1.0)
   self.global_env.define_var("parseFloat", parse_float_fn)
   let _ = js_set_prop(global_obj, "parseFloat", parse_float_fn)
-
-  // Symbol
-  let symbol_fn = self.make_native("Symbol")
-  self.set_function_length(symbol_fn, 0.0)
-  // Create Symbol.prototype
-  let symbol_proto = self.new_object()
-  let _ = js_set_prop(symbol_proto, "__class", String("Symbol"))
-  // Symbol.prototype.description (getter)
-  let sym_desc_get = self.make_native("Symbol.prototype.description")
-  self.set_function_length(sym_desc_get, 0.0)
-  self.set_function_name(sym_desc_get, "get description")
-  let _ = js_define_accessor_prop(
-    symbol_proto, "description", Some(sym_desc_get), None, false, true,
-  )
-  // Symbol.prototype.toString
-  let sym_to_str = self.make_native("Symbol.prototype.toString")
-  self.set_function_length(sym_to_str, 0.0)
-  self.set_function_name(sym_to_str, "toString")
-  let _ = js_define_data_prop(symbol_proto, "toString", sym_to_str, true, false, true)
-  // Symbol.prototype.valueOf
-  let sym_value_of = self.make_native("Symbol.prototype.valueOf")
-  self.set_function_length(sym_value_of, 0.0)
-  self.set_function_name(sym_value_of, "valueOf")
-  let _ = js_define_data_prop(symbol_proto, "valueOf", sym_value_of, true, false, true)
-  // Symbol.prototype[@@toPrimitive]
-  let sym_to_prim = self.make_native("Symbol.prototype[@@toPrimitive]")
-  self.set_function_length(sym_to_prim, 1.0)
-  self.set_function_name(sym_to_prim, "[Symbol.toPrimitive]")
-  let _ = js_define_data_prop(symbol_proto, "@@toPrimitive", sym_to_prim, false, false, true)
-  // Symbol.prototype[@@toStringTag]
-  let _ = js_define_data_prop(
-    symbol_proto, "@@toStringTag", String("Symbol"), false, false, true,
-  )
-  let _ = js_define_data_prop(symbol_fn, "prototype", symbol_proto, false, false, false)
-  // Symbol.for
-  let symbol_for = self.make_native("Symbol.for")
-  self.set_function_length(symbol_for, 1.0)
-  self.set_function_name(symbol_for, "for")
-  let _ = js_define_data_prop(symbol_fn, "for", symbol_for, true, false, true)
-  // Symbol.keyFor
-  let symbol_key_for = self.make_native("Symbol.keyFor")
-  self.set_function_length(symbol_key_for, 1.0)
-  self.set_function_name(symbol_key_for, "keyFor")
-  let _ = js_define_data_prop(symbol_fn, "keyFor", symbol_key_for, true, false, true)
-  // Well-known symbols (not enumerable, not writable, not configurable)
-  let _ = js_define_data_prop(symbol_fn, "asyncIterator", String("@@asyncIterator"), false, false, false)
-  let _ = js_define_data_prop(symbol_fn, "hasInstance", String("@@hasInstance"), false, false, false)
-  let _ = js_define_data_prop(symbol_fn, "isConcatSpreadable", String("@@isConcatSpreadable"), false, false, false)
-  let _ = js_define_data_prop(symbol_fn, "iterator", String("@@iterator"), false, false, false)
-  let _ = js_define_data_prop(symbol_fn, "match", String("@@match"), false, false, false)
-  let _ = js_define_data_prop(symbol_fn, "matchAll", String("@@matchAll"), false, false, false)
-  let _ = js_define_data_prop(symbol_fn, "replace", String("@@replace"), false, false, false)
-  let _ = js_define_data_prop(symbol_fn, "search", String("@@search"), false, false, false)
-  let _ = js_define_data_prop(symbol_fn, "species", String("@@species"), false, false, false)
-  let _ = js_define_data_prop(symbol_fn, "split", String("@@split"), false, false, false)
-  let _ = js_define_data_prop(symbol_fn, "toPrimitive", String("@@toPrimitive"), false, false, false)
-  let _ = js_define_data_prop(symbol_fn, "toStringTag", String("@@toStringTag"), false, false, false)
-  let _ = js_define_data_prop(symbol_fn, "unscopables", String("@@unscopables"), false, false, false)
-  let _ = js_define_data_prop(symbol_fn, "dispose", String("@@dispose"), false, false, false)
-  let _ = js_define_data_prop(symbol_fn, "asyncDispose", String("@@asyncDispose"), false, false, false)
-  self.global_env.define_var("Symbol", symbol_fn)
-  let _ = js_set_prop(global_obj, "Symbol", symbol_fn)
+  self.install_symbol(global_obj)
 
   // Proxy (minimal)
   let proxy_ctor = self.make_native("Proxy")
@@ -1197,148 +1338,7 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let _ = js_set_prop(reflect, "getOwnPropertyDescriptor", reflect_get_desc)
   self.global_env.define_var("Reflect", reflect)
   let _ = js_set_prop(global_obj, "Reflect", reflect)
-
-  // Map
-  let map_ctor = self.make_native("Map")
-  self.set_function_length(map_ctor, 0.0)
-  self.set_function_name(map_ctor, "Map")
-  let map_proto = self.new_object()
-  let _ = js_set_prop(map_proto, "get", self.make_native("Map.prototype.get"))
-  let _ = js_set_prop(map_proto, "set", self.make_native("Map.prototype.set"))
-  let _ = js_set_prop(map_proto, "has", self.make_native("Map.prototype.has"))
-  let _ = js_set_prop(
-    map_proto, "delete", self.make_native("Map.prototype.delete"),
-  )
-  let _ = js_set_prop(
-    map_proto, "clear", self.make_native("Map.prototype.clear"),
-  )
-  let _ = js_set_prop(map_proto, "keys", self.make_native("Map.prototype.keys"))
-  let _ = js_set_prop(
-    map_proto, "values", self.make_native("Map.prototype.values"),
-  )
-  let _ = js_set_prop(
-    map_proto, "entries", self.make_native("Map.prototype.entries"),
-  )
-  let _ = js_set_prop(
-    map_proto, "forEach", self.make_native("Map.prototype.forEach"),
-  )
-  let map_iter_fn = self.make_native("Map.prototype.entries")
-  let _ = js_set_prop(map_proto, "@@iterator", map_iter_fn)
-  let _ = js_define_data_prop(map_ctor, "prototype", map_proto, true, false, true)
-  self.global_env.define_var("Map", map_ctor)
-  let _ = js_set_prop(global_obj, "Map", map_ctor)
-
-  // Set
-  let set_ctor = self.make_native("Set")
-  self.set_function_length(set_ctor, 0.0)
-  self.set_function_name(set_ctor, "Set")
-  let set_proto = self.new_object()
-  let _ = js_set_prop(set_proto, "add", self.make_native("Set.prototype.add"))
-  let _ = js_set_prop(set_proto, "has", self.make_native("Set.prototype.has"))
-  let _ = js_set_prop(
-    set_proto, "delete", self.make_native("Set.prototype.delete"),
-  )
-  let _ = js_set_prop(
-    set_proto, "clear", self.make_native("Set.prototype.clear"),
-  )
-  let _ = js_set_prop(set_proto, "keys", self.make_native("Set.prototype.values"))
-  let _ = js_set_prop(
-    set_proto, "values", self.make_native("Set.prototype.values"),
-  )
-  let _ = js_set_prop(
-    set_proto, "entries", self.make_native("Set.prototype.entries"),
-  )
-  let _ = js_set_prop(
-    set_proto, "forEach", self.make_native("Set.prototype.forEach"),
-  )
-  let set_iter_fn = self.make_native("Set.prototype.values")
-  let _ = js_set_prop(set_proto, "@@iterator", set_iter_fn)
-  let _ = js_define_data_prop(set_ctor, "prototype", set_proto, true, false, true)
-  self.global_env.define_var("Set", set_ctor)
-  let _ = js_set_prop(global_obj, "Set", set_ctor)
-
-  // WeakMap (stub)
-  let weakmap_ctor = self.make_native("WeakMap")
-  self.set_function_length(weakmap_ctor, 0.0)
-  self.set_function_name(weakmap_ctor, "WeakMap")
-  let _ = js_define_data_prop(
-    weakmap_ctor,
-    "prototype",
-    self.new_object(),
-    true,
-    false,
-    true,
-  )
-  self.global_env.define_var("WeakMap", weakmap_ctor)
-  let _ = js_set_prop(global_obj, "WeakMap", weakmap_ctor)
-
-  // WeakSet (stub)
-  let weakset_ctor = self.make_native("WeakSet")
-  self.set_function_length(weakset_ctor, 0.0)
-  self.set_function_name(weakset_ctor, "WeakSet")
-  let _ = js_define_data_prop(
-    weakset_ctor,
-    "prototype",
-    self.new_object(),
-    true,
-    false,
-    true,
-  )
-  self.global_env.define_var("WeakSet", weakset_ctor)
-  let _ = js_set_prop(global_obj, "WeakSet", weakset_ctor)
-
-  // ArrayBuffer (stub)
-  let arraybuffer_ctor = self.make_native("ArrayBuffer")
-  self.set_function_length(arraybuffer_ctor, 1.0)
-  self.set_function_name(arraybuffer_ctor, "ArrayBuffer")
-  let _ = js_define_data_prop(
-    arraybuffer_ctor,
-    "prototype",
-    self.new_object(),
-    true,
-    false,
-    true,
-  )
-  self.global_env.define_var("ArrayBuffer", arraybuffer_ctor)
-  let _ = js_set_prop(global_obj, "ArrayBuffer", arraybuffer_ctor)
-
-  // DataView (stub)
-  let dataview_ctor = self.make_native("DataView")
-  self.set_function_length(dataview_ctor, 1.0)
-  self.set_function_name(dataview_ctor, "DataView")
-  let _ = js_define_data_prop(
-    dataview_ctor,
-    "prototype",
-    self.new_object(),
-    true,
-    false,
-    true,
-  )
-  self.global_env.define_var("DataView", dataview_ctor)
-  let _ = js_set_prop(global_obj, "DataView", dataview_ctor)
-
-  // TypedArrays (stubs)
-  let typed_arrays = [
-    "Int8Array", "Uint8Array", "Uint8ClampedArray", "Int16Array", "Uint16Array",
-    "Int32Array", "Uint32Array", "Float32Array", "Float64Array", "BigInt64Array",
-    "BigUint64Array",
-  ]
-  for name in typed_arrays {
-    let ctor = self.make_native(name)
-    self.set_function_length(ctor, 3.0)
-    self.set_function_name(ctor, name)
-    let _ = js_define_data_prop(
-      ctor,
-      "prototype",
-      self.new_object(),
-      true,
-      false,
-      true,
-    )
-    self.global_env.define_var(name, ctor)
-    let _ = js_set_prop(global_obj, name, ctor)
-
-  }
+  self.install_collections(global_obj)
 }
 
 ///|
@@ -2544,7 +2544,7 @@ fn JSInterpreter::define_property(
   // (ES6 14.5.14: It is a TypeError to attempt to define a static "prototype" method on a class)
   if key == "prototype" {
     match target {
-      Function(_) => {
+      Function(_) =>
         // Check if this is trying to define a method (has "value" that is a function)
         match desc {
           Object(_) | Function(_) => {
@@ -2553,14 +2553,12 @@ fn JSInterpreter::define_property(
             let has_set = self.has_own_prop(desc, "set")
             if has_value || has_get || has_set {
               return self.set_error_kind(
-                "TypeError",
-                "Cannot define property 'prototype' on a class constructor",
+                "TypeError", "Cannot define property 'prototype' on a class constructor",
               )
             }
           }
           _ => ()
         }
-      }
       _ => ()
     }
   }
@@ -2661,302 +2659,6 @@ fn JSInterpreter::define_property(
       target, key, value, writable, enumerable, configurable,
     )
     target
-  }
-}
-
-///|
-fn hex_digit(value : Int) -> Char {
-  let hex = "0123456789ABCDEF"
-  let idx = if value < 0 { 0 } else if value > 15 { 15 } else { value }
-  let unit = hex[idx]
-  unit.unsafe_to_char()
-}
-
-///|
-fn append_hex2(sb : StringBuilder, value : Int) -> Unit {
-  let hi = (value >> 4) & 0xf
-  let lo = value & 0xf
-  sb.write_char(hex_digit(hi))
-  sb.write_char(hex_digit(lo))
-}
-
-///|
-fn append_hex4(sb : StringBuilder, value : Int) -> Unit {
-  let a = (value >> 12) & 0xf
-  let b = (value >> 8) & 0xf
-  let c = (value >> 4) & 0xf
-  let d = value & 0xf
-  sb.write_char(hex_digit(a))
-  sb.write_char(hex_digit(b))
-  sb.write_char(hex_digit(c))
-  sb.write_char(hex_digit(d))
-}
-
-///|
-fn is_escape_passthrough(code : Int) -> Bool {
-  if (code >= 0x41 && code <= 0x5a) ||
-    (code >= 0x61 && code <= 0x7a) ||
-    (code >= 0x30 && code <= 0x39) {
-    return true
-  }
-  match code {
-    0x40 | 0x2a | 0x5f | 0x2b | 0x2d | 0x2e | 0x2f => true
-    _ => false
-  }
-}
-
-///|
-fn escape_string_value(value : String) -> String {
-  let sb = StringBuilder::new()
-  let len = value.length()
-  let mut i = 0
-  while i < len {
-    let unit = value[i]
-    let code = unit.to_int()
-    if is_escape_passthrough(code) {
-      sb.write_char(unit.unsafe_to_char())
-    } else if code < 256 {
-      sb.write_char('%')
-      append_hex2(sb, code)
-    } else {
-      sb.write_string("%u")
-      append_hex4(sb, code)
-    }
-    i += 1
-  }
-  sb.to_string()
-}
-
-///|
-fn hex_value(unit : UInt16) -> Int? {
-  let code = unit.to_int()
-  if code >= 0x30 && code <= 0x39 {
-    Some(code - 0x30)
-  } else if code >= 0x41 && code <= 0x46 {
-    Some(code - 0x37)
-  } else if code >= 0x61 && code <= 0x66 {
-    Some(code - 0x57)
-  } else {
-    None
-  }
-}
-
-///|
-fn unescape_string_value(value : String) -> String {
-  let sb = StringBuilder::new()
-  let len = value.length()
-  let percent : UInt16 = '%'
-  let u_char : UInt16 = 'u'
-  let mut k = 0
-  while k < len {
-    let unit = value[k]
-    if unit == percent {
-      if k + 5 < len && value[k + 1] == u_char {
-        match
-          (
-            hex_value(value[k + 2]),
-            hex_value(value[k + 3]),
-            hex_value(value[k + 4]),
-            hex_value(value[k + 5]),
-          ) {
-          (Some(a), Some(b), Some(c), Some(d)) => {
-            let code = (a << 12) | (b << 8) | (c << 4) | d
-            let ch = code.to_uint16().unsafe_to_char()
-            sb.write_char(ch)
-            k += 6
-            continue
-          }
-          _ => ()
-        }
-      }
-      if k + 2 < len {
-        match (hex_value(value[k + 1]), hex_value(value[k + 2])) {
-          (Some(a), Some(b)) => {
-            let code = (a << 4) | b
-            let ch = code.to_uint16().unsafe_to_char()
-            sb.write_char(ch)
-            k += 3
-            continue
-          }
-          _ => ()
-        }
-      }
-      sb.write_char(percent.unsafe_to_char())
-      k += 1
-    } else {
-      sb.write_char(unit.unsafe_to_char())
-      k += 1
-    }
-  }
-  sb.to_string()
-}
-
-///|
-fn is_leap_year(year : Int) -> Bool {
-  (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
-}
-
-///|
-fn days_in_year(year : Int) -> Int {
-  if is_leap_year(year) {
-    366
-  } else {
-    365
-  }
-}
-
-///|
-fn days_in_month(year : Int, month : Int) -> Int {
-  match month {
-    0 => 31
-    1 => if is_leap_year(year) { 29 } else { 28 }
-    2 => 31
-    3 => 30
-    4 => 31
-    5 => 30
-    6 => 31
-    7 => 31
-    8 => 30
-    9 => 31
-    10 => 30
-    11 => 31
-    _ => 30
-  }
-}
-
-///|
-fn floor_div(a : Int, b : Int) -> Int {
-  if b == 0 {
-    0
-  } else if a >= 0 {
-    a / b
-  } else {
-    -((-a + b - 1) / b)
-  }
-}
-
-///|
-fn days_before_year(year : Int) -> Int {
-  let mut days = 0
-  if year >= 1970 {
-    let mut y = 1970
-    while y < year {
-      days += days_in_year(y)
-      y += 1
-    }
-  } else {
-    let mut y = year
-    while y < 1970 {
-      days -= days_in_year(y)
-      y += 1
-    }
-  }
-  days
-}
-
-///|
-fn days_before_month(year : Int, month : Int) -> Int {
-  let mut days = 0
-  let mut m = 0
-  while m < month {
-    days += days_in_month(year, m)
-    m += 1
-  }
-  days
-}
-
-///|
-fn make_date_time(
-  year : Int,
-  month : Int,
-  date : Int,
-  hour : Int,
-  minute : Int,
-  second : Int,
-  ms : Int,
-) -> Double {
-  let q = floor_div(month, 12)
-  let mut y = year + q
-  let mut m = month - q * 12
-  if m < 0 {
-    m += 12
-    y -= 1
-  }
-  let day = days_before_year(y) + days_before_month(y, m) + (date - 1)
-  let time_ms = ((hour * 60 + minute) * 60 + second) * 1000 + ms
-  day.to_double() * 86400000.0 + time_ms.to_double()
-}
-
-///|
-fn break_time(t : Double) -> (Int, Int, Int, Int, Int, Int, Int) {
-  let day = (t / 86400000.0).floor()
-  let mut days = day.to_int()
-  let time_ms = t - day * 86400000.0
-  let time_ms_int = time_ms.to_int()
-  let mut year = 1970
-  if days >= 0 {
-    while days >= days_in_year(year) {
-      days -= days_in_year(year)
-      year += 1
-    }
-  } else {
-    year = 1969
-    while days < 0 {
-      days += days_in_year(year)
-      year -= 1
-    }
-    year += 1
-  }
-  let mut month = 0
-  while days >= days_in_month(year, month) {
-    days -= days_in_month(year, month)
-    month += 1
-  }
-  let day = days + 1
-  let hour = time_ms_int / 3600000
-  let mut rem = time_ms_int - hour * 3600000
-  let minute = rem / 60000
-  rem = rem - minute * 60000
-  let second = rem / 1000
-  let milli = rem - second * 1000
-  (year, month, day, hour, minute, second, milli)
-}
-
-///|
-fn time_clip(t : Double) -> Double {
-  if t.is_nan() || t.is_inf() {
-    return js_nan
-  }
-  let abs = if t < 0.0 { -t } else { t }
-  if abs > 8.64e15 {
-    js_nan
-  } else {
-    t.trunc()
-  }
-}
-
-///|
-fn JSInterpreter::date_time_value(
-  self : JSInterpreter,
-  this_arg : JSValue,
-) -> Double? {
-  match this_arg {
-    Object(_) | Array(_) | Function(_) => ()
-    _ => {
-      let _ = self.set_error_kind("TypeError", "Not a Date object")
-      return None
-    }
-  }
-  match js_get_prop(this_arg, "__class") {
-    String("Date") => ()
-    _ => {
-      let _ = self.set_error_kind("TypeError", "Not a Date object")
-      return None
-    }
-  }
-  match js_get_prop(this_arg, "__date_value") {
-    Number(n) => Some(n)
-    _ => Some(js_nan)
   }
 }
 
@@ -3988,18 +3690,19 @@ fn JSInterpreter::call_native(
         match item {
           String(s) => {
             // Check if s is a valid array index (non-negative integer)
-            let is_index = s.length() > 0 && {
-              let mut valid = true
-              let has_leading_zero = s.length() > 1 && s[0] == '0'
-              for i = 0; i < s.length(); i = i + 1 {
-                let c = s[i]
-                if c < '0' || c > '9' {
-                  valid = false
-                  break
+            let is_index = s.length() > 0 &&
+              {
+                let mut valid = true
+                let has_leading_zero = s.length() > 1 && s[0] == '0'
+                for i = 0; i < s.length(); i = i + 1 {
+                  let c = s[i]
+                  if c < '0' || c > '9' {
+                    valid = false
+                    break
+                  }
                 }
+                valid && not(has_leading_zero)
               }
-              valid && not(has_leading_zero)
-            }
             if is_index {
               // Parse the integer
               let mut n = 0
@@ -4534,14 +4237,17 @@ fn JSInterpreter::call_native(
             env: self.global_env,
             is_arrow: false,
             is_strict: self.is_strict_body(func.body, false),
-            is_generator: func.is_generator, is_async: func.is_async,
+            is_generator: func.is_generator,
+            is_async: func.is_async,
             props: [],
             object_proto: Some(self.function_proto),
           })
           let formal_count = calc_formal_parameter_count(func.params)
           self.set_function_length(closure, formal_count.to_double())
           let proto = self.new_object()
-          let _ = js_define_data_prop(proto, "constructor", closure, true, false, true)
+          let _ = js_define_data_prop(
+            proto, "constructor", closure, true, false, true,
+          )
           let _ = js_define_data_prop(
             closure, "prototype", proto, true, false, true,
           )
@@ -4659,7 +4365,8 @@ fn JSInterpreter::call_native(
         env: self.global_env,
         is_arrow: false,
         is_strict: false,
-        is_generator: false, is_async: false,
+        is_generator: false,
+        is_async: false,
         props: [],
         object_proto: Some(self.function_proto),
       })
@@ -5010,7 +4717,10 @@ fn JSInterpreter::call_native(
           } else {
             Undefined
           }
-        _ => self.set_error_kind("TypeError", "Symbol.prototype.description requires a symbol")
+        _ =>
+          self.set_error_kind(
+            "TypeError", "Symbol.prototype.description requires a symbol",
+          )
       }
     }
     "Symbol.prototype.toString" => {
@@ -5022,7 +4732,9 @@ fn JSInterpreter::call_native(
             String("Symbol(" + (s[9:].to_string() catch { _ => "" }) + ")")
           } else if s.has_prefix("@@") {
             // Well-known symbol - format as Symbol(Symbol.name)
-            String("Symbol(Symbol." + (s[2:].to_string() catch { _ => "" }) + ")")
+            String(
+              "Symbol(Symbol." + (s[2:].to_string() catch { _ => "" }) + ")",
+            )
           } else if s.has_prefix("Symbol([empty])") {
             // Symbol("") - empty string description -> "Symbol()"
             String("Symbol()")
@@ -5044,21 +4756,30 @@ fn JSInterpreter::call_native(
           } else {
             String(s)
           }
-        _ => self.set_error_kind("TypeError", "Symbol.prototype.toString requires a symbol")
+        _ =>
+          self.set_error_kind(
+            "TypeError", "Symbol.prototype.toString requires a symbol",
+          )
       }
     }
     "Symbol.prototype.valueOf" => {
       let sym = self.get_symbol_value(this_arg)
       match sym {
         String(s) if s.has_prefix("Symbol(") || s.has_prefix("@@") => sym
-        _ => self.set_error_kind("TypeError", "Symbol.prototype.valueOf requires a symbol")
+        _ =>
+          self.set_error_kind(
+            "TypeError", "Symbol.prototype.valueOf requires a symbol",
+          )
       }
     }
     "Symbol.prototype[@@toPrimitive]" => {
       let sym = self.get_symbol_value(this_arg)
       match sym {
         String(s) if s.has_prefix("Symbol(") || s.has_prefix("@@") => sym
-        _ => self.set_error_kind("TypeError", "Symbol.prototype[@@toPrimitive] requires a symbol")
+        _ =>
+          self.set_error_kind(
+            "TypeError", "Symbol.prototype[@@toPrimitive] requires a symbol",
+          )
       }
     }
     "Boolean" =>
@@ -6027,6 +5748,7 @@ fn JSInterpreter::call_native(
                   let key = js_get_prop(val, "0")
                   let value = js_get_prop(val, "1")
                   let _ = self.map_set_entry(map_obj, key, value)
+
                 }
               }
             }
@@ -6065,22 +5787,26 @@ fn JSInterpreter::call_native(
     "Map.prototype.entries" => self.new_map_entry_iterator(this_arg)
     "Map.prototype.forEach" => {
       let callback = if args.length() > 0 { args[0] } else { Undefined }
-      let this_for_callback = if args.length() > 1 { args[1] } else { Undefined }
+      let this_for_callback = if args.length() > 1 {
+        args[1]
+      } else {
+        Undefined
+      }
       match js_get_prop(this_arg, "__map_entries") {
-        JSValue::Array(arr) => {
+        JSValue::Array(arr) =>
           for i = 0; i < arr.length; i = i + 1 {
             match arr.items[i] {
               JSValue::Array(pair) if pair.length >= 2 => {
                 let key = pair.items[0]
                 let value = pair.items[1]
-                let _ = self.call_function(
-                  callback, this_for_callback, [value, key, this_arg],
-                )
+                let _ = self.call_function(callback, this_for_callback, [
+                  value, key, this_arg,
+                ])
+
               }
               _ => ()
             }
           }
-        }
         _ => ()
       }
       Undefined
@@ -6108,6 +5834,7 @@ fn JSInterpreter::call_native(
                 _ => {
                   let val = js_get_prop(next_result, "value")
                   let _ = self.set_add_entry(set_obj, val)
+
                 }
               }
             }
@@ -6140,16 +5867,20 @@ fn JSInterpreter::call_native(
     "Set.prototype.entries" => self.new_set_entry_iterator(this_arg)
     "Set.prototype.forEach" => {
       let callback = if args.length() > 0 { args[0] } else { Undefined }
-      let this_for_callback = if args.length() > 1 { args[1] } else { Undefined }
+      let this_for_callback = if args.length() > 1 {
+        args[1]
+      } else {
+        Undefined
+      }
       match js_get_prop(this_arg, "__set_entries") {
-        JSValue::Array(arr) => {
+        JSValue::Array(arr) =>
           for i = 0; i < arr.length; i = i + 1 {
             let value = arr.items[i]
-            let _ = self.call_function(
-              callback, this_for_callback, [value, value, this_arg],
-            )
+            let _ = self.call_function(callback, this_for_callback, [
+              value, value, this_arg,
+            ])
+
           }
-        }
         _ => ()
       }
       Undefined
@@ -6172,7 +5903,8 @@ fn JSInterpreter::call_native(
             let entry = arr.items[idx]
             let value = match (entry, kind) {
               (JSValue::Array(pair), "key") if pair.length >= 2 => pair.items[0]
-              (JSValue::Array(pair), "value") if pair.length >= 2 => pair.items[1]
+              (JSValue::Array(pair), "value") if pair.length >= 2 =>
+                pair.items[1]
               (JSValue::Array(pair), _) if pair.length >= 2 => {
                 let result = js_new_array()
                 let _ = js_array_push(result, pair.items[0])
@@ -6345,289 +6077,4 @@ fn JSInterpreter::new_instance(
       }
     }
   }
-}
-
-///|
-// SameValueZero comparison for Map/Set keys
-fn same_value_zero(a : JSValue, b : JSValue) -> Bool {
-  match (a, b) {
-    (Number(x), Number(y)) => {
-      if x.is_nan() && y.is_nan() {
-        true
-      } else if x == 0.0 && y == 0.0 {
-        // +0 === -0 in SameValueZero
-        true
-      } else {
-        x == y
-      }
-    }
-    (String(x), String(y)) => x == y
-    (Bool(x), Bool(y)) => x == y
-    (Undefined, Undefined) => true
-    (Null, Null) => true
-    // Reference equality for objects
-    (Object(m1), Object(m2)) => m1.id == m2.id
-    (JSValue::Array(a1), JSValue::Array(a2)) => a1.id == a2.id
-    (Function(f1), Function(f2)) => f1.id == f2.id
-    _ => false
-  }
-}
-
-///|
-fn JSInterpreter::map_get_entry(
-  self : JSInterpreter,
-  map_obj : JSValue,
-  key : JSValue,
-) -> JSValue {
-  let _ = self
-  match js_get_prop(map_obj, "__map_entries") {
-    JSValue::Array(arr) => {
-      for i = 0; i < arr.length; i = i + 1 {
-        match arr.items[i] {
-          JSValue::Array(pair) if pair.length >= 2 => {
-            if same_value_zero(pair.items[0], key) {
-              return pair.items[1]
-            }
-          }
-          _ => ()
-        }
-      }
-      Undefined
-    }
-    _ => Undefined
-  }
-}
-
-///|
-fn JSInterpreter::map_set_entry(
-  self : JSInterpreter,
-  map_obj : JSValue,
-  key : JSValue,
-  value : JSValue,
-) -> JSValue {
-  let _ = self
-  match js_get_prop(map_obj, "__map_entries") {
-    JSValue::Array(arr) => {
-      // Check if key exists
-      for i = 0; i < arr.length; i = i + 1 {
-        match arr.items[i] {
-          JSValue::Array(pair) if pair.length >= 2 => {
-            if same_value_zero(pair.items[0], key) {
-              // Update existing entry
-              let new_pair = js_new_array()
-              let _ = js_array_push(new_pair, key)
-              let _ = js_array_push(new_pair, value)
-              arr.items[i] = new_pair
-              return value
-            }
-          }
-          _ => ()
-        }
-      }
-      // Add new entry
-      let new_pair = js_new_array()
-      let _ = js_array_push(new_pair, key)
-      let _ = js_array_push(new_pair, value)
-      let _ = js_array_push(JSValue::Array(arr), new_pair)
-    }
-    _ => ()
-  }
-  value
-}
-
-///|
-fn JSInterpreter::map_has_entry(
-  self : JSInterpreter,
-  map_obj : JSValue,
-  key : JSValue,
-) -> Bool {
-  let _ = self
-  match js_get_prop(map_obj, "__map_entries") {
-    JSValue::Array(arr) => {
-      for i = 0; i < arr.length; i = i + 1 {
-        match arr.items[i] {
-          JSValue::Array(pair) if pair.length >= 2 => {
-            if same_value_zero(pair.items[0], key) {
-              return true
-            }
-          }
-          _ => ()
-        }
-      }
-      false
-    }
-    _ => false
-  }
-}
-
-///|
-fn JSInterpreter::map_delete_entry(
-  self : JSInterpreter,
-  map_obj : JSValue,
-  key : JSValue,
-) -> Bool {
-  let _ = self
-  match js_get_prop(map_obj, "__map_entries") {
-    JSValue::Array(arr) => {
-      for i = 0; i < arr.length; i = i + 1 {
-        match arr.items[i] {
-          JSValue::Array(pair) if pair.length >= 2 => {
-            if same_value_zero(pair.items[0], key) {
-              let _ = arr.items.remove(i)
-              arr.length = arr.length - 1
-              return true
-            }
-          }
-          _ => ()
-        }
-      }
-      false
-    }
-    _ => false
-  }
-}
-
-///|
-fn JSInterpreter::set_add_entry(
-  self : JSInterpreter,
-  set_obj : JSValue,
-  value : JSValue,
-) -> JSValue {
-  let _ = self
-  match js_get_prop(set_obj, "__set_entries") {
-    JSValue::Array(arr) => {
-      // Check if value exists
-      for i = 0; i < arr.length; i = i + 1 {
-        if same_value_zero(arr.items[i], value) {
-          return value
-        }
-      }
-      // Add new entry
-      let _ = js_array_push(JSValue::Array(arr), value)
-    }
-    _ => ()
-  }
-  value
-}
-
-///|
-fn JSInterpreter::set_has_entry(
-  self : JSInterpreter,
-  set_obj : JSValue,
-  value : JSValue,
-) -> Bool {
-  let _ = self
-  match js_get_prop(set_obj, "__set_entries") {
-    JSValue::Array(arr) => {
-      for i = 0; i < arr.length; i = i + 1 {
-        if same_value_zero(arr.items[i], value) {
-          return true
-        }
-      }
-      false
-    }
-    _ => false
-  }
-}
-
-///|
-fn JSInterpreter::set_delete_entry(
-  self : JSInterpreter,
-  set_obj : JSValue,
-  value : JSValue,
-) -> Bool {
-  let _ = self
-  match js_get_prop(set_obj, "__set_entries") {
-    JSValue::Array(arr) => {
-      for i = 0; i < arr.length; i = i + 1 {
-        if same_value_zero(arr.items[i], value) {
-          let _ = arr.items.remove(i)
-          arr.length = arr.length - 1
-          return true
-        }
-      }
-      false
-    }
-    _ => false
-  }
-}
-
-///|
-fn JSInterpreter::new_map_key_iterator(
-  self : JSInterpreter,
-  map_obj : JSValue,
-) -> JSValue {
-  let iter = self.new_object()
-  let _ = js_set_prop(iter, "__map_ref", map_obj)
-  let _ = js_set_prop(iter, "__iter_index", Number(0.0))
-  let _ = js_set_prop(iter, "__iter_kind", String("key"))
-  let next_fn = self.make_native("MapIterator.next")
-  let _ = js_set_prop(iter, "next", next_fn)
-  let iter_self_fn = self.make_native("Iterator.self")
-  let _ = js_set_prop(iter, "@@iterator", iter_self_fn)
-  iter
-}
-
-///|
-fn JSInterpreter::new_map_value_iterator(
-  self : JSInterpreter,
-  map_obj : JSValue,
-) -> JSValue {
-  let iter = self.new_object()
-  let _ = js_set_prop(iter, "__map_ref", map_obj)
-  let _ = js_set_prop(iter, "__iter_index", Number(0.0))
-  let _ = js_set_prop(iter, "__iter_kind", String("value"))
-  let next_fn = self.make_native("MapIterator.next")
-  let _ = js_set_prop(iter, "next", next_fn)
-  let iter_self_fn = self.make_native("Iterator.self")
-  let _ = js_set_prop(iter, "@@iterator", iter_self_fn)
-  iter
-}
-
-///|
-fn JSInterpreter::new_map_entry_iterator(
-  self : JSInterpreter,
-  map_obj : JSValue,
-) -> JSValue {
-  let iter = self.new_object()
-  let _ = js_set_prop(iter, "__map_ref", map_obj)
-  let _ = js_set_prop(iter, "__iter_index", Number(0.0))
-  let _ = js_set_prop(iter, "__iter_kind", String("entry"))
-  let next_fn = self.make_native("MapIterator.next")
-  let _ = js_set_prop(iter, "next", next_fn)
-  let iter_self_fn = self.make_native("Iterator.self")
-  let _ = js_set_prop(iter, "@@iterator", iter_self_fn)
-  iter
-}
-
-///|
-fn JSInterpreter::new_set_value_iterator(
-  self : JSInterpreter,
-  set_obj : JSValue,
-) -> JSValue {
-  let iter = self.new_object()
-  let _ = js_set_prop(iter, "__set_ref", set_obj)
-  let _ = js_set_prop(iter, "__iter_index", Number(0.0))
-  let _ = js_set_prop(iter, "__iter_kind", String("value"))
-  let next_fn = self.make_native("SetIterator.next")
-  let _ = js_set_prop(iter, "next", next_fn)
-  let iter_self_fn = self.make_native("Iterator.self")
-  let _ = js_set_prop(iter, "@@iterator", iter_self_fn)
-  iter
-}
-
-///|
-fn JSInterpreter::new_set_entry_iterator(
-  self : JSInterpreter,
-  set_obj : JSValue,
-) -> JSValue {
-  let iter = self.new_object()
-  let _ = js_set_prop(iter, "__set_ref", set_obj)
-  let _ = js_set_prop(iter, "__iter_index", Number(0.0))
-  let _ = js_set_prop(iter, "__iter_kind", String("entry"))
-  let next_fn = self.make_native("SetIterator.next")
-  let _ = js_set_prop(iter, "next", next_fn)
-  let iter_self_fn = self.make_native("Iterator.self")
-  let _ = js_set_prop(iter, "@@iterator", iter_self_fn)
-  iter
 }
