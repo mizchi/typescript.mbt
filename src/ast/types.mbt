@@ -55,6 +55,9 @@ pub(all) enum TsExpr {
   // objectliteral
   ObjectLit(Array[(String, TsExpr)]) // [(key, value)]
 
+  // computed property for object literal [keyExpr]: valueExpr
+  ComputedProp(TsExpr, TsExpr) // (keyExpr, valueExpr)
+
   // array
   IndexAccess(TsExpr, TsExpr)
 

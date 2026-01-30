@@ -1032,6 +1032,7 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
       let _ = self.advance()
       let fields : Array[(String, @ast.TsExpr)] = []
       let mut spread_idx = 0
+      let mut computed_idx = 0
       if not(self.check(RBrace)) {
         if self.match_ellipsis() {
           let spread_expr = self.parse_assignment()
@@ -1040,11 +1041,17 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
         } else {
           // field
           let mut is_ident_key = false
+          let mut is_computed_key = false
+          let mut computed_key_expr : @ast.TsExpr? = None
           let _ = self.match_(Star)
           let key = if self.match_(LBracket) {
             let key_expr = self.parse_assignment()
             let _ = self.expect(RBracket)
-            self.computed_key_name(key_expr)
+            is_computed_key = true
+            computed_key_expr = Some(key_expr)
+            let idx = computed_idx
+            computed_idx += 1
+            "@@computed:" + idx.to_string()
           } else {
             match self.advance().kind {
               Ident(n) => {
@@ -1212,7 +1219,12 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
           } else {
             raise ParseError("Expected Colon, got \{self.peek().kind}")
           }
-          fields.push((prop_key, value))
+          // Wrap computed keys in ComputedProp
+          let final_value = match (is_computed_key, computed_key_expr) {
+            (true, Some(key_expr)) => @ast.TsExpr::ComputedProp(key_expr, value)
+            _ => value
+          }
+          fields.push((prop_key, final_value))
         }
         // field
         while self.match_(Comma) {
@@ -1226,11 +1238,17 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
             continue
           }
           let mut is_ident_key = false
+          let mut is_computed_key = false
+          let mut computed_key_expr : @ast.TsExpr? = None
           let _ = self.match_(Star)
           let key = if self.match_(LBracket) {
             let key_expr = self.parse_assignment()
             let _ = self.expect(RBracket)
-            self.computed_key_name(key_expr)
+            is_computed_key = true
+            computed_key_expr = Some(key_expr)
+            let idx = computed_idx
+            computed_idx += 1
+            "@@computed:" + idx.to_string()
           } else {
             match self.advance().kind {
               Ident(n) => {
@@ -1398,7 +1416,12 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
           } else {
             raise ParseError("Expected Colon, got \{self.peek().kind}")
           }
-          fields.push((prop_key, value))
+          // Wrap computed keys in ComputedProp
+          let final_value = match (is_computed_key, computed_key_expr) {
+            (true, Some(key_expr)) => @ast.TsExpr::ComputedProp(key_expr, value)
+            _ => value
+          }
+          fields.push((prop_key, final_value))
         }
       }
       let _ = self.expect(RBrace)

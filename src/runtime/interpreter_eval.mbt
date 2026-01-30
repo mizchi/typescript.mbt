@@ -23,6 +23,11 @@ pub fn JSInterpreter::eval_expr(
       let _ = self.set_error_kind("TypeError", "Unexpected spread expression")
       Undefined
     }
+    @ast.TsExpr::ComputedProp(_, _) => {
+      // ComputedProp is only used within ObjectLit, should not be evaluated directly
+      let _ = self.set_error_kind("TypeError", "Unexpected computed property")
+      Undefined
+    }
     @ast.TsExpr::Yield(_) => Undefined
     @ast.TsExpr::YieldStar(_) => Undefined
     @ast.TsExpr::Var(name) =>
@@ -677,6 +682,41 @@ pub fn JSInterpreter::eval_expr(
               }
             }
             _ => () // null/undefined/primitive: no properties to spread
+          }
+        } else if key.has_prefix("@@computed:") {
+          // Handle computed property: val_expr is ComputedProp(key_expr, value_expr)
+          match val_expr {
+            @ast.TsExpr::ComputedProp(key_expr, value_expr) => {
+              // Evaluate key expression and convert to property key
+              let key_val = self.eval_expr(key_expr, env)
+              let prop_key = self.to_property_key(key_val)
+              // Evaluate value expression
+              let value = self.eval_expr(value_expr, env)
+              // Set the property
+              match find_prop_index(props, prop_key) {
+                Some(i) =>
+                  props[i] = {
+                    key: prop_key,
+                    value,
+                    writable: true,
+                    enumerable: true,
+                    configurable: true,
+                    get: None,
+                    set: None,
+                  }
+                None =>
+                  props.push({
+                    key: prop_key,
+                    value,
+                    writable: true,
+                    enumerable: true,
+                    configurable: true,
+                    get: None,
+                    set: None,
+                  })
+              }
+            }
+            _ => () // Unexpected: not a ComputedProp
           }
         } else if key.has_prefix("@@get:") || key.has_prefix("@@set:") {
           let is_get = key.has_prefix("@@get:")

@@ -806,6 +806,19 @@ fn JSInterpreter::to_primitive_for_add(
 }
 
 ///|
+// / JS ToPropertyKey - convert a value to a property key (string or symbol)
+fn JSInterpreter::to_property_key(
+  self : JSInterpreter,
+  value : JSValue,
+) -> String {
+  // For symbols, return the symbol representation
+  match value {
+    String(s) if s.has_prefix("Symbol(") => s
+    _ => self.to_string_value(value)
+  }
+}
+
+///|
 // / JS ToString (Object toString )
 fn JSInterpreter::to_string_value(
   self : JSInterpreter,

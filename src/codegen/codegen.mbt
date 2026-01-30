@@ -186,6 +186,7 @@ fn infer_literal_type(expr : @ast.TsExpr) -> @ast.TsType {
     @ast.TsExpr::ArrayHole => @ast.TsType::Any
     @ast.TsExpr::ArrayLit(_) => @ast.TsType::Any // elementtype @ast.TsType::Any
     @ast.TsExpr::Spread(_) => @ast.TsType::Any
+    @ast.TsExpr::ComputedProp(_, _) => @ast.TsType::Any
     @ast.TsExpr::ObjectLit(_) => @ast.TsType::Any // objectliteral @ast.TsType::Any
     @ast.TsExpr::Var(_) => @ast.TsType::Any // variablestatement
     @ast.TsExpr::Yield(_) => @ast.TsType::Any
@@ -394,6 +395,7 @@ fn infer_type(ctx : CodeGenCtx, expr : @ast.TsExpr) -> @ast.TsType {
     @ast.TsExpr::NullLit => @ast.TsType::Any // null @ast.TsType::Any
     @ast.TsExpr::ArrayHole => @ast.TsType::Any
     @ast.TsExpr::Spread(_) => @ast.TsType::Any
+    @ast.TsExpr::ComputedProp(_, _) => @ast.TsType::Any
     @ast.TsExpr::ObjectLit(_) => @ast.TsType::Any // objectliteral @ast.TsType::Any
     @ast.TsExpr::Seq(_, right) => infer_type(ctx, right)
     @ast.TsExpr::PropAssignExpr(_, _, value) => infer_type(ctx, value)
@@ -659,6 +661,10 @@ fn compile_expr(
     @ast.TsExpr::Spread(_) =>
       raise CodeGenError(
         "Spread is not supported in Wasm compiler (use interpreter)",
+      )
+    @ast.TsExpr::ComputedProp(_, _) =>
+      raise CodeGenError(
+        "ComputedProp is not supported in Wasm compiler (use interpreter)",
       )
     @ast.TsExpr::ArrayLit(elements) =>
       compile_array_lit(ctx, elements, expected_type)
