@@ -12,8 +12,6 @@ pub enum TokenKind {
   Regex(String, String) // /pattern/flags
   Ident(String)
   PrivateIdent(String)
-
-
   Function
   Class
   Extends
@@ -79,6 +77,7 @@ pub enum TokenKind {
   Bang // !
   Eq // =
   Question // ?
+  QuestionQuestion // ??
   PlusPlus // ++
   MinusMinus // --
   PlusEq // +=
@@ -95,8 +94,6 @@ pub enum TokenKind {
   GtGtGtEq // >>>=
   Arrow // =>
   Ellipsis // ...
-
-
   LParen // (
   RParen // )
   LBrace // {
@@ -116,8 +113,6 @@ pub enum TokenKind {
   In // in (for...in)
   Declare // declare (externalimport)
   Null // null
-
-
   Eof
 } derive(Eq, Show)
 
@@ -232,7 +227,7 @@ fn Lexer::skip_whitespace(self : Lexer) -> Unit {
         self.pos += 2
         continue
       }
-      Some(0xE2) if self.peek_byte(1) == Some(0x80) => {
+      Some(0xE2) if self.peek_byte(1) == Some(0x80) =>
         match self.peek_byte(2) {
           Some(0xA8) | Some(0xA9) => {
             self.pos += 3
@@ -240,8 +235,8 @@ fn Lexer::skip_whitespace(self : Lexer) -> Unit {
           }
           _ => ()
         }
-      }
-      Some(0xEF) if self.peek_byte(1) == Some(0xBB) && self.peek_byte(2) == Some(0xBF) => {
+      Some(0xEF) if self.peek_byte(1) == Some(0xBB) &&
+        self.peek_byte(2) == Some(0xBF) => {
         self.pos += 3
         continue
       }
@@ -265,11 +260,9 @@ fn Lexer::skip_whitespace(self : Lexer) -> Unit {
         let _ = self.advance()
 
       }
-
       Some('/') =>
         match self.peek_next() {
           Some('/') => {
-
             let _ = self.advance()
             let _ = self.advance()
             while true {
@@ -331,6 +324,7 @@ fn Lexer::scan_number(self : Lexer) -> TokenKind {
           match self.peek() {
             Some('_') => {
               let _ = self.advance()
+
             }
             Some(c) =>
               match c {
@@ -426,6 +420,7 @@ fn Lexer::scan_number(self : Lexer) -> TokenKind {
         if self.peek() == Some('n') {
           is_bigint = true
           let _ = self.advance()
+
         }
         if is_bigint {
           return BigInt(value.to_string())
@@ -442,6 +437,7 @@ fn Lexer::scan_number(self : Lexer) -> TokenKind {
           match self.peek() {
             Some('_') => {
               let _ = self.advance()
+
             }
             Some('0') => {
               let _ = self.advance()
@@ -463,6 +459,7 @@ fn Lexer::scan_number(self : Lexer) -> TokenKind {
         if self.peek() == Some('n') {
           is_bigint = true
           let _ = self.advance()
+
         }
         if is_bigint {
           return BigInt(value.to_string())
@@ -479,6 +476,7 @@ fn Lexer::scan_number(self : Lexer) -> TokenKind {
           match self.peek() {
             Some('_') => {
               let _ = self.advance()
+
             }
             Some('0') => {
               let _ = self.advance()
@@ -530,6 +528,7 @@ fn Lexer::scan_number(self : Lexer) -> TokenKind {
         if self.peek() == Some('n') {
           is_bigint = true
           let _ = self.advance()
+
         }
         if is_bigint {
           return BigInt(value.to_string())
@@ -553,6 +552,7 @@ fn Lexer::scan_number(self : Lexer) -> TokenKind {
         } else if c == '_' {
           has_sep = true
           let _ = self.advance()
+
         } else if c == '.' && not(has_dot) && not(has_exp) {
           has_dot = true
           let _ = self.advance()
@@ -576,27 +576,30 @@ fn Lexer::scan_number(self : Lexer) -> TokenKind {
   if self.peek() == Some('n') {
     is_bigint = true
     let _ = self.advance()
+
   }
-  let raw =
-    if is_bigint {
-      let end = if self.pos > start { self.pos - 1 } else { self.pos }
-      try { self.src[start:end].to_string() } catch { _ => "" }
-    } else {
-      try { self.src[start:self.pos].to_string() } catch { _ => "" }
+  let raw = if is_bigint {
+    let end = if self.pos > start { self.pos - 1 } else { self.pos }
+    self.src[start:end].to_string() catch {
+      _ => ""
     }
-  let s =
-    if has_sep {
-      let cleaned = StringBuilder::new()
-      for ch in raw {
-        if ch == '_' {
-          continue
-        }
-        cleaned.write_char(ch)
+  } else {
+    self.src[start:self.pos].to_string() catch {
+      _ => ""
+    }
+  }
+  let s = if has_sep {
+    let cleaned = StringBuilder::new()
+    for ch in raw {
+      if ch == '_' {
+        continue
       }
-      cleaned.to_string()
-    } else {
-      raw
+      cleaned.write_char(ch)
     }
+    cleaned.to_string()
+  } else {
+    raw
+  }
   if is_bigint {
     BigInt(s)
   } else if has_dot || has_exp {
@@ -879,7 +882,6 @@ fn Lexer::scan_string(self : Lexer, quote : Char) -> TokenKind {
           let _ = self.advance()
           break
         } else if c == '\\' {
-
           let _ = self.advance()
           match self.peek() {
             Some('n') => {
@@ -1021,19 +1023,17 @@ fn Lexer::scan_template_expr_source(self : Lexer) -> String {
           '\'' | '"' => self.skip_string_body(c)
           '`' => {
             let _ = self.scan_template()
+
           }
           _ => ()
         }
       }
     }
   }
-  let end =
-    if self.pos > 0 {
-      self.pos - 1
-    } else {
-      0
-    }
-  (try { self.src[start:end].to_string() } catch { _ => "" })
+  let end = if self.pos > 0 { self.pos - 1 } else { 0 }
+  self.src[start:end].to_string() catch {
+    _ => ""
+  }
 }
 
 ///|
@@ -1180,7 +1180,11 @@ fn Lexer::scan_template_parts(self : Lexer) -> (Array[String], Array[String]) {
 }
 
 ///|
-fn Lexer::tokenize_fragment(_self : Lexer, src : String, pos : Int) -> Array[Token] {
+fn Lexer::tokenize_fragment(
+  _self : Lexer,
+  src : String,
+  pos : Int,
+) -> Array[Token] {
   let sub = Lexer::new(src)
   let tokens : Array[Token] = []
   while true {
@@ -1379,6 +1383,7 @@ fn Lexer::skip_template_expr(self : Lexer) -> Unit {
           '\'' | '"' => self.skip_string_body(c)
           '`' => {
             let _ = self.scan_template()
+
           }
           _ => ()
         }
@@ -1400,6 +1405,7 @@ fn Lexer::skip_string_body(self : Lexer, quote : Char) -> Unit {
         }
         if c == '\\' {
           let _ = self.advance()
+
         }
       }
     }
@@ -1496,7 +1502,6 @@ pub fn Lexer::next_token(self : Lexer) -> Token {
     None => { kind: Eof, pos }
     Some(c) => {
       let kind : TokenKind = match c {
-
         '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' => {
           self.pos -= 1
           self.scan_number()
@@ -1634,12 +1639,7 @@ pub fn Lexer::next_token(self : Lexer) -> Token {
               let _ = self.advance()
               SlashEq
             }
-            _ =>
-              if self.allow_regex {
-                self.scan_regex()
-              } else {
-                Slash
-              }
+            _ => if self.allow_regex { self.scan_regex() } else { Slash }
           }
         '%' =>
           match self.peek() {
@@ -1649,7 +1649,14 @@ pub fn Lexer::next_token(self : Lexer) -> Token {
             }
             _ => Percent
           }
-        '?' => Question
+        '?' =>
+          match self.peek() {
+            Some('?') => {
+              let _ = self.advance()
+              QuestionQuestion
+            }
+            _ => Question
+          }
         '=' =>
           match self.peek() {
             Some('=') =>
@@ -1764,7 +1771,6 @@ pub fn Lexer::next_token(self : Lexer) -> Token {
             }
             _ => Caret
           }
-
         '(' => LParen
         ')' => RParen
         '{' => LBrace
@@ -1813,13 +1819,12 @@ pub fn Lexer::next_token(self : Lexer) -> Token {
 // / get
 pub fn Lexer::tokenize(self : Lexer) -> Array[Token] {
   let len = self.src.length()
-  let tokens : Array[Token] =
-    if len >= 1024 {
-      let cap = (len / 2) + 4
-      Array::new(capacity=cap)
-    } else {
-      []
-    }
+  let tokens : Array[Token] = if len >= 1024 {
+    let cap = len / 2 + 4
+    Array::new(capacity=cap)
+  } else {
+    []
+  }
   while true {
     let tok = self.next_token()
     tokens.push(tok)

@@ -121,7 +121,6 @@ fn serialize_type_metadata(module_ : @ast.TsModule) -> Bytes {
     for i = 0; i < name_len; i = i + 1 {
       buf.push((imp.name[i].to_int() & 0xFF).to_byte())
     }
-
     let mod_len = imp.module_.length()
     buf.push((mod_len & 0xFF).to_byte())
     for i = 0; i < mod_len; i = i + 1 {
@@ -209,10 +208,20 @@ fn infer_literal_type(expr : @ast.TsExpr) -> @ast.TsType {
         | @ast.TsBinOp::Instanceof
         | @ast.TsBinOp::In
         | @ast.TsBinOp::And
-        | @ast.TsBinOp::Or => @ast.TsType::Boolean
-        @ast.TsBinOp::Add | @ast.TsBinOp::Sub | @ast.TsBinOp::Mul | @ast.TsBinOp::Div | @ast.TsBinOp::Mod | @ast.TsBinOp::Pow | @ast.TsBinOp::BitAnd | @ast.TsBinOp::BitOr | @ast.TsBinOp::BitXor | @ast.TsBinOp::Shl | @ast.TsBinOp::Shr
-        | @ast.TsBinOp::UShr =>
-          infer_literal_type(lhs) // type
+        | @ast.TsBinOp::Or
+        | @ast.TsBinOp::Coalesce => @ast.TsType::Boolean
+        @ast.TsBinOp::Add
+        | @ast.TsBinOp::Sub
+        | @ast.TsBinOp::Mul
+        | @ast.TsBinOp::Div
+        | @ast.TsBinOp::Mod
+        | @ast.TsBinOp::Pow
+        | @ast.TsBinOp::BitAnd
+        | @ast.TsBinOp::BitOr
+        | @ast.TsBinOp::BitXor
+        | @ast.TsBinOp::Shl
+        | @ast.TsBinOp::Shr
+        | @ast.TsBinOp::UShr => infer_literal_type(lhs) // type
       }
     @ast.TsExpr::UnaryOp(op, e) =>
       match op {
@@ -221,7 +230,10 @@ fn infer_literal_type(expr : @ast.TsExpr) -> @ast.TsType {
         @ast.TsUnaryOp::Typeof => @ast.TsType::String_
         @ast.TsUnaryOp::Void => @ast.TsType::Any
         @ast.TsUnaryOp::Delete => @ast.TsType::Boolean
-        @ast.TsUnaryOp::PreInc | @ast.TsUnaryOp::PreDec | @ast.TsUnaryOp::PostInc | @ast.TsUnaryOp::PostDec => infer_literal_type(e)
+        @ast.TsUnaryOp::PreInc
+        | @ast.TsUnaryOp::PreDec
+        | @ast.TsUnaryOp::PostInc
+        | @ast.TsUnaryOp::PostDec => infer_literal_type(e)
       }
     @ast.TsExpr::Call(_, _) => @ast.TsType::Any // functionreturn valuetypestatement
     @ast.TsExpr::CallExpr(_, _) => @ast.TsType::Any
@@ -408,7 +420,8 @@ fn infer_type(ctx : CodeGenCtx, expr : @ast.TsExpr) -> @ast.TsType {
         | @ast.TsBinOp::Instanceof
         | @ast.TsBinOp::In => @ast.TsType::Boolean
         // operator @ast.TsType::Boolean
-        @ast.TsBinOp::And | @ast.TsBinOp::Or => @ast.TsType::Boolean
+        @ast.TsBinOp::And | @ast.TsBinOp::Or | @ast.TsBinOp::Coalesce =>
+          @ast.TsType::Boolean
         // @ast.TsBinOp::Add: stringcheck
         @ast.TsBinOp::Add => {
           let left_t = infer_type(ctx, left)
@@ -429,7 +442,10 @@ fn infer_type(ctx : CodeGenCtx, expr : @ast.TsExpr) -> @ast.TsType {
         @ast.TsUnaryOp::Typeof => @ast.TsType::String_
         @ast.TsUnaryOp::Void => @ast.TsType::Any
         @ast.TsUnaryOp::Delete => @ast.TsType::Boolean
-        @ast.TsUnaryOp::PreInc | @ast.TsUnaryOp::PreDec | @ast.TsUnaryOp::PostInc | @ast.TsUnaryOp::PostDec => infer_type(ctx, operand)
+        @ast.TsUnaryOp::PreInc
+        | @ast.TsUnaryOp::PreDec
+        | @ast.TsUnaryOp::PostInc
+        | @ast.TsUnaryOp::PostDec => infer_type(ctx, operand)
       }
     @ast.TsExpr::Call(_, _) => @ast.TsType::Number // functionreturn valuetypeget
     @ast.TsExpr::CallExpr(_, _) => @ast.TsType::Number
@@ -508,7 +524,10 @@ fn struct_size(fields : Array[(String, @ast.TsType)]) -> Int {
 
 ///|
 // / structfieldcompute
-fn field_offset(fields : Array[(String, @ast.TsType)], field_name : String) -> Int? {
+fn field_offset(
+  fields : Array[(String, @ast.TsType)],
+  field_name : String,
+) -> Int? {
   let mut offset = 0
   for i = 0; i < fields.length(); i = i + 1 {
     let (name, field_type) = fields[i]
@@ -522,7 +541,10 @@ fn field_offset(fields : Array[(String, @ast.TsType)], field_name : String) -> I
 
 ///|
 // / structfieldtypeget
-fn field_type(fields : Array[(String, @ast.TsType)], field_name : String) -> @ast.TsType? {
+fn field_type(
+  fields : Array[(String, @ast.TsType)],
+  field_name : String,
+) -> @ast.TsType? {
   for i = 0; i < fields.length(); i = i + 1 {
     let (name, field_type) = fields[i]
     if name == field_name {
@@ -558,7 +580,9 @@ fn compile_expr(
         ctx.emit(I32Const(i.reinterpret_as_uint()))
       }
     @ast.TsExpr::BigIntLit(_) =>
-      raise CodeGenError("BigInt is not supported in Wasm compiler (use interpreter)")
+      raise CodeGenError(
+        "BigInt is not supported in Wasm compiler (use interpreter)",
+      )
     @ast.TsExpr::BoolLit(b) => ctx.emit(I32Const(if b { 1U } else { 0U }))
     @ast.TsExpr::StringLit(s) => {
       // stringaddget (snapshotexpression)
@@ -572,9 +596,13 @@ fn compile_expr(
         None => raise CodeGenError("Undefined variable: \{name}")
       }
     @ast.TsExpr::Yield(_) =>
-      raise CodeGenError("yield is not supported in Wasm compiler (use interpreter)")
+      raise CodeGenError(
+        "yield is not supported in Wasm compiler (use interpreter)",
+      )
     @ast.TsExpr::YieldStar(_) =>
-      raise CodeGenError("yield* is not supported in Wasm compiler (use interpreter)")
+      raise CodeGenError(
+        "yield* is not supported in Wasm compiler (use interpreter)",
+      )
     @ast.TsExpr::Seq(_, _) =>
       raise CodeGenError(
         "comma operator is not supported in Wasm compiler (use interpreter)",
@@ -585,9 +613,12 @@ fn compile_expr(
       compile_index_assign_expr(ctx, arr, index, value)
     @ast.TsExpr::CompoundAssignExpr(left, op, right) =>
       compile_compound_assign_expr(ctx, left, op, right)
-    @ast.TsExpr::BinOp(op, left, right) => compile_binop(ctx, op, left, right, expected_type)
-    @ast.TsExpr::UnaryOp(op, operand) => compile_unaryop(ctx, op, operand, expected_type)
-    @ast.TsExpr::Call(name, args) => compile_call(ctx, name, args, expected_type)
+    @ast.TsExpr::BinOp(op, left, right) =>
+      compile_binop(ctx, op, left, right, expected_type)
+    @ast.TsExpr::UnaryOp(op, operand) =>
+      compile_unaryop(ctx, op, operand, expected_type)
+    @ast.TsExpr::Call(name, args) =>
+      compile_call(ctx, name, args, expected_type)
     @ast.TsExpr::CallExpr(_, _) =>
       raise CodeGenError("call expression is not supported in Wasm compiler")
     @ast.TsExpr::Cond(cond, then_expr, else_expr) => {
@@ -626,11 +657,15 @@ fn compile_expr(
       ctx.emit(If(Value(result_type), then_ctx.instrs, else_ctx.instrs))
     }
     @ast.TsExpr::Spread(_) =>
-      raise CodeGenError("Spread is not supported in Wasm compiler (use interpreter)")
-    @ast.TsExpr::ArrayLit(elements) => compile_array_lit(ctx, elements, expected_type)
+      raise CodeGenError(
+        "Spread is not supported in Wasm compiler (use interpreter)",
+      )
+    @ast.TsExpr::ArrayLit(elements) =>
+      compile_array_lit(ctx, elements, expected_type)
     @ast.TsExpr::IndexAccess(arr, index) =>
       compile_index_access(ctx, arr, index, expected_type)
-    @ast.TsExpr::PropAccess(obj, prop) => compile_prop_access(ctx, obj, prop, expected_type)
+    @ast.TsExpr::PropAccess(obj, prop) =>
+      compile_prop_access(ctx, obj, prop, expected_type)
     @ast.TsExpr::New(type_name, args) =>
       compile_new_expr(ctx, type_name, args, expected_type)
     @ast.TsExpr::NewExpr(_, _) =>
@@ -694,7 +729,9 @@ fn compile_array_lit(
   for i, elem in elements {
     match elem {
       @ast.TsExpr::Spread(_) =>
-        raise CodeGenError("Spread is not supported in Wasm compiler (use interpreter)")
+        raise CodeGenError(
+          "Spread is not supported in Wasm compiler (use interpreter)",
+        )
       _ => ()
     }
     ctx.emit(GlobalGet(0U))
@@ -707,8 +744,6 @@ fn compile_array_lit(
       ctx.emit(I32Store(2U, 0U, 0U))
     }
   }
-
-
   ctx.emit(GlobalGet(0U))
   ctx.emit(I32Const((4 + length * elem_sz).reinterpret_as_uint()))
   ctx.emit(I32Add)
@@ -738,8 +773,6 @@ fn compile_index_access(
   ctx.emit(I32Const(elem_sz.reinterpret_as_uint()))
   ctx.emit(I32Mul)
   ctx.emit(I32Add)
-
-
   if is_f64_type(elem_type) {
     ctx.emit(F64Load(3U, 0U, 0U))
   } else {
@@ -846,8 +879,6 @@ fn compile_new_expr(
 
         // currentstruct
         ctx.emit(GlobalGet(0U))
-
-
         ctx.emit(GlobalGet(0U))
         ctx.emit(I32Const(size.reinterpret_as_uint()))
         ctx.emit(I32Add)
@@ -869,8 +900,10 @@ fn compile_method_call(
 ) -> Unit raise CodeGenError {
   let recv_type = infer_type(ctx, receiver)
   match recv_type {
-    @ast.TsType::String_ => compile_string_method(ctx, receiver, method_name, args)
-    @ast.TsType::Array(_) => compile_array_method(ctx, receiver, method_name, args, recv_type)
+    @ast.TsType::String_ =>
+      compile_string_method(ctx, receiver, method_name, args)
+    @ast.TsType::Array(_) =>
+      compile_array_method(ctx, receiver, method_name, args, recv_type)
     _ => raise CodeGenError("Cannot call method on type: \{recv_type}")
   }
 }
@@ -1006,8 +1039,6 @@ fn compile_string_method(
       loop_instrs.push(LocalSet(i_local))
       loop_instrs.push(Br(0U))
       ctx.emit(Block(Empty, [Loop(Empty, loop_instrs)]))
-
-
       ctx.emit(GlobalGet(0U))
       ctx.emit(I32Const(4U))
       ctx.emit(LocalGet(len_local))
@@ -1074,8 +1105,6 @@ fn compile_string_concat(
   ctx.emit(GlobalGet(0U))
   ctx.emit(LocalGet(total_len))
   ctx.emit(I32Store(2U, 0U, 0U))
-
-
   let i_local = ctx.add_local("__concat_i__", @ast.TsType::Int)
   ctx.emit(I32Const(0U))
   ctx.emit(LocalSet(i_local))
@@ -1104,8 +1133,6 @@ fn compile_string_concat(
   loop1.push(LocalSet(i_local))
   loop1.push(Br(0U))
   ctx.emit(Block(Empty, [Loop(Empty, loop1)]))
-
-
   ctx.emit(I32Const(0U))
   ctx.emit(LocalSet(i_local))
   let loop2 : Array[@core.Instr] = []
@@ -1135,8 +1162,6 @@ fn compile_string_concat(
   loop2.push(LocalSet(i_local))
   loop2.push(Br(0U))
   ctx.emit(Block(Empty, [Loop(Empty, loop2)]))
-
-
   ctx.emit(GlobalGet(0U))
   ctx.emit(I32Const(4U))
   ctx.emit(LocalGet(total_len))
@@ -1230,7 +1255,6 @@ fn compile_prop_assign(
               compile_expr(ctx, obj, obj_type)
               ctx.emit(I32Const(offset.reinterpret_as_uint()))
               ctx.emit(I32Add)
-
               match field_type(fields, prop) {
                 Some(ft) => {
                   compile_expr(ctx, value, ft)
@@ -1278,7 +1302,6 @@ fn compile_prop_assign_expr(
                   // value
                   compile_expr(ctx, value, ft)
                   ctx.emit(LocalSet(val_local))
-
                   ctx.emit(LocalGet(obj_local))
                   ctx.emit(I32Const(offset.reinterpret_as_uint()))
                   ctx.emit(I32Add)
@@ -1288,7 +1311,6 @@ fn compile_prop_assign_expr(
                   } else {
                     ctx.emit(I32Store(2U, 0U, 0U))
                   }
-
                   ctx.emit(LocalGet(val_local))
                   return
                 }
@@ -1326,8 +1348,6 @@ fn compile_index_assign(
   ctx.emit(I32Const(elem_sz.reinterpret_as_uint()))
   ctx.emit(I32Mul)
   ctx.emit(I32Add)
-
-
   compile_expr(ctx, value, elem_type)
   if is_f64_type(elem_type) {
     ctx.emit(F64Store(3U, 0U, 0U))
@@ -1370,16 +1390,12 @@ fn compile_index_assign_expr(
   ctx.emit(I32Const(elem_sz.reinterpret_as_uint()))
   ctx.emit(I32Mul)
   ctx.emit(I32Add)
-
-
   ctx.emit(LocalGet(val_local))
   if is_f64_type(elem_type) {
     ctx.emit(F64Store(3U, 0U, 0U))
   } else {
     ctx.emit(I32Store(2U, 0U, 0U))
   }
-
-
   ctx.emit(LocalGet(val_local))
 }
 
@@ -1390,7 +1406,9 @@ fn emit_compound_op_instr(
   operand_type : @ast.TsType,
 ) -> Unit raise CodeGenError {
   if operand_type == @ast.TsType::String_ {
-    raise CodeGenError("string compound assignment is not supported in Wasm compiler")
+    raise CodeGenError(
+      "string compound assignment is not supported in Wasm compiler",
+    )
   }
   match op {
     @ast.TsCompoundOp::BitAndAssign
@@ -1478,7 +1496,6 @@ fn compile_prop_compound_assign_expr(
                   ctx.emit(I32Const(offset.reinterpret_as_uint()))
                   ctx.emit(I32Add)
                   ctx.emit(LocalSet(addr_local))
-
                   ctx.emit(LocalGet(addr_local))
                   if is_f64_type(ft) {
                     ctx.emit(F64Load(3U, 0U, 0U))
@@ -1527,12 +1544,10 @@ fn compile_index_compound_assign_expr(
   let idx_local = ctx.add_temp_local(@ast.TsType::Int)
   let addr_local = ctx.add_temp_local(@ast.TsType::Int)
   let val_local = ctx.add_temp_local(elem_type)
-
   compile_expr(ctx, arr, arr_type)
   ctx.emit(LocalSet(arr_local))
   compile_expr(ctx, index, @ast.TsType::Int)
   ctx.emit(LocalSet(idx_local))
-
   ctx.emit(LocalGet(arr_local))
   ctx.emit(I32Const(4U))
   ctx.emit(I32Add)
@@ -1541,7 +1556,6 @@ fn compile_index_compound_assign_expr(
   ctx.emit(I32Mul)
   ctx.emit(I32Add)
   ctx.emit(LocalSet(addr_local))
-
   ctx.emit(LocalGet(addr_local))
   if is_f64_type(elem_type) {
     ctx.emit(F64Load(3U, 0U, 0U))
@@ -1569,7 +1583,8 @@ fn compile_compound_assign_expr(
   value : @ast.TsExpr,
 ) -> Unit raise CodeGenError {
   match left {
-    @ast.TsExpr::Var(name) => compile_var_compound_assign_expr(ctx, name, op, value)
+    @ast.TsExpr::Var(name) =>
+      compile_var_compound_assign_expr(ctx, name, op, value)
     @ast.TsExpr::PropAccess(obj, prop) =>
       compile_prop_compound_assign_expr(ctx, obj, prop, op, value)
     @ast.TsExpr::IndexAccess(arr, index) =>
@@ -1593,13 +1608,21 @@ fn compile_binop(
   // stringcheck
   let left_type = infer_type(ctx, left)
   let right_type = infer_type(ctx, right)
-  if op == @ast.TsBinOp::Add && (left_type == @ast.TsType::String_ || right_type == @ast.TsType::String_) {
+  if op == @ast.TsBinOp::Add &&
+    (left_type == @ast.TsType::String_ || right_type == @ast.TsType::String_) {
     // string
     compile_string_concat(ctx, left, right)
     return
   }
   match op {
-    @ast.TsBinOp::Pow | @ast.TsBinOp::BitAnd | @ast.TsBinOp::BitOr | @ast.TsBinOp::BitXor | @ast.TsBinOp::Shl | @ast.TsBinOp::Shr | @ast.TsBinOp::UShr | @ast.TsBinOp::In =>
+    @ast.TsBinOp::Pow
+    | @ast.TsBinOp::BitAnd
+    | @ast.TsBinOp::BitOr
+    | @ast.TsBinOp::BitXor
+    | @ast.TsBinOp::Shl
+    | @ast.TsBinOp::Shr
+    | @ast.TsBinOp::UShr
+    | @ast.TsBinOp::In =>
       raise CodeGenError(
         "binary op is not supported in Wasm compiler (use interpreter)",
       )
@@ -1638,7 +1661,8 @@ fn compile_binop(
       raise CodeGenError(
         "instanceof is not supported in Wasm compiler (use interpreter)",
       )
-    @ast.TsBinOp::And | @ast.TsBinOp::Or => @ast.TsType::Boolean
+    @ast.TsBinOp::And | @ast.TsBinOp::Or | @ast.TsBinOp::Coalesce =>
+      @ast.TsType::Boolean
   }
   compile_expr(ctx, left, operand_type)
   compile_expr(ctx, right, operand_type)
@@ -1664,9 +1688,14 @@ fn compile_binop(
         raise CodeGenError(
           "instanceof is not supported in Wasm compiler (use interpreter)",
         )
-      @ast.TsBinOp::BitAnd | @ast.TsBinOp::BitOr | @ast.TsBinOp::BitXor | @ast.TsBinOp::Shl | @ast.TsBinOp::Shr | @ast.TsBinOp::UShr =>
-        raise CodeGenError("bitwise op on f64")
-      @ast.TsBinOp::And | @ast.TsBinOp::Or => raise CodeGenError("Logical op on f64")
+      @ast.TsBinOp::BitAnd
+      | @ast.TsBinOp::BitOr
+      | @ast.TsBinOp::BitXor
+      | @ast.TsBinOp::Shl
+      | @ast.TsBinOp::Shr
+      | @ast.TsBinOp::UShr => raise CodeGenError("bitwise op on f64")
+      @ast.TsBinOp::And | @ast.TsBinOp::Or | @ast.TsBinOp::Coalesce =>
+        raise CodeGenError("Logical op on f64")
     }
   } else {
     // i32
@@ -1698,6 +1727,8 @@ fn compile_binop(
         )
       @ast.TsBinOp::And => ctx.emit(I32And)
       @ast.TsBinOp::Or => ctx.emit(I32Or)
+      @ast.TsBinOp::Coalesce =>
+        raise CodeGenError("Nullish coalescing not supported in Wasm compiler")
     }
   }
 }
@@ -1850,7 +1881,9 @@ fn compile_call(
           for i, arg in args {
             match arg {
               @ast.TsExpr::Spread(_) =>
-                raise CodeGenError("Spread is not supported in Wasm compiler (use interpreter)")
+                raise CodeGenError(
+                  "Spread is not supported in Wasm compiler (use interpreter)",
+                )
               _ => ()
             }
             let param_type = if i < param_types.length() {
@@ -1865,7 +1898,9 @@ fn compile_call(
           for arg in args {
             match arg {
               @ast.TsExpr::Spread(_) =>
-                raise CodeGenError("Spread is not supported in Wasm compiler (use interpreter)")
+                raise CodeGenError(
+                  "Spread is not supported in Wasm compiler (use interpreter)",
+                )
               _ => ()
             }
             compile_expr(ctx, arg, expected_type)
@@ -1969,17 +2004,17 @@ fn compile_stmt(
       }
     @ast.TsStmt::IndexAssign(arr, index, value) =>
       compile_index_assign(ctx, arr, index, value)
-    @ast.TsStmt::PropAssign(obj, prop, value) => compile_prop_assign(ctx, obj, prop, value)
+    @ast.TsStmt::PropAssign(obj, prop, value) =>
+      compile_prop_assign(ctx, obj, prop, value)
     @ast.TsStmt::Expr(expr) => {
       compile_expr(ctx, expr, return_type)
       ctx.emit(Drop)
     }
     Empty => ()
-    @ast.TsStmt::Block(block) => {
+    @ast.TsStmt::Block(block) =>
       for stmt in block.stmts {
         compile_stmt(ctx, stmt, return_type)
       }
-    }
     @ast.TsStmt::Label(_, inner) => compile_stmt(ctx, inner, return_type)
     @ast.TsStmt::Return(Some(expr)) => {
       compile_expr(ctx, expr, return_type)
@@ -1992,7 +2027,8 @@ fn compile_stmt(
       raise CodeGenError("try/catch/finally is not supported in Wasm compiler")
     @ast.TsStmt::If(cond, then_block, else_block) =>
       compile_if(ctx, cond, then_block, else_block, return_type)
-    @ast.TsStmt::While(cond, body) => compile_while(ctx, cond, body, return_type)
+    @ast.TsStmt::While(cond, body) =>
+      compile_while(ctx, cond, body, return_type)
     @ast.TsStmt::DoWhile(_, _) =>
       raise CodeGenError("do-while is not yet supported in Wasm compiler")
     @ast.TsStmt::Switch(_, _) =>
@@ -2011,7 +2047,8 @@ fn compile_stmt(
         None =>
           // loop block
           ctx.emit(Br((ctx.loop_depth * 2 - 1).reinterpret_as_uint()))
-        Some(_) => raise CodeGenError("labeled break is not supported in Wasm compiler")
+        Some(_) =>
+          raise CodeGenError("labeled break is not supported in Wasm compiler")
       }
     @ast.TsStmt::Continue(label) =>
       match label {
@@ -2019,7 +2056,9 @@ fn compile_stmt(
           // loop head
           ctx.emit(Br(((ctx.loop_depth - 1) * 2).reinterpret_as_uint()))
         Some(_) =>
-          raise CodeGenError("labeled continue is not supported in Wasm compiler")
+          raise CodeGenError(
+            "labeled continue is not supported in Wasm compiler",
+          )
       }
   }
 }
@@ -2174,7 +2213,10 @@ fn compile_for_of(
 ) -> Unit raise CodeGenError {
   let var_name = match binding {
     @ast.TsBinding::Ident(name) => name
-    _ => raise CodeGenError("for...of destructuring is not supported in Wasm compiler")
+    _ =>
+      raise CodeGenError(
+        "for...of destructuring is not supported in Wasm compiler",
+      )
   }
   // arraygetvariablesave
   let arr_type = infer_type(ctx, iterable)
@@ -2328,8 +2370,6 @@ fn compile_function(
     locals.push(ts_type_to_valtype(ctx.local_types[i]))
     i += 1
   }
-
-
   let code : @core.Code = {
     locals,
     body: @core.Expr::{ instrs: ctx.instrs },
@@ -2345,7 +2385,9 @@ fn compile_function(
 
 ///|
 // /
-pub fn compile_module(module_ : @ast.TsModule) -> @core.Module raise CodeGenError {
+pub fn compile_module(
+  module_ : @ast.TsModule,
+) -> @core.Module raise CodeGenError {
   // importcompute
   let num_imports = module_.imports.length().reinterpret_as_uint()
 
@@ -2501,7 +2543,6 @@ pub suberror CompileError {
 ///|
 // / TypeScript Wasm
 pub fn compile_to_wasm(source : String) -> Bytes raise CompileError {
-
   let parser = @parser.Parser::from_source(source)
   let ts_module = parser.parse_module() catch {
     @parser.ParseError::ParseError(msg) =>

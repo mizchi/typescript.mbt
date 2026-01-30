@@ -57,96 +57,120 @@ fn Parser::parse_assignment(self : Parser) -> @ast.TsExpr raise ParseError {
     let right = self.parse_assignment()
     match left {
       Var(name) => CompoundAssignExpr(Var(name), AddAssign, right)
-      PropAccess(obj, prop) => CompoundAssignExpr(PropAccess(obj, prop), AddAssign, right)
-      IndexAccess(obj, index) => CompoundAssignExpr(IndexAccess(obj, index), AddAssign, right)
+      PropAccess(obj, prop) =>
+        CompoundAssignExpr(PropAccess(obj, prop), AddAssign, right)
+      IndexAccess(obj, index) =>
+        CompoundAssignExpr(IndexAccess(obj, index), AddAssign, right)
       _ => right
     }
   } else if self.match_(MinusEq) {
     let right = self.parse_assignment()
     match left {
       Var(name) => CompoundAssignExpr(Var(name), SubAssign, right)
-      PropAccess(obj, prop) => CompoundAssignExpr(PropAccess(obj, prop), SubAssign, right)
-      IndexAccess(obj, index) => CompoundAssignExpr(IndexAccess(obj, index), SubAssign, right)
+      PropAccess(obj, prop) =>
+        CompoundAssignExpr(PropAccess(obj, prop), SubAssign, right)
+      IndexAccess(obj, index) =>
+        CompoundAssignExpr(IndexAccess(obj, index), SubAssign, right)
       _ => right
     }
   } else if self.match_(StarEq) {
     let right = self.parse_assignment()
     match left {
       Var(name) => CompoundAssignExpr(Var(name), MulAssign, right)
-      PropAccess(obj, prop) => CompoundAssignExpr(PropAccess(obj, prop), MulAssign, right)
-      IndexAccess(obj, index) => CompoundAssignExpr(IndexAccess(obj, index), MulAssign, right)
+      PropAccess(obj, prop) =>
+        CompoundAssignExpr(PropAccess(obj, prop), MulAssign, right)
+      IndexAccess(obj, index) =>
+        CompoundAssignExpr(IndexAccess(obj, index), MulAssign, right)
       _ => right
     }
   } else if self.match_(SlashEq) {
     let right = self.parse_assignment()
     match left {
       Var(name) => CompoundAssignExpr(Var(name), DivAssign, right)
-      PropAccess(obj, prop) => CompoundAssignExpr(PropAccess(obj, prop), DivAssign, right)
-      IndexAccess(obj, index) => CompoundAssignExpr(IndexAccess(obj, index), DivAssign, right)
+      PropAccess(obj, prop) =>
+        CompoundAssignExpr(PropAccess(obj, prop), DivAssign, right)
+      IndexAccess(obj, index) =>
+        CompoundAssignExpr(IndexAccess(obj, index), DivAssign, right)
       _ => right
     }
   } else if self.match_(PercentEq) {
     let right = self.parse_assignment()
     match left {
       Var(name) => CompoundAssignExpr(Var(name), ModAssign, right)
-      PropAccess(obj, prop) => CompoundAssignExpr(PropAccess(obj, prop), ModAssign, right)
-      IndexAccess(obj, index) => CompoundAssignExpr(IndexAccess(obj, index), ModAssign, right)
+      PropAccess(obj, prop) =>
+        CompoundAssignExpr(PropAccess(obj, prop), ModAssign, right)
+      IndexAccess(obj, index) =>
+        CompoundAssignExpr(IndexAccess(obj, index), ModAssign, right)
       _ => right
     }
   } else if self.match_(AmpEq) {
     let right = self.parse_assignment()
     match left {
       Var(name) => CompoundAssignExpr(Var(name), BitAndAssign, right)
-      PropAccess(obj, prop) => CompoundAssignExpr(PropAccess(obj, prop), BitAndAssign, right)
-      IndexAccess(obj, index) => CompoundAssignExpr(IndexAccess(obj, index), BitAndAssign, right)
+      PropAccess(obj, prop) =>
+        CompoundAssignExpr(PropAccess(obj, prop), BitAndAssign, right)
+      IndexAccess(obj, index) =>
+        CompoundAssignExpr(IndexAccess(obj, index), BitAndAssign, right)
       _ => right
     }
   } else if self.match_(PipeEq) {
     let right = self.parse_assignment()
     match left {
       Var(name) => CompoundAssignExpr(Var(name), BitOrAssign, right)
-      PropAccess(obj, prop) => CompoundAssignExpr(PropAccess(obj, prop), BitOrAssign, right)
-      IndexAccess(obj, index) => CompoundAssignExpr(IndexAccess(obj, index), BitOrAssign, right)
+      PropAccess(obj, prop) =>
+        CompoundAssignExpr(PropAccess(obj, prop), BitOrAssign, right)
+      IndexAccess(obj, index) =>
+        CompoundAssignExpr(IndexAccess(obj, index), BitOrAssign, right)
       _ => right
     }
   } else if self.match_(CaretEq) {
     let right = self.parse_assignment()
     match left {
       Var(name) => CompoundAssignExpr(Var(name), BitXorAssign, right)
-      PropAccess(obj, prop) => CompoundAssignExpr(PropAccess(obj, prop), BitXorAssign, right)
-      IndexAccess(obj, index) => CompoundAssignExpr(IndexAccess(obj, index), BitXorAssign, right)
+      PropAccess(obj, prop) =>
+        CompoundAssignExpr(PropAccess(obj, prop), BitXorAssign, right)
+      IndexAccess(obj, index) =>
+        CompoundAssignExpr(IndexAccess(obj, index), BitXorAssign, right)
       _ => right
     }
   } else if self.match_(LtLtEq) {
     let right = self.parse_assignment()
     match left {
       Var(name) => CompoundAssignExpr(Var(name), ShlAssign, right)
-      PropAccess(obj, prop) => CompoundAssignExpr(PropAccess(obj, prop), ShlAssign, right)
-      IndexAccess(obj, index) => CompoundAssignExpr(IndexAccess(obj, index), ShlAssign, right)
+      PropAccess(obj, prop) =>
+        CompoundAssignExpr(PropAccess(obj, prop), ShlAssign, right)
+      IndexAccess(obj, index) =>
+        CompoundAssignExpr(IndexAccess(obj, index), ShlAssign, right)
       _ => right
     }
   } else if self.match_(GtGtEq) {
     let right = self.parse_assignment()
     match left {
       Var(name) => CompoundAssignExpr(Var(name), ShrAssign, right)
-      PropAccess(obj, prop) => CompoundAssignExpr(PropAccess(obj, prop), ShrAssign, right)
-      IndexAccess(obj, index) => CompoundAssignExpr(IndexAccess(obj, index), ShrAssign, right)
+      PropAccess(obj, prop) =>
+        CompoundAssignExpr(PropAccess(obj, prop), ShrAssign, right)
+      IndexAccess(obj, index) =>
+        CompoundAssignExpr(IndexAccess(obj, index), ShrAssign, right)
       _ => right
     }
   } else if self.match_(GtGtGtEq) {
     let right = self.parse_assignment()
     match left {
       Var(name) => CompoundAssignExpr(Var(name), UShrAssign, right)
-      PropAccess(obj, prop) => CompoundAssignExpr(PropAccess(obj, prop), UShrAssign, right)
-      IndexAccess(obj, index) => CompoundAssignExpr(IndexAccess(obj, index), UShrAssign, right)
+      PropAccess(obj, prop) =>
+        CompoundAssignExpr(PropAccess(obj, prop), UShrAssign, right)
+      IndexAccess(obj, index) =>
+        CompoundAssignExpr(IndexAccess(obj, index), UShrAssign, right)
       _ => right
     }
   } else if self.match_(StarStarEq) {
     let right = self.parse_assignment()
     match left {
       Var(name) => CompoundAssignExpr(Var(name), PowAssign, right)
-      PropAccess(obj, prop) => CompoundAssignExpr(PropAccess(obj, prop), PowAssign, right)
-      IndexAccess(obj, index) => CompoundAssignExpr(IndexAccess(obj, index), PowAssign, right)
+      PropAccess(obj, prop) =>
+        CompoundAssignExpr(PropAccess(obj, prop), PowAssign, right)
+      IndexAccess(obj, index) =>
+        CompoundAssignExpr(IndexAccess(obj, index), PowAssign, right)
       _ => right
     }
   } else {
@@ -185,12 +209,17 @@ fn Parser::parse_ternary(self : Parser) -> @ast.TsExpr raise ParseError {
 }
 
 ///|
-// / || (OR)
+// / || (OR) and ?? (Nullish Coalesce)
 fn Parser::parse_or(self : Parser) -> @ast.TsExpr raise ParseError {
   let mut left = self.parse_and()
-  while self.match_(PipePipe) {
-    let right = self.parse_and()
-    left = BinOp(Or, left, right)
+  while self.check(PipePipe) || self.check(QuestionQuestion) {
+    if self.match_(PipePipe) {
+      let right = self.parse_and()
+      left = BinOp(Or, left, right)
+    } else if self.match_(QuestionQuestion) {
+      let right = self.parse_and()
+      left = BinOp(Coalesce, left, right)
+    }
   }
   left
 }
@@ -400,16 +429,15 @@ fn Parser::parse_unary(self : Parser) -> @ast.TsExpr raise ParseError {
         let expr = self.parse_assignment()
         YieldStar(expr)
       } else {
-        let expr =
-          if self.check(Semicolon) ||
-            self.check(Comma) ||
-            self.check(RParen) ||
-            self.check(RBracket) ||
-            self.check(RBrace) {
-            None
-          } else {
-            Some(self.parse_unary())
-          }
+        let expr = if self.check(Semicolon) ||
+          self.check(Comma) ||
+          self.check(RParen) ||
+          self.check(RBracket) ||
+          self.check(RBrace) {
+          None
+        } else {
+          Some(self.parse_unary())
+        }
         Yield(expr)
       }
     } else {
@@ -459,15 +487,10 @@ fn Parser::parse_call(self : Parser) -> @ast.TsExpr raise ParseError {
           let args = self.parse_args()
           let _ = self.expect(RParen)
           match expr {
-            Var(name) => {
-              expr = Call(name, args)
-            }
-            PropAccess(receiver, method_name) => {
+            Var(name) => expr = Call(name, args)
+            PropAccess(receiver, method_name) =>
               expr = MethodCall(receiver, method_name, args)
-            }
-            _ => {
-              expr = CallExpr(expr, args)
-            }
+            _ => expr = CallExpr(expr, args)
           }
           continue
         }
@@ -529,16 +552,11 @@ fn Parser::parse_call(self : Parser) -> @ast.TsExpr raise ParseError {
       let args = self.parse_args()
       let _ = self.expect(RParen)
       match expr {
-        Var(name) => {
-          expr = Call(name, args)
-        }
-        PropAccess(receiver, method_name) => {
+        Var(name) => expr = Call(name, args)
+        PropAccess(receiver, method_name) =>
           // method: receiver.method(args)
           expr = MethodCall(receiver, method_name, args)
-        }
-        _ => {
-          expr = CallExpr(expr, args)
-        }
+        _ => expr = CallExpr(expr, args)
       }
     } else if self.match_(LBracket) {
       // array
@@ -686,8 +704,9 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
       }
       New("RegExp", args)
     }
-    Ident(name) => {
-      if name == "async" && self.peek_at(1).kind == Function &&
+    Ident(name) =>
+      if name == "async" &&
+        self.peek_at(1).kind == Function &&
         not(self.has_line_terminator_after()) {
         let _ = self.advance()
         let func = self.parse_function_expr()
@@ -710,6 +729,7 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
           self.in_switch = false
           while self.labels.length() > 0 {
             let _ = self.labels.pop()
+
           }
           let block = self.parse_block()
           self.in_function = prev_function
@@ -718,6 +738,7 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
           // Restore labels
           while self.labels.length() > 0 {
             let _ = self.labels.pop()
+
           }
           for label in prev_labels {
             self.labels.push(label)
@@ -728,20 +749,21 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
           ArrowExpr(expr)
         }
         ArrowFunc(
-          [{
-            name,
-            binding: Some(@ast.TsBinding::Ident(name)),
-            is_rest: false,
-            type_: Any,
-            default: None,
-          }],
+          [
+            {
+              name,
+              binding: Some(@ast.TsBinding::Ident(name)),
+              is_rest: false,
+              type_: Any,
+              default: None,
+            },
+          ],
           body,
         )
       } else {
         let _ = self.advance()
         Var(name)
       }
-    }
     Let =>
       if self.in_strict {
         raise ParseError("Unexpected token: Let")
@@ -777,6 +799,7 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
           self.in_switch = false
           while self.labels.length() > 0 {
             let _ = self.labels.pop()
+
           }
           let block = self.parse_block()
           self.in_function = prev_function
@@ -785,6 +808,7 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
           // Restore labels
           while self.labels.length() > 0 {
             let _ = self.labels.pop()
+
           }
           for label in prev_labels {
             self.labels.push(label)
@@ -911,6 +935,7 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
           if self.match_(Lt) {
             let _ = self.parse_type()
             let _ = self.expect(Gt)
+
           }
         }
         NumberType => {
@@ -976,15 +1001,14 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
           }
         None => ()
       }
-      let args =
-        if self.check(LParen) {
-          let _ = self.expect(LParen)
-          let args = self.parse_args()
-          let _ = self.expect(RParen)
-          args
-        } else {
-          []
-        }
+      let args = if self.check(LParen) {
+        let _ = self.expect(LParen)
+        let args = self.parse_args()
+        let _ = self.expect(RParen)
+        args
+      } else {
+        []
+      }
       match callee_expr {
         Some(expr) =>
           match expr {
@@ -1001,71 +1025,71 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
       if not(self.check(RBrace)) {
         if self.match_ellipsis() {
           let _ = self.parse_assignment()
+
         } else {
-        // field
-        let mut is_ident_key = false
-        let _ = self.match_(Star)
-        let key = if self.match_(LBracket) {
-          let key_expr = self.parse_assignment()
-          let _ = self.expect(RBracket)
-          self.computed_key_name(key_expr)
-        } else {
-          match self.advance().kind {
-            Ident(n) => {
-              is_ident_key = true
-              n
+          // field
+          let mut is_ident_key = false
+          let _ = self.match_(Star)
+          let key = if self.match_(LBracket) {
+            let key_expr = self.parse_assignment()
+            let _ = self.expect(RBracket)
+            self.computed_key_name(key_expr)
+          } else {
+            match self.advance().kind {
+              Ident(n) => {
+                is_ident_key = true
+                n
+              }
+              Str(s) => s
+              Int(i) => i.to_string()
+              Number(n) => n.to_string()
+              Yield => "yield"
+              Return => "return"
+              If => "if"
+              Else => "else"
+              For => "for"
+              While => "while"
+              Switch => "switch"
+              Case => "case"
+              Default => "default"
+              With => "with"
+              Debugger => "debugger"
+              Import => "import"
+              Export => "export"
+              From => "from"
+              As => "as"
+              Break => "break"
+              Continue => "continue"
+              Function => "function"
+              Do => "do"
+              Try => "try"
+              Catch => "catch"
+              Finally => "finally"
+              Throw => "throw"
+              Delete => "delete"
+              Let => "let"
+              Const => "const"
+              Var => "var"
+              New => "new"
+              Typeof => "typeof"
+              Of => "of"
+              In => "in"
+              Declare => "declare"
+              Interface => "interface"
+              Class => "class"
+              Instanceof => "instanceof"
+              NumberType => "number"
+              BooleanType => "boolean"
+              StringType => "string"
+              VoidType => "void"
+              IntType => "int"
+              Type => "type"
+              Extends => "extends"
+              k => raise ParseError("Expected property name, got \{k}")
             }
-            Str(s) => s
-            Int(i) => i.to_string()
-            Number(n) => n.to_string()
-            Yield => "yield"
-            Return => "return"
-            If => "if"
-            Else => "else"
-            For => "for"
-            While => "while"
-            Switch => "switch"
-            Case => "case"
-            Default => "default"
-            With => "with"
-            Debugger => "debugger"
-            Import => "import"
-            Export => "export"
-            From => "from"
-            As => "as"
-            Break => "break"
-            Continue => "continue"
-            Function => "function"
-            Do => "do"
-            Try => "try"
-            Catch => "catch"
-            Finally => "finally"
-            Throw => "throw"
-            Delete => "delete"
-            Let => "let"
-            Const => "const"
-            Var => "var"
-            New => "new"
-            Typeof => "typeof"
-            Of => "of"
-            In => "in"
-            Declare => "declare"
-            Interface => "interface"
-            Class => "class"
-            Instanceof => "instanceof"
-            NumberType => "number"
-            BooleanType => "boolean"
-            StringType => "string"
-            VoidType => "void"
-            IntType => "int"
-            Type => "type"
-            Extends => "extends"
-            k => raise ParseError("Expected property name, got \{k}")
           }
-        }
-        let mut prop_key = key
-        let value =
-          if is_ident_key &&
+          let mut prop_key = key
+          let value = if is_ident_key &&
             (prop_key == "get" || prop_key == "set") &&
             not(self.check(Colon)) &&
             not(self.check(LParen)) &&
@@ -1128,12 +1152,11 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
             }
             let is_getter = prop_key == "get"
             let func_name = acc_key
-            prop_key =
-              if is_getter {
-                "@@get:" + acc_key
-              } else {
-                "@@set:" + acc_key
-              }
+            prop_key = if is_getter {
+              "@@get:" + acc_key
+            } else {
+              "@@set:" + acc_key
+            }
             let _ = self.expect(LParen)
             let params = self.parse_params()
             let _ = self.expect(RParen)
@@ -1178,7 +1201,7 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
           } else {
             raise ParseError("Expected Colon, got \{self.peek().kind}")
           }
-        fields.push((prop_key, value))
+          fields.push((prop_key, value))
         }
         // field
         while self.match_(Comma) {
@@ -1250,85 +1273,83 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
             }
           }
           let mut prop_key = key
-          let value =
-            if is_ident_key &&
-              (prop_key == "get" || prop_key == "set") &&
-              not(self.check(Colon)) &&
-              not(self.check(LParen)) &&
-              not(self.check(Comma)) &&
-              not(self.check(RBrace)) {
-              let acc_key = if self.match_(LBracket) {
-                let key_expr = self.parse_assignment()
-                let _ = self.expect(RBracket)
-                self.computed_key_name(key_expr)
-              } else {
-                match self.advance().kind {
-                  Ident(n) => n
-                  Str(s) => s
-                  Int(i) => i.to_string()
-                  Number(n) => n.to_string()
-                  Return => "return"
-                  If => "if"
-                  Else => "else"
-                  For => "for"
-                  While => "while"
-                  Switch => "switch"
-                  Case => "case"
-                  Default => "default"
-                  With => "with"
-                  Debugger => "debugger"
-                  Import => "import"
-                  Export => "export"
-                  From => "from"
-                  As => "as"
-                  Break => "break"
-                  Continue => "continue"
-                  Function => "function"
-                  Do => "do"
-                  Try => "try"
-                  Catch => "catch"
-                  Finally => "finally"
-                  Throw => "throw"
-                  Delete => "delete"
-                  Yield => "yield"
-                  Let => "let"
-                  Const => "const"
-                  Var => "var"
-                  New => "new"
-                  Typeof => "typeof"
-                  Of => "of"
-                  In => "in"
-                  Declare => "declare"
-                  Interface => "interface"
-                  Class => "class"
-                  Instanceof => "instanceof"
-                  NumberType => "number"
-                  BooleanType => "boolean"
-                  StringType => "string"
-                  VoidType => "void"
-                  IntType => "int"
-                  Type => "type"
-                  Extends => "extends"
-                  k => raise ParseError("Expected property name, got \{k}")
-                }
+          let value = if is_ident_key &&
+            (prop_key == "get" || prop_key == "set") &&
+            not(self.check(Colon)) &&
+            not(self.check(LParen)) &&
+            not(self.check(Comma)) &&
+            not(self.check(RBrace)) {
+            let acc_key = if self.match_(LBracket) {
+              let key_expr = self.parse_assignment()
+              let _ = self.expect(RBracket)
+              self.computed_key_name(key_expr)
+            } else {
+              match self.advance().kind {
+                Ident(n) => n
+                Str(s) => s
+                Int(i) => i.to_string()
+                Number(n) => n.to_string()
+                Return => "return"
+                If => "if"
+                Else => "else"
+                For => "for"
+                While => "while"
+                Switch => "switch"
+                Case => "case"
+                Default => "default"
+                With => "with"
+                Debugger => "debugger"
+                Import => "import"
+                Export => "export"
+                From => "from"
+                As => "as"
+                Break => "break"
+                Continue => "continue"
+                Function => "function"
+                Do => "do"
+                Try => "try"
+                Catch => "catch"
+                Finally => "finally"
+                Throw => "throw"
+                Delete => "delete"
+                Yield => "yield"
+                Let => "let"
+                Const => "const"
+                Var => "var"
+                New => "new"
+                Typeof => "typeof"
+                Of => "of"
+                In => "in"
+                Declare => "declare"
+                Interface => "interface"
+                Class => "class"
+                Instanceof => "instanceof"
+                NumberType => "number"
+                BooleanType => "boolean"
+                StringType => "string"
+                VoidType => "void"
+                IntType => "int"
+                Type => "type"
+                Extends => "extends"
+                k => raise ParseError("Expected property name, got \{k}")
               }
+            }
             let is_getter = prop_key == "get"
             let func_name = acc_key
-            prop_key =
-              if is_getter {
-                "@@get:" + acc_key
-              } else {
-                "@@set:" + acc_key
-              }
+            prop_key = if is_getter {
+              "@@get:" + acc_key
+            } else {
+              "@@set:" + acc_key
+            }
             let _ = self.expect(LParen)
             let params = self.parse_params()
             let _ = self.expect(RParen)
-              let return_type = if self.check(Colon) {
-                let _ = self.advance()
-                self.parse_type()
-              } else {
-                Any
-              }
+            let return_type = if self.check(Colon) {
+              let _ = self.advance()
+              self.parse_type()
+            } else {
+              Any
+            }
             let body = self.parse_block()
             @ast.TsExpr::FuncExpr(@ast.TsFunc::{
               name: func_name,
@@ -1337,33 +1358,33 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
               body,
               is_generator: false,
             })
-            } else if self.match_(Colon) {
-              self.parse_assignment()
-            } else if is_ident_key && self.match_(Eq) {
-              self.parse_assignment()
-            } else if self.check(LParen) {
-              let _ = self.expect(LParen)
-              let params = self.parse_params()
-              let _ = self.expect(RParen)
-              let return_type = if self.check(Colon) {
-                let _ = self.advance()
-                self.parse_type()
-              } else {
-                Any
-              }
-              let body = self.parse_block()
-              @ast.TsExpr::FuncExpr({
-                name: prop_key,
-                params,
-                return_type,
-                body,
-                is_generator: false,
-              })
-            } else if is_ident_key && (self.check(Comma) || self.check(RBrace)) {
-              Var(prop_key)
+          } else if self.match_(Colon) {
+            self.parse_assignment()
+          } else if is_ident_key && self.match_(Eq) {
+            self.parse_assignment()
+          } else if self.check(LParen) {
+            let _ = self.expect(LParen)
+            let params = self.parse_params()
+            let _ = self.expect(RParen)
+            let return_type = if self.check(Colon) {
+              let _ = self.advance()
+              self.parse_type()
             } else {
-              raise ParseError("Expected Colon, got \{self.peek().kind}")
+              Any
             }
+            let body = self.parse_block()
+            @ast.TsExpr::FuncExpr({
+              name: prop_key,
+              params,
+              return_type,
+              body,
+              is_generator: false,
+            })
+          } else if is_ident_key && (self.check(Comma) || self.check(RBrace)) {
+            Var(prop_key)
+          } else {
+            raise ParseError("Expected Colon, got \{self.peek().kind}")
+          }
           fields.push((prop_key, value))
         }
       }

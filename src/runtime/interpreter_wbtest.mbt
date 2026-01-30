@@ -865,3 +865,73 @@ test "interpreter: for loop let scope basic" {
   )
   inspect(result, content="String(\"inside\")")
 }
+
+///|
+test "interpreter: nullish coalescing with null" {
+  let interp = JSInterpreter::new()
+  let result = interp.run(
+    (
+      #|function main() {
+      #|  var a = null ?? "default";
+      #|  return a;
+      #|}
+    ),
+  )
+  inspect(result, content="String(\"default\")")
+}
+
+///|
+test "interpreter: nullish coalescing with undefined" {
+  let interp = JSInterpreter::new()
+  let result = interp.run(
+    (
+      #|function main() {
+      #|  var a = undefined ?? "fallback";
+      #|  return a;
+      #|}
+    ),
+  )
+  inspect(result, content="String(\"fallback\")")
+}
+
+///|
+test "interpreter: nullish coalescing preserves zero" {
+  let interp = JSInterpreter::new()
+  let result = interp.run(
+    (
+      #|function main() {
+      #|  return 0 ?? "unused";
+      #|}
+    ),
+  )
+  // 0 should NOT trigger default value (unlike ||)
+  inspect(result, content="Number(0)")
+}
+
+///|
+test "interpreter: nullish coalescing preserves empty string" {
+  let interp = JSInterpreter::new()
+  let result = interp.run(
+    (
+      #|function main() {
+      #|  return "" ?? "unused";
+      #|}
+    ),
+  )
+  // "" should NOT trigger default value (unlike ||)
+  inspect(result, content="String(\"\")")
+}
+
+///|
+test "interpreter: nullish coalescing preserves false" {
+  let interp = JSInterpreter::new()
+  let result = interp.run(
+    (
+      #|function main() {
+      #|  return false ?? "unused";
+      #|}
+    ),
+  )
+  // false should NOT trigger default value (unlike ||)
+  inspect(result, content="Bool(false)")
+}

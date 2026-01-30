@@ -38,7 +38,10 @@ pub fn JSInterpreter::eval_expr(
         if js_has_prop(global_obj, name) {
           js_get_prop(global_obj, name)
         } else {
-          let _ = self.set_error_kind("ReferenceError", name + " is not defined")
+          let _ = self.set_error_kind(
+            "ReferenceError",
+            name + " is not defined",
+          )
           Undefined
         }
       }
@@ -46,7 +49,7 @@ pub fn JSInterpreter::eval_expr(
       let _ = self.eval_expr(left, env)
       self.eval_expr(right, env)
     }
-    @ast.TsExpr::BinOp(op, left, right) => {
+    @ast.TsExpr::BinOp(op, left, right) =>
       match op {
         @ast.TsBinOp::And => {
           let lval = self.eval_expr(left, env)
@@ -64,79 +67,90 @@ pub fn JSInterpreter::eval_expr(
             self.eval_expr(right, env)
           }
         }
+        @ast.TsBinOp::Coalesce => {
+          // ?? returns left if it's not null/undefined, otherwise right
+          let lval = self.eval_expr(left, env)
+          match lval {
+            Null | Undefined => self.eval_expr(right, env)
+            _ => lval
+          }
+        }
         _ => {
           let lval = self.eval_expr(left, env)
           let rval = self.eval_expr(right, env)
           match op {
-        @ast.TsBinOp::Add => {
-          let lprim = self.to_primitive_for_add(lval)
-          let rprim = self.to_primitive_for_add(rval)
-          match (lprim, rprim) {
-            (String(_), _) | (_, String(_)) =>
-              String(lprim.to_js_string() + rprim.to_js_string())
-            _ => js_add(lprim, rprim)
-          }
-        }
-        @ast.TsBinOp::Sub => js_sub(lval, rval)
-        @ast.TsBinOp::Mul => js_mul(lval, rval)
-        @ast.TsBinOp::Div => js_div(lval, rval)
-        @ast.TsBinOp::Mod => js_mod(lval, rval)
-        @ast.TsBinOp::Pow => Number(@math.pow(lval.to_number(), rval.to_number()))
-        @ast.TsBinOp::BitAnd => {
-          let li = lval.to_number().to_int()
-          let ri = rval.to_number().to_int()
-          Number((li & ri).to_double())
-        }
-        @ast.TsBinOp::BitOr => {
-          let li = lval.to_number().to_int()
-          let ri = rval.to_number().to_int()
-          Number((li | ri).to_double())
-        }
-        @ast.TsBinOp::BitXor => {
-          let li = lval.to_number().to_int()
-          let ri = rval.to_number().to_int()
-          Number((li ^ ri).to_double())
-        }
-        @ast.TsBinOp::Shl => {
-          let li = lval.to_number().to_int()
-          let ri = rval.to_number().to_int()
-          let shift = ri & 31
-          Number((li << shift).to_double())
-        }
-        @ast.TsBinOp::Shr => {
-          let li = lval.to_number().to_int()
-          let ri = rval.to_number().to_int()
-          let shift = ri & 31
-          Number((li >> shift).to_double())
-        }
-        @ast.TsBinOp::UShr => {
-          let li = lval.to_number()
-          let ri = rval.to_number().to_int()
-          let shift = ri & 31
-          let u = if li < 0.0 { li + 4294967296.0 } else { li }
-          let denom = @math.pow(2.0, shift.to_double())
-          Number(@math.floor(u / denom))
-        }
-        @ast.TsBinOp::BinLt => js_lt(lval, rval)
-        @ast.TsBinOp::BinLe => js_le(lval, rval)
-        @ast.TsBinOp::BinGt => js_gt(lval, rval)
-        @ast.TsBinOp::BinGe => js_ge(lval, rval)
-        @ast.TsBinOp::BinEq => js_strict_eq(lval, rval) // === (strict equality)
-        @ast.TsBinOp::BinNe => js_strict_ne(lval, rval) // !== (strict inequality)
-        @ast.TsBinOp::AbstractEq => js_eq(lval, rval) // == (abstract equality)
-        @ast.TsBinOp::AbstractNe => js_ne(lval, rval) // != (abstract inequality)
-        @ast.TsBinOp::Instanceof => Bool(self.instanceof(lval, rval))
-        @ast.TsBinOp::In => Bool(js_has_prop(rval, lval.to_js_string()))
-        @ast.TsBinOp::And =>
-          // handled above for short-circuit
-          Undefined
-        @ast.TsBinOp::Or =>
-          // handled above for short-circuit
-          Undefined
+            @ast.TsBinOp::Add => {
+              let lprim = self.to_primitive_for_add(lval)
+              let rprim = self.to_primitive_for_add(rval)
+              match (lprim, rprim) {
+                (String(_), _) | (_, String(_)) =>
+                  String(lprim.to_js_string() + rprim.to_js_string())
+                _ => js_add(lprim, rprim)
+              }
+            }
+            @ast.TsBinOp::Sub => js_sub(lval, rval)
+            @ast.TsBinOp::Mul => js_mul(lval, rval)
+            @ast.TsBinOp::Div => js_div(lval, rval)
+            @ast.TsBinOp::Mod => js_mod(lval, rval)
+            @ast.TsBinOp::Pow =>
+              Number(@math.pow(lval.to_number(), rval.to_number()))
+            @ast.TsBinOp::BitAnd => {
+              let li = lval.to_number().to_int()
+              let ri = rval.to_number().to_int()
+              Number((li & ri).to_double())
+            }
+            @ast.TsBinOp::BitOr => {
+              let li = lval.to_number().to_int()
+              let ri = rval.to_number().to_int()
+              Number((li | ri).to_double())
+            }
+            @ast.TsBinOp::BitXor => {
+              let li = lval.to_number().to_int()
+              let ri = rval.to_number().to_int()
+              Number((li ^ ri).to_double())
+            }
+            @ast.TsBinOp::Shl => {
+              let li = lval.to_number().to_int()
+              let ri = rval.to_number().to_int()
+              let shift = ri & 31
+              Number((li << shift).to_double())
+            }
+            @ast.TsBinOp::Shr => {
+              let li = lval.to_number().to_int()
+              let ri = rval.to_number().to_int()
+              let shift = ri & 31
+              Number((li >> shift).to_double())
+            }
+            @ast.TsBinOp::UShr => {
+              let li = lval.to_number()
+              let ri = rval.to_number().to_int()
+              let shift = ri & 31
+              let u = if li < 0.0 { li + 4294967296.0 } else { li }
+              let denom = @math.pow(2.0, shift.to_double())
+              Number(@math.floor(u / denom))
+            }
+            @ast.TsBinOp::BinLt => js_lt(lval, rval)
+            @ast.TsBinOp::BinLe => js_le(lval, rval)
+            @ast.TsBinOp::BinGt => js_gt(lval, rval)
+            @ast.TsBinOp::BinGe => js_ge(lval, rval)
+            @ast.TsBinOp::BinEq => js_strict_eq(lval, rval) // === (strict equality)
+            @ast.TsBinOp::BinNe => js_strict_ne(lval, rval) // !== (strict inequality)
+            @ast.TsBinOp::AbstractEq => js_eq(lval, rval) // == (abstract equality)
+            @ast.TsBinOp::AbstractNe => js_ne(lval, rval) // != (abstract inequality)
+            @ast.TsBinOp::Instanceof => Bool(self.instanceof(lval, rval))
+            @ast.TsBinOp::In => Bool(js_has_prop(rval, lval.to_js_string()))
+            @ast.TsBinOp::And =>
+              // handled above for short-circuit
+              Undefined
+            @ast.TsBinOp::Or =>
+              // handled above for short-circuit
+              Undefined
+            @ast.TsBinOp::Coalesce =>
+              // handled above for short-circuit
+              Undefined
           }
         }
       }
-    }
     @ast.TsExpr::UnaryOp(op, operand) =>
       match op {
         @ast.TsUnaryOp::PreInc =>
@@ -265,7 +279,8 @@ pub fn JSInterpreter::eval_expr(
         @ast.TsUnaryOp::Typeof =>
           match operand {
             @ast.TsExpr::Var(name) =>
-              if env.has(name) || js_has_prop(self.global_env.get("globalThis"), name) {
+              if env.has(name) ||
+                js_has_prop(self.global_env.get("globalThis"), name) {
                 js_typeof(self.eval_expr(operand, env))
               } else {
                 String("undefined")
@@ -301,7 +316,7 @@ pub fn JSInterpreter::eval_expr(
           let _ = self.eval_expr(operand, env)
           Undefined
         }
-    }
+      }
     @ast.TsExpr::Call(name, args) => {
       if name == "eval" {
         let arg_values = self.eval_args(args, env)
@@ -309,12 +324,11 @@ pub fn JSInterpreter::eval_expr(
           Some(_) => return self.error_or_undefined()
           None => ()
         }
-        let src =
-          if arg_values.length() > 0 {
-            arg_values[0].to_js_string()
-          } else {
-            ""
-          }
+        let src = if arg_values.length() > 0 {
+          arg_values[0].to_js_string()
+        } else {
+          ""
+        }
         return self.direct_eval(src, env)
       }
       if name == "super" && env.has("__super_ctor") {
@@ -360,16 +374,16 @@ pub fn JSInterpreter::eval_expr(
           Some(_) => return self.error_or_undefined()
           None => ()
         }
-        let new_target =
-          match env.get("new") {
-            Object(_) | Function(_) | Array(_) => js_get_prop(env.get("new"), "target")
-            _ => Undefined
-          }
+        let new_target = match env.get("new") {
+          Object(_) | Function(_) | Array(_) =>
+            js_get_prop(env.get("new"), "target")
+          _ => Undefined
+        }
         let _ = self.call_function(
           super_ctor,
           env.get("this"),
           arg_values,
-          new_target=new_target,
+          new_target~,
         )
         if already_called {
           let _ = self.set_error_kind("ReferenceError", "super already called")
@@ -388,7 +402,10 @@ pub fn JSInterpreter::eval_expr(
         if js_has_prop(global_obj, name) {
           js_get_prop(global_obj, name)
         } else {
-          let _ = self.set_error_kind("ReferenceError", name + " is not defined")
+          let _ = self.set_error_kind(
+            "ReferenceError",
+            name + " is not defined",
+          )
           JSValue::Undefined
         }
       }
@@ -448,7 +465,11 @@ pub fn JSInterpreter::eval_expr(
       match obj_expr {
         @ast.TsExpr::Var(name) if name == "super" && env.has("__super_proto") => {
           let super_proto = env.get("__super_proto")
-          let super_this = if env.has("__super_this") { env.get("__super_this") } else { env.get("this") }
+          let super_this = if env.has("__super_this") {
+            env.get("__super_this")
+          } else {
+            env.get("this")
+          }
           let arg_values = self.eval_args(args, env)
           match self.peek_error() {
             Some(_) => return self.error_or_undefined()
@@ -479,11 +500,10 @@ pub fn JSInterpreter::eval_expr(
               Some(_) => return self.error_or_undefined()
               None => ()
             }
-            let values =
-              match self.collect_spread_values(spread_val) {
-                Some(list) => list
-                None => return self.error_or_undefined()
-              }
+            let values = match self.collect_spread_values(spread_val) {
+              Some(list) => list
+              None => return self.error_or_undefined()
+            }
             for value in values {
               let _ = js_set_prop(arr, idx.to_string(), value)
               idx += 1
@@ -513,11 +533,12 @@ pub fn JSInterpreter::eval_expr(
         }
         None
       }
+
       for field in fields {
         let (key, val_expr) = field
         if key.has_prefix("@@get:") || key.has_prefix("@@set:") {
           let is_get = key.has_prefix("@@get:")
-          let real_key = (try { key[6:] } catch { _ => "" }).to_string()
+          let real_key = (key[6:] catch { _ => "" }).to_string()
           let func_val = self.eval_expr(val_expr, env)
           match find_prop_index(props, real_key) {
             Some(i) => {
@@ -534,17 +555,24 @@ pub fn JSInterpreter::eval_expr(
                 set: next_set,
               }
             }
-            None => {
+            None =>
               props.push({
                 key: real_key,
                 value: Undefined,
                 writable: true,
                 enumerable: true,
                 configurable: true,
-                get: if is_get { Some(func_val) } else { None },
-                set: if is_get { None } else { Some(func_val) },
+                get: if is_get {
+                  Some(func_val)
+                } else {
+                  None
+                },
+                set: if is_get {
+                  None
+                } else {
+                  Some(func_val)
+                },
               })
-            }
           }
         } else {
           let value = self.eval_expr(val_expr, env)
@@ -580,7 +608,7 @@ pub fn JSInterpreter::eval_expr(
       let key = idx.to_js_string()
       self.get_prop_value(obj, key)
     }
-    @ast.TsExpr::PropAccess(obj_expr, prop) => {
+    @ast.TsExpr::PropAccess(obj_expr, prop) =>
       match obj_expr {
         @ast.TsExpr::Var(name) if name == "super" && env.has("__super_proto") => {
           let super_proto = env.get("__super_proto")
@@ -591,8 +619,7 @@ pub fn JSInterpreter::eval_expr(
           self.get_prop_value(obj, prop)
         }
       }
-    }
-    @ast.TsExpr::CompoundAssignExpr(left, op, right) => {
+    @ast.TsExpr::CompoundAssignExpr(left, op, right) =>
       match left {
         @ast.TsExpr::Var(name) => {
           let current = env.get(name)
@@ -619,6 +646,7 @@ pub fn JSInterpreter::eval_expr(
           match obj {
             Array(_) | Object(_) => {
               let _ = js_set_prop(obj, key, new_val)
+
             }
             _ => ()
           }
@@ -626,7 +654,6 @@ pub fn JSInterpreter::eval_expr(
         }
         _ => self.eval_expr(right, env)
       }
-    }
     @ast.TsExpr::AssignExpr(name, val_expr) => {
       let val = self.eval_expr(val_expr, env)
       self.assign_ident(name, val, env)
@@ -747,7 +774,9 @@ pub fn JSInterpreter::eval_expr(
       }
       let proto = self.new_object()
       let _ = js_set_prop(proto, "constructor", closure)
-      let _ = js_define_data_prop(closure, "prototype", proto, true, false, true)
+      let _ = js_define_data_prop(
+        closure, "prototype", proto, true, false, true,
+      )
       closure
     }
   }
@@ -768,11 +797,10 @@ fn JSInterpreter::eval_args(
           Some(_) => return arg_values
           None => ()
         }
-        let values =
-          match self.collect_spread_values(spread_val) {
-            Some(list) => list
-            None => return arg_values
-          }
+        let values = match self.collect_spread_values(spread_val) {
+          Some(list) => list
+          None => return arg_values
+        }
         for value in values {
           arg_values.push(value)
         }
@@ -803,69 +831,79 @@ fn JSInterpreter::eval_expr_gen(
     @ast.TsExpr::Yield(opt) =>
       match opt {
         Some(inner) =>
-          gen_bind(self.eval_expr_gen(inner, env), (yielded) =>
-            GenValue::Yield(yielded, (sent) => GenValue::Value(sent))
-          )
-        None => GenValue::Yield(JSValue::Undefined, (sent) => GenValue::Value(sent))
+          gen_bind(self.eval_expr_gen(inner, env), yielded => GenValue::Yield(
+            yielded,
+            sent => GenValue::Value(sent),
+          ))
+        None =>
+          GenValue::Yield(JSValue::Undefined, sent => GenValue::Value(sent))
       }
     @ast.TsExpr::YieldStar(inner) => self.eval_yield_star(inner, env)
     @ast.TsExpr::Seq(left, right) =>
-      gen_bind(self.eval_expr_gen(left, env), (_unused) =>
-        self.eval_expr_gen(right, env)
-      )
+      gen_bind(self.eval_expr_gen(left, env), _unused => self.eval_expr_gen(
+        right, env,
+      ))
     @ast.TsExpr::AssignExpr(name, value) =>
-      gen_bind(self.eval_expr_gen(value, env), (val) => {
+      gen_bind(self.eval_expr_gen(value, env), val => {
         self.assign_ident(name, val, env)
         GenValue::Value(val)
       })
     @ast.TsExpr::AssignPattern(binding, value) =>
-      gen_bind(self.eval_expr_gen(value, env), (val) =>
-        gen_bind(self.assign_pattern_gen(binding, val, env), (_unused) =>
-          GenValue::Value(val)
-        )
-      )
+      gen_bind(self.eval_expr_gen(value, env), val => gen_bind(
+        self.assign_pattern_gen(binding, val, env),
+        _unused => GenValue::Value(val),
+      ))
     @ast.TsExpr::PropAccess(obj_expr, prop) =>
-      gen_bind(self.eval_expr_gen(obj_expr, env), (obj) =>
-        GenValue::Value(self.get_prop_value(obj, prop))
-      )
+      gen_bind(self.eval_expr_gen(obj_expr, env), obj => GenValue::Value(
+        self.get_prop_value(obj, prop),
+      ))
     @ast.TsExpr::IndexAccess(obj_expr, idx_expr) =>
-      gen_bind(self.eval_expr_gen(obj_expr, env), (obj) =>
-        gen_bind(self.eval_expr_gen(idx_expr, env), (idx) => {
+      gen_bind(self.eval_expr_gen(obj_expr, env), obj => gen_bind(
+        self.eval_expr_gen(idx_expr, env),
+        idx => {
           let key = idx.to_js_string()
           GenValue::Value(self.get_prop_value(obj, key))
-        })
-      )
+        },
+      ))
     @ast.TsExpr::PropAssignExpr(obj_expr, prop, value_expr) =>
-      gen_bind(self.eval_expr_gen(obj_expr, env), (obj) =>
-        gen_bind(self.eval_expr_gen(value_expr, env), (val) => {
+      gen_bind(self.eval_expr_gen(obj_expr, env), obj => gen_bind(
+        self.eval_expr_gen(value_expr, env),
+        val => {
           self.set_prop_value(obj, prop, val)
           GenValue::Value(val)
-        })
-      )
+        },
+      ))
     @ast.TsExpr::IndexAssignExpr(obj_expr, idx_expr, value_expr) =>
-      gen_bind(self.eval_expr_gen(obj_expr, env), (obj) =>
-        gen_bind(self.eval_expr_gen(idx_expr, env), (idx) =>
-          gen_bind(self.eval_expr_gen(value_expr, env), (val) => {
-            let key = idx.to_js_string()
-            self.set_prop_value(obj, key, val)
-            GenValue::Value(val)
-          })
-        )
-      )
+      gen_bind(self.eval_expr_gen(obj_expr, env), obj => gen_bind(
+        self.eval_expr_gen(idx_expr, env),
+        idx => gen_bind(self.eval_expr_gen(value_expr, env), val => {
+          let key = idx.to_js_string()
+          self.set_prop_value(obj, key, val)
+          GenValue::Value(val)
+        }),
+      ))
     _ => GenValue::Value(self.eval_expr(expr, env))
   }
 }
 
 ///|
 // / direct eval: expression/statementrun
-fn JSInterpreter::direct_eval(self : JSInterpreter, source : String, env : JSEnv) -> JSValue {
+fn JSInterpreter::direct_eval(
+  self : JSInterpreter,
+  source : String,
+  env : JSEnv,
+) -> JSValue {
   // Direct eval inherits strict mode from the calling context
   let inherit_strict = env.has("__strict__")
-  let parsed_expr = try { @parser.parse_expr_from_source_strict(source, inherit_strict) } catch { _ => None }
+  let parsed_expr = @parser.parse_expr_from_source_strict(
+    source, inherit_strict,
+  ) catch {
+    _ => None
+  }
   match parsed_expr {
     Some(expr) => self.eval_expr(expr, env)
     None => {
-      let block = try { @parser.parse_block_from_source_strict(source, inherit_strict) } catch {
+      let block = @parser.parse_block_from_source_strict(source, inherit_strict) catch {
         @parser.ParseError::ParseError(msg) => {
           let _ = self.set_error_kind("SyntaxError", msg)
           return JSValue::Undefined
@@ -952,13 +990,12 @@ fn collect_decl_names_from_stmt(
         collect_decl_names_from_stmt(inner, names)
       }
     }
-    @ast.TsStmt::Switch(_, cases) => {
+    @ast.TsStmt::Switch(_, cases) =>
       for case_ in cases {
         for inner in case_.body.stmts {
           collect_decl_names_from_stmt(inner, names)
         }
       }
-    }
     @ast.TsStmt::ForOf(kind, binding, _, _, body) => {
       if kind != @ast.TsForOfKind::Assign {
         collect_binding_names(binding, names)
@@ -1074,12 +1111,11 @@ fn JSInterpreter::exec_stmt_for_eval(
     | @ast.TsStmt::CompoundAssign(_, _, _)
     | @ast.TsStmt::IndexAssign(_, _, _)
     | @ast.TsStmt::PropAssign(_, _, _)
-    | @ast.TsStmt::Empty => {
+    | @ast.TsStmt::Empty =>
       match self.exec_stmt(stmt, env) {
         Some(val) => (Some(val), Empty) // abrupt completions have empty value
         None => (None, Empty) // assignments have empty completion value
       }
-    }
     @ast.TsStmt::If(cond, then_block, else_block) => {
       let cond_val = self.eval_expr(cond, env)
       match self.peek_error() {
@@ -1112,7 +1148,7 @@ fn JSInterpreter::exec_stmt_for_eval(
       self.hoist_block_lexical(block, block_env)
       self.exec_block_for_eval(block, block_env)
     }
-    @ast.TsStmt::Label(name, inner) => {
+    @ast.TsStmt::Label(name, inner) =>
       // Handle labeled statements with completion value tracking
       match inner {
         @ast.TsStmt::While(cond, body) =>
@@ -1121,7 +1157,7 @@ fn JSInterpreter::exec_stmt_for_eval(
           self.exec_do_while_for_eval_labeled(cond, body, env, name)
         @ast.TsStmt::For(init, cond, update, body) =>
           self.exec_for_for_eval_labeled(init, cond, update, body, env, name)
-        _ => {
+        _ =>
           // For non-loop labeled statements
           match self.exec_stmt_for_eval(inner, env) {
             (Some(BreakSignal(Some(lbl))), completion) if lbl == name => {
@@ -1135,26 +1171,19 @@ fn JSInterpreter::exec_stmt_for_eval(
             }
             other => other
           }
-        }
       }
-    }
     @ast.TsStmt::Try(try_block, catch_binding, catch_block, finally_block) =>
       self.exec_try_for_eval(
-        try_block,
-        catch_binding,
-        catch_block,
-        finally_block,
-        env,
+        try_block, catch_binding, catch_block, finally_block, env,
       )
     @ast.TsStmt::Switch(expr, cases) =>
       self.exec_switch_for_eval(expr, cases, env)
-    _ => {
+    _ =>
       // For other statements, fall back to regular exec_stmt
       match self.exec_stmt(stmt, env) {
         Some(val) => (Some(val), Empty) // abrupt completions have empty value
         None => (None, Empty) // most statements have empty completion value
       }
-    }
   }
 }
 
@@ -1184,7 +1213,6 @@ fn JSInterpreter::exec_try_for_eval(
       }
     None => None
   }
-
   let (after_catch_control, after_catch_completion) = match caught_error {
     Some(err) => {
       // Clear the error since we're catching it
@@ -1210,17 +1238,15 @@ fn JSInterpreter::exec_try_for_eval(
   let (result_control, result_completion) = match finally_block {
     Some(block) => {
       let (finally_control, _finally_completion) = self.exec_block_for_eval(
-        block,
-        env,
+        block, env,
       )
       // ES spec: If F.[[type]] is normal, let F be B (the try/catch result)
       // Finally only overrides when it has abrupt completion (return/throw/break/continue)
       match finally_control {
         Some(_) => (finally_control, _finally_completion)
-        None => {
+        None =>
           // Finally completed normally, use try/catch result (B), not finally completion
           (after_catch_control, after_catch_completion)
-        }
       }
     }
     None => (after_catch_control, after_catch_completion)
@@ -1261,16 +1287,14 @@ fn JSInterpreter::exec_switch_for_eval(
   // ES spec: First find a matching case (not default)
   let mut match_index : Int = -1
   let mut default_index : Int = -1
-
   for i, case_ in cases {
     match case_.test_expr {
-      None => {
+      None =>
         // Remember default position for later
         if default_index < 0 {
           default_index = i
         }
-      }
-      Some(test_expr) => {
+      Some(test_expr) =>
         if match_index < 0 {
           let test_val = self.eval_expr(test_expr, switch_env)
           match self.peek_error() {
@@ -1282,7 +1306,6 @@ fn JSInterpreter::exec_switch_for_eval(
             _ => ()
           }
         }
-      }
     }
   }
 
@@ -1325,11 +1348,7 @@ fn JSInterpreter::exec_switch_for_eval(
           }
           return (Some(control), v)
         }
-        (None, completion) => {
-          if is_not_empty(completion) {
-            v = completion
-          }
-        }
+        (None, completion) => if is_not_empty(completion) { v = completion }
       }
     }
   }
@@ -1355,12 +1374,11 @@ fn JSInterpreter::exec_block_for_eval(
         }
         return (Some(val), final_completion)
       }
-      (None, completion) => {
+      (None, completion) =>
         // Only update last if completion is not empty (UpdateEmpty semantics)
         if is_not_empty(completion) {
           last = completion
         }
-      }
     }
   }
   (None, last)
@@ -1424,11 +1442,7 @@ fn JSInterpreter::exec_while_for_eval(
         }
         return (Some(val), v)
       }
-      (None, completion) => {
-        if is_not_empty(completion) {
-          v = completion
-        }
-      }
+      (None, completion) => if is_not_empty(completion) { v = completion }
     }
   }
   (None, v) // unreachable but needed for type
@@ -1457,12 +1471,11 @@ fn JSInterpreter::exec_do_while_for_eval(
         }
         return (Some(BreakSignal(None)), v)
       }
-      (Some(ContinueSignal(None)), completion) => {
+      (Some(ContinueSignal(None)), completion) =>
         if is_not_empty(completion) {
           v = completion
         }
-        // continue to condition check
-      }
+      // continue to condition check
       (Some(ContinueSignal(Some(_))), completion) => {
         if is_not_empty(completion) {
           v = completion
@@ -1475,11 +1488,7 @@ fn JSInterpreter::exec_do_while_for_eval(
         }
         return (Some(val), v)
       }
-      (None, completion) => {
-        if is_not_empty(completion) {
-          v = completion
-        }
-      }
+      (None, completion) => if is_not_empty(completion) { v = completion }
     }
     // Check condition after body execution
     let cond_val = self.eval_expr(cond, env)
@@ -1517,7 +1526,6 @@ fn JSInterpreter::exec_for_for_eval(
     }
     None => ()
   }
-
   let mut v = JSValue::Undefined
   while true {
     // Check condition
@@ -1549,11 +1557,10 @@ fn JSInterpreter::exec_for_for_eval(
         }
         return (Some(BreakSignal(None)), v)
       }
-      (Some(ContinueSignal(None)), completion) => {
+      (Some(ContinueSignal(None)), completion) =>
         if is_not_empty(completion) {
           v = completion
         }
-      }
       (Some(ContinueSignal(Some(_))), completion) => {
         if is_not_empty(completion) {
           v = completion
@@ -1566,21 +1573,16 @@ fn JSInterpreter::exec_for_for_eval(
         }
         return (Some(val), v)
       }
-      (None, completion) => {
-        if is_not_empty(completion) {
-          v = completion
-        }
-      }
+      (None, completion) => if is_not_empty(completion) { v = completion }
     }
 
     // Execute update
     match update {
-      Some(u) => {
+      Some(u) =>
         match self.exec_stmt(u, for_env) {
           Some(val) => return (Some(val), Undefined)
           None => ()
         }
-      }
       None => ()
     }
   }
@@ -1645,11 +1647,7 @@ fn JSInterpreter::exec_while_for_eval_labeled(
         }
         return (Some(val), v)
       }
-      (None, completion) => {
-        if is_not_empty(completion) {
-          v = completion
-        }
-      }
+      (None, completion) => if is_not_empty(completion) { v = completion }
     }
   }
   (None, v) // unreachable but needed for type
@@ -1684,12 +1682,11 @@ fn JSInterpreter::exec_do_while_for_eval_labeled(
           return (Some(BreakSignal(Some(lbl))), v)
         }
       }
-      (Some(ContinueSignal(None)), completion) => {
+      (Some(ContinueSignal(None)), completion) =>
         if is_not_empty(completion) {
           v = completion
         }
-        // continue to condition check
-      }
+      // continue to condition check
       (Some(ContinueSignal(Some(lbl))), completion) => {
         if is_not_empty(completion) {
           v = completion
@@ -1706,11 +1703,7 @@ fn JSInterpreter::exec_do_while_for_eval_labeled(
         }
         return (Some(val), v)
       }
-      (None, completion) => {
-        if is_not_empty(completion) {
-          v = completion
-        }
-      }
+      (None, completion) => if is_not_empty(completion) { v = completion }
     }
     // Check condition after body execution
     let cond_val = self.eval_expr(cond, env)
@@ -1750,7 +1743,6 @@ fn JSInterpreter::exec_for_for_eval_labeled(
     }
     None => ()
   }
-
   let mut v = JSValue::Undefined
   while true {
     // Check condition
@@ -1786,11 +1778,10 @@ fn JSInterpreter::exec_for_for_eval_labeled(
           return (Some(BreakSignal(Some(lbl))), v)
         }
       }
-      (Some(ContinueSignal(None)), completion) => {
+      (Some(ContinueSignal(None)), completion) =>
         if is_not_empty(completion) {
           v = completion
         }
-      }
       (Some(ContinueSignal(Some(lbl))), completion) => {
         if is_not_empty(completion) {
           v = completion
@@ -1807,21 +1798,16 @@ fn JSInterpreter::exec_for_for_eval_labeled(
         }
         return (Some(val), v)
       }
-      (None, completion) => {
-        if is_not_empty(completion) {
-          v = completion
-        }
-      }
+      (None, completion) => if is_not_empty(completion) { v = completion }
     }
 
     // Execute update
     match update {
-      Some(u) => {
+      Some(u) =>
         match self.exec_stmt(u, for_env) {
           Some(val) => return (Some(val), Undefined)
           None => ()
         }
-      }
       None => ()
     }
   }
@@ -1875,7 +1861,8 @@ fn apply_compound_op(
       let denom = @math.pow(2.0, shift.to_double())
       Number(@math.floor(u / denom))
     }
-    @ast.TsCompoundOp::PowAssign => Number(@math.pow(current.to_number(), val.to_number()))
+    @ast.TsCompoundOp::PowAssign =>
+      Number(@math.pow(current.to_number(), val.to_number()))
   }
 }
 
@@ -1891,11 +1878,10 @@ fn JSInterpreter::apply_for_of_binding(
     @ast.TsForOfKind::Assign => self.assign_pattern(binding, value, env)
     @ast.TsForOfKind::Var =>
       match binding {
-        @ast.TsBinding::Ident(name) => {
+        @ast.TsBinding::Ident(name) =>
           if not(env.set(name, value)) {
             env.define_var(name, value)
           }
-        }
         _ => self.bind_pattern(binding, value, env)
       }
     @ast.TsForOfKind::Let => self.init_pattern(binding, value, env, false)
@@ -1911,12 +1897,17 @@ fn JSInterpreter::collect_for_in_keys(
 ) -> Array[String] {
   let keys : Array[String] = []
   let seen : Array[String] = []
-  fn push_key(keys : Array[String], seen : Array[String], key : String) -> Unit {
+  fn push_key(
+    keys : Array[String],
+    seen : Array[String],
+    key : String,
+  ) -> Unit {
     if not(contains_key(seen, key)) {
       keys.push(key)
       seen.push(key)
     }
   }
+
   match original {
     String(s) =>
       for i in 0..<s.length() {
@@ -2079,7 +2070,8 @@ fn is_lexical_init(init : @ast.TsStmt?) -> Bool {
 fn collect_per_iteration_bindings(init : @ast.TsStmt?) -> Array[String] {
   let names : Array[String] = []
   match init {
-    Some(@ast.TsStmt::Let(binding, _, _)) | Some(@ast.TsStmt::Const(binding, _, _)) =>
+    Some(@ast.TsStmt::Let(binding, _, _))
+    | Some(@ast.TsStmt::Const(binding, _, _)) =>
       collect_binding_names(binding, names)
     Some(@ast.TsStmt::Block(block)) =>
       for stmt in block.stmts {
@@ -2106,11 +2098,7 @@ fn JSInterpreter::exec_for_loop(
 ) -> JSValue? {
   // Create new environment for let/const bindings (ES6 semantics)
   let is_lexical = is_lexical_init(init)
-  let loop_env = if is_lexical {
-    js_new_env(Some(env))
-  } else {
-    env
-  }
+  let loop_env = if is_lexical { js_new_env(Some(env)) } else { env }
 
   // Collect per-iteration binding names for ES6 per-iteration environment
   let per_iteration_bindings = if is_lexical {
@@ -2126,18 +2114,16 @@ fn JSInterpreter::exec_for_loop(
       // If init is a Block (from comma-separated let/const declarations),
       // execute it directly in loop_env without creating a new scope
       match init_stmt {
-        @ast.TsStmt::Block(block) => {
+        @ast.TsStmt::Block(block) =>
           match self.exec_block(block, loop_env) {
             Some(val) => return Some(val)
             None => ()
           }
-        }
-        _ => {
+        _ =>
           match self.exec_stmt(init_stmt, loop_env) {
             Some(val) => return Some(val)
             None => ()
           }
-        }
       }
     }
     None => ()
@@ -2184,7 +2170,6 @@ fn JSInterpreter::exec_for_loop(
       Some(err) => return Some(err)
       None => ()
     }
-
     match self.exec_block(body, iter_env) {
       Some(BreakSignal(label)) =>
         if loop_label_matches(loop_label, label) {
@@ -2196,7 +2181,9 @@ fn JSInterpreter::exec_for_loop(
         if loop_label_matches(loop_label, label) {
           // ES6: Create new per-iteration environment BEFORE update
           if per_iteration_bindings.length() > 0 {
-            iter_env = create_per_iteration_env(env, iter_env, per_iteration_bindings)
+            iter_env = create_per_iteration_env(
+              env, iter_env, per_iteration_bindings,
+            )
           }
           match update {
             Some(u) =>
@@ -2274,9 +2261,8 @@ fn JSInterpreter::exec_for_of_loop(
   }
 
   let is_const = kind == @ast.TsForOfKind::Const
-
   match self.get_iterator(iter_val) {
-    Some(iterator) => {
+    Some(iterator) =>
       while true {
         self.tick()
         match self.peek_error() {
@@ -2300,8 +2286,9 @@ fn JSInterpreter::exec_for_of_loop(
         let value = self.get_prop_value(next_val, "value")
 
         // ES6: Create per-iteration environment for let/const
-        let iter_env = create_iter_env(env, binding, is_const, needs_per_iteration_env)
-
+        let iter_env = create_iter_env(
+          env, binding, is_const, needs_per_iteration_env,
+        )
         self.apply_for_of_binding(kind, binding, value, iter_env)
         match self.peek_error() {
           Some(err) => {
@@ -2336,7 +2323,6 @@ fn JSInterpreter::exec_for_of_loop(
           None => ()
         }
       }
-    }
     None =>
       match iter_val {
         Array(arr) => {
@@ -2351,8 +2337,9 @@ fn JSInterpreter::exec_for_of_loop(
             let item = self.get_prop_value(arr_val, idx.to_string())
 
             // ES6: Create per-iteration environment for let/const
-            let iter_env = create_iter_env(env, binding, is_const, needs_per_iteration_env)
-
+            let iter_env = create_iter_env(
+              env, binding, is_const, needs_per_iteration_env,
+            )
             self.apply_for_of_binding(kind, binding, item, iter_env)
             match self.peek_error() {
               Some(err) => return Some(err)
@@ -2386,11 +2373,12 @@ fn JSInterpreter::exec_for_of_loop(
               Some(err) => return Some(err)
               None => ()
             }
-            let char_str = try { s[idx:idx + 1].to_string() } catch { _ => "" }
+            let char_str = s[idx:idx + 1].to_string() catch { _ => "" }
 
             // ES6: Create per-iteration environment for let/const
-            let iter_env = create_iter_env(env, binding, is_const, needs_per_iteration_env)
-
+            let iter_env = create_iter_env(
+              env, binding, is_const, needs_per_iteration_env,
+            )
             self.apply_for_of_binding(kind, binding, String(char_str), iter_env)
             match self.peek_error() {
               Some(err) => return Some(err)
@@ -2449,7 +2437,6 @@ fn JSInterpreter::exec_for_in_loop(
     @ast.TsForOfKind::Let | @ast.TsForOfKind::Const => true
     _ => false
   }
-
   for key in keys {
     self.tick()
     match self.peek_error() {
@@ -2470,7 +2457,6 @@ fn JSInterpreter::exec_for_in_loop(
     } else {
       env
     }
-
     self.apply_for_of_binding(kind, binding, String(key), iter_env)
     match self.peek_error() {
       Some(err) => return Some(err)
@@ -2535,6 +2521,7 @@ pub fn JSInterpreter::exec_stmt(
           for name in names {
             let v = env.get(name)
             let _ = js_set_prop(global_obj, name, v)
+
           }
         }
         Some(_) => ()
@@ -2555,7 +2542,7 @@ pub fn JSInterpreter::exec_stmt(
       self.hoist_block_lexical(block, block_env)
       self.exec_block(block, block_env)
     }
-    @ast.TsStmt::Label(name, inner) => {
+    @ast.TsStmt::Label(name, inner) =>
       match inner {
         @ast.TsStmt::While(cond, body) =>
           self.exec_while_loop(cond, body, env, Some(name))
@@ -2577,14 +2564,17 @@ pub fn JSInterpreter::exec_stmt(
             Some(ContinueSignal(label)) =>
               match label {
                 Some(lbl) if lbl == name =>
-                  Some(self.set_error_kind("SyntaxError", "Illegal continue statement"))
+                  Some(
+                    self.set_error_kind(
+                      "SyntaxError", "Illegal continue statement",
+                    ),
+                  )
                 _ => Some(ContinueSignal(label))
               }
             Some(val) => Some(val)
             None => None
           }
       }
-    }
     @ast.TsStmt::Assign(name, val_expr) => {
       let val = self.eval_expr(val_expr, env)
       match self.peek_error() {
@@ -2616,7 +2606,7 @@ pub fn JSInterpreter::exec_stmt(
       match self.peek_error() {
         Some(_) =>
           match self.take_error() {
-            Some(err) => {
+            Some(err) =>
               match catch_block {
                 Some(block) => {
                   // ES spec: catch has TWO scopes:
@@ -2646,7 +2636,6 @@ pub fn JSInterpreter::exec_stmt(
                 }
                 None => pending_error = Some(err)
               }
-            }
             None => ()
           }
         None => ()
@@ -2706,7 +2695,8 @@ pub fn JSInterpreter::exec_stmt(
         }
       }
     }
-    @ast.TsStmt::While(cond, body) => self.exec_while_loop(cond, body, env, None)
+    @ast.TsStmt::While(cond, body) =>
+      self.exec_while_loop(cond, body, env, None)
     @ast.TsStmt::DoWhile(cond, body) =>
       self.exec_do_while_loop(cond, body, env, None)
     @ast.TsStmt::Switch(expr, cases) => {
@@ -2798,8 +2788,9 @@ pub fn JSInterpreter::exec_stmt(
         None => ()
       }
       if prop.has_prefix("@@define:") {
-        let real_key = (try { prop[9:] } catch { _ => "" }).to_string()
+        let real_key = (prop[9:] catch { _ => "" }).to_string()
         let _ = js_define_data_prop(obj, real_key, val, true, false, true)
+
       } else if prop.has_prefix("@@get:") || prop.has_prefix("@@set:") {
         fn find_accessor(obj : JSValue, key : String) -> (JSValue?, JSValue?) {
           match obj {
@@ -2825,12 +2816,16 @@ pub fn JSInterpreter::exec_stmt(
           }
           (None, None)
         }
+
         let is_get = prop.has_prefix("@@get:")
-        let real_key = (try { prop[6:] } catch { _ => "" }).to_string()
+        let real_key = (prop[6:] catch { _ => "" }).to_string()
         let (prev_get, prev_set) = find_accessor(obj, real_key)
         let getter = if is_get { Some(val) } else { prev_get }
         let setter = if is_get { prev_set } else { Some(val) }
-        let _ = js_define_accessor_prop(obj, real_key, getter, setter, false, true)
+        let _ = js_define_accessor_prop(
+          obj, real_key, getter, setter, false, true,
+        )
+
       } else {
         self.set_prop_value(obj, prop, val)
       }
@@ -2842,7 +2837,11 @@ pub fn JSInterpreter::exec_stmt(
       self.exec_for_in_loop(kind, binding, iterable, body, env, None)
     @ast.TsStmt::With(obj_expr, body) => {
       if env.has("__strict__") {
-        return Some(self.set_error_kind("SyntaxError", "Strict mode code may not include a with statement"))
+        return Some(
+          self.set_error_kind(
+            "SyntaxError", "Strict mode code may not include a with statement",
+          ),
+        )
       }
       let obj_val = self.eval_expr(obj_expr, env)
       match self.peek_error() {
@@ -2852,8 +2851,7 @@ pub fn JSInterpreter::exec_stmt(
       let target = match obj_val {
         Undefined | Null => {
           let err = self.set_error_kind(
-            "TypeError",
-            "Cannot convert undefined or null to object",
+            "TypeError", "Cannot convert undefined or null to object",
           )
           return Some(err)
         }
@@ -2889,7 +2887,11 @@ pub fn JSInterpreter::exec_block(
 
 ///|
 // / variablesimple
-fn JSInterpreter::hoist_stmt(self : JSInterpreter, stmt : @ast.TsStmt, env : JSEnv) -> Unit {
+fn JSInterpreter::hoist_stmt(
+  self : JSInterpreter,
+  stmt : @ast.TsStmt,
+  env : JSEnv,
+) -> Unit {
   match stmt {
     @ast.TsStmt::Var(binding, _, _) => {
       // var declarations are hoisted with initial value undefined (no TDZ)
@@ -2902,6 +2904,7 @@ fn JSInterpreter::hoist_stmt(self : JSInterpreter, stmt : @ast.TsStmt, env : JSE
             None => {
               let global_obj = self.global_env.get("globalThis")
               let _ = js_set_prop(global_obj, name, Undefined)
+
             }
             Some(_) => ()
           }
@@ -2924,6 +2927,7 @@ fn JSInterpreter::hoist_stmt(self : JSInterpreter, stmt : @ast.TsStmt, env : JSE
             None => {
               let global_obj = self.global_env.get("globalThis")
               let _ = js_set_prop(global_obj, name, Undefined)
+
             }
             Some(_) => ()
           }
@@ -2974,6 +2978,7 @@ fn JSInterpreter::hoist_stmt(self : JSInterpreter, stmt : @ast.TsStmt, env : JSE
               None => {
                 let global_obj = self.global_env.get("globalThis")
                 let _ = js_set_prop(global_obj, name, Undefined)
+
               }
               Some(_) => ()
             }
@@ -3000,6 +3005,7 @@ fn JSInterpreter::hoist_stmt(self : JSInterpreter, stmt : @ast.TsStmt, env : JSE
               None => {
                 let global_obj = self.global_env.get("globalThis")
                 let _ = js_set_prop(global_obj, name, Undefined)
+
               }
               Some(_) => ()
             }
@@ -3024,7 +3030,11 @@ fn JSInterpreter::hoist_stmt(self : JSInterpreter, stmt : @ast.TsStmt, env : JSE
 }
 
 ///|
-pub fn JSInterpreter::hoist_block(self : JSInterpreter, block : @ast.TsBlock, env : JSEnv) -> Unit {
+pub fn JSInterpreter::hoist_block(
+  self : JSInterpreter,
+  block : @ast.TsBlock,
+  env : JSEnv,
+) -> Unit {
   for stmt in block.stmts {
     self.hoist_stmt(stmt, env)
   }
@@ -3033,7 +3043,11 @@ pub fn JSInterpreter::hoist_block(self : JSInterpreter, block : @ast.TsBlock, en
 ///|
 /// Hoist only var declarations (not let/const) to the given environment.
 /// Used for switch blocks where let/const go to switch_env but var goes to outer env.
-fn JSInterpreter::hoist_block_var_only(_self : JSInterpreter, block : @ast.TsBlock, env : JSEnv) -> Unit {
+fn JSInterpreter::hoist_block_var_only(
+  _self : JSInterpreter,
+  block : @ast.TsBlock,
+  env : JSEnv,
+) -> Unit {
   for stmt in block.stmts {
     match stmt {
       @ast.TsStmt::Var(binding, _, _) => {
@@ -3127,14 +3141,13 @@ fn JSInterpreter::exec_stmt_gen(
   }
   match stmt {
     @ast.TsStmt::Expr(expr) =>
-      gen_to_signal(self.eval_expr_gen(expr, env), (_val) =>
-        match self.peek_error() {
-          Some(err) => GenSignal::Return(err)
-          None => GenSignal::Continue
-        }
-      )
+      gen_to_signal(self.eval_expr_gen(expr, env), _val => match
+        self.peek_error() {
+        Some(err) => GenSignal::Return(err)
+        None => GenSignal::Continue
+      })
     @ast.TsStmt::Assign(name, value) =>
-      gen_to_signal(self.eval_expr_gen(value, env), (val) => {
+      gen_to_signal(self.eval_expr_gen(value, env), val => {
         self.assign_ident(name, val, env)
         match self.peek_error() {
           Some(err) => GenSignal::Return(err)
@@ -3143,58 +3156,55 @@ fn JSInterpreter::exec_stmt_gen(
       })
     @ast.TsStmt::PropAssign(obj_expr, prop, value_expr) =>
       gen_to_signal(
-        gen_bind(self.eval_expr_gen(obj_expr, env), (obj) =>
-          gen_bind(self.eval_expr_gen(value_expr, env), (val) => {
+        gen_bind(self.eval_expr_gen(obj_expr, env), obj => gen_bind(
+          self.eval_expr_gen(value_expr, env),
+          val => {
             self.set_prop_value(obj, prop, val)
             GenValue::Value(val)
-          })
-        ),
-        (_val) =>
-          match self.peek_error() {
-            Some(err) => GenSignal::Return(err)
-            None => GenSignal::Continue
           },
+        )),
+        _val => match self.peek_error() {
+          Some(err) => GenSignal::Return(err)
+          None => GenSignal::Continue
+        },
       )
     @ast.TsStmt::IndexAssign(obj_expr, idx_expr, value_expr) =>
       gen_to_signal(
-        gen_bind(self.eval_expr_gen(obj_expr, env), (obj) =>
-          gen_bind(self.eval_expr_gen(idx_expr, env), (idx) =>
-            gen_bind(self.eval_expr_gen(value_expr, env), (val) => {
-              let key = idx.to_js_string()
-              self.set_prop_value(obj, key, val)
-              GenValue::Value(val)
-            })
-          )
-        ),
-        (_val) =>
-          match self.peek_error() {
-            Some(err) => GenSignal::Return(err)
-            None => GenSignal::Continue
-          },
+        gen_bind(self.eval_expr_gen(obj_expr, env), obj => gen_bind(
+          self.eval_expr_gen(idx_expr, env),
+          idx => gen_bind(self.eval_expr_gen(value_expr, env), val => {
+            let key = idx.to_js_string()
+            self.set_prop_value(obj, key, val)
+            GenValue::Value(val)
+          }),
+        )),
+        _val => match self.peek_error() {
+          Some(err) => GenSignal::Return(err)
+          None => GenSignal::Continue
+        },
       )
     @ast.TsStmt::Return(opt) =>
       match opt {
         Some(e) =>
-          gen_to_signal(self.eval_expr_gen(e, env), (val) =>
-            GenSignal::Return(val)
-          )
+          gen_to_signal(self.eval_expr_gen(e, env), val => GenSignal::Return(
+            val,
+          ))
         None => GenSignal::Return(JSValue::Undefined)
       }
     @ast.TsStmt::If(cond, then_block, else_block) =>
-      gen_to_signal(self.eval_expr_gen(cond, env), (cond_val) =>
-        match self.peek_error() {
-          Some(err) => GenSignal::Return(err)
-          None =>
-            if cond_val.to_boolean() {
-              self.exec_block_gen(then_block, env)
-            } else {
-              match else_block {
-                Some(block) => self.exec_block_gen(block, env)
-                None => GenSignal::Continue
-              }
+      gen_to_signal(self.eval_expr_gen(cond, env), cond_val => match
+        self.peek_error() {
+        Some(err) => GenSignal::Return(err)
+        None =>
+          if cond_val.to_boolean() {
+            self.exec_block_gen(then_block, env)
+          } else {
+            match else_block {
+              Some(block) => self.exec_block_gen(block, env)
+              None => GenSignal::Continue
             }
-        }
-      )
+          }
+      })
     @ast.TsStmt::Block(block) => self.exec_block_gen(block, env)
     _ =>
       match self.exec_stmt(stmt, env) {
@@ -3222,7 +3232,11 @@ fn JSInterpreter::exec_block_gen(
 
 ///|
 // / instanceof simplecheck
-fn JSInterpreter::instanceof(self : JSInterpreter, left : JSValue, right : JSValue) -> Bool {
+fn JSInterpreter::instanceof(
+  self : JSInterpreter,
+  left : JSValue,
+  right : JSValue,
+) -> Bool {
   self.ordinary_has_instance(right, left)
 }
 
@@ -3251,7 +3265,8 @@ pub fn JSInterpreter::call_function(
         } else {
           let bound_this = match this_arg {
             Undefined | Null => closure.env.get("globalThis")
-            Bool(_) | Number(_) | String(_) => self.wrap_primitive(closure.env, this_arg)
+            Bool(_) | Number(_) | String(_) =>
+              self.wrap_primitive(closure.env, this_arg)
             _ => this_arg
           }
           call_env.define_var("this", bound_this)
@@ -3259,11 +3274,9 @@ pub fn JSInterpreter::call_function(
         let new_meta = self.new_object()
         let _ = js_set_prop(new_meta, "target", new_target)
         call_env.define_var("new", new_meta)
-
         let args_obj = self.make_arguments(args)
         call_env.define_var("arguments", args_obj)
       }
-
       let super_ctor = js_get_prop(func, "__super_ctor")
       match super_ctor {
         Undefined => ()
@@ -3317,12 +3330,11 @@ pub fn JSInterpreter::call_function(
         Native(name) => {
           let prev_array_proto = js_get_default_array_proto()
           let mut switched = false
-          let realm_array_proto =
-            match closure.env.get("Array") {
-              Function(_) | Object(_) | Array(_) =>
-                js_get_prop(closure.env.get("Array"), "prototype")
-              _ => Undefined
-            }
+          let realm_array_proto = match closure.env.get("Array") {
+            Function(_) | Object(_) | Array(_) =>
+              js_get_prop(closure.env.get("Array"), "prototype")
+            _ => Undefined
+          }
           match realm_array_proto {
             Object(_) | Function(_) | Array(_) => {
               js_set_default_array_proto(realm_array_proto)
@@ -3330,38 +3342,41 @@ pub fn JSInterpreter::call_function(
             }
             _ => ()
           }
-          let result =
-            if name == "Promise" {
-              if not(new_target.is_undefined()) {
-                self.promise_construct_with_instance(this_arg, args)
-              } else {
-                self.call_native(name, this_arg, args)
-              }
-            } else if name == "Iterator" {
-              if new_target.is_undefined() {
-                self.set_error_kind("TypeError", "Iterator constructor must be called with new")
-              } else {
-                match js_strict_eq(new_target, func) {
-                  Bool(true) =>
-                    self.set_error_kind("TypeError", "Iterator is not directly constructible")
-                  _ => this_arg
-                }
-              }
-            } else if name == "__export_get__" {
-              let name_val = js_get_prop(func, "__export_name")
-              let module_val = js_get_prop(func, "__export_module")
-              match (module_val, name_val) {
-                (Object(_) | Function(_) | Array(_), String(n)) =>
-                  js_get_prop(module_val, n)
-                _ =>
-                  match name_val {
-                    String(n) => closure.env.get(n)
-                    _ => Undefined
-                  }
-              }
+          let result = if name == "Promise" {
+            if not(new_target.is_undefined()) {
+              self.promise_construct_with_instance(this_arg, args)
             } else {
               self.call_native(name, this_arg, args)
             }
+          } else if name == "Iterator" {
+            if new_target.is_undefined() {
+              self.set_error_kind(
+                "TypeError", "Iterator constructor must be called with new",
+              )
+            } else {
+              match js_strict_eq(new_target, func) {
+                Bool(true) =>
+                  self.set_error_kind(
+                    "TypeError", "Iterator is not directly constructible",
+                  )
+                _ => this_arg
+              }
+            }
+          } else if name == "__export_get__" {
+            let name_val = js_get_prop(func, "__export_name")
+            let module_val = js_get_prop(func, "__export_module")
+            match (module_val, name_val) {
+              (Object(_) | Function(_) | Array(_), String(n)) =>
+                js_get_prop(module_val, n)
+              _ =>
+                match name_val {
+                  String(n) => closure.env.get(n)
+                  _ => Undefined
+                }
+            }
+          } else {
+            self.call_native(name, this_arg, args)
+          }
           if switched {
             match prev_array_proto {
               Some(proto) => js_set_default_array_proto(proto)

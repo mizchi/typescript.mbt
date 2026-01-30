@@ -3,7 +3,6 @@
 ///|
 // / type
 pub(all) enum TsType {
-
   Number // f64
   Int // i32 ()
   Boolean // i32 (0/1)
@@ -110,7 +109,6 @@ pub(all) enum TsArrowBody {
 ///|
 // / binaryoperator
 pub(all) enum TsBinOp {
-
   Add // +
   Sub // -
   Mul // *
@@ -137,9 +135,9 @@ pub(all) enum TsBinOp {
   BinGe // >=
   Instanceof // instanceof
   In // in
-
   And // &&
   Or // ||
+  Coalesce // ??
 } derive(Eq, Show)
 
 ///|
@@ -215,8 +213,6 @@ pub(all) enum TsStmt {
 
   // try/catch/finally
   Try(TsBlock, TsBinding?, TsBlock?, TsBlock?)
-
-
   If(TsExpr, TsBlock, TsBlock?)
   While(TsExpr, TsBlock)
   DoWhile(TsExpr, TsBlock) // do { body } while (cond)
