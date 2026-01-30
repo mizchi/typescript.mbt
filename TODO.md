@@ -1,39 +1,95 @@
-# test262 進捗
+# test262 Progress
 
-## 現状 (2026-01-31)
+## Current Status (2026-01-31)
 
-| カテゴリ | Passed | Total | 達成率 |
-|---------|--------|-------|--------|
-| allowlist 全体 | 19,122 | 30,225 | 63% |
-| negative テスト | 3,902 | 4,447 | 88% |
-| language | 12,678 | 20,430 | 62% |
+Based on `test262.allowlist.txt` (34,268 tests) and `test262.skiplist.txt` (14,029 skipped).
+
+### Overall
+
+| Category | Allowlist | Skipped | Runnable | Notes |
+|----------|-----------|---------|----------|-------|
+| Total | 34,268 | 14,029 | ~20,000 | |
+| built-ins | 17,574 | - | - | |
+| language | 13,179 | - | - | |
+| intl402 | 1,712 | - | - | Not tested |
+| staging | 1,051 | - | - | Not tested |
+| annexB | 752 | - | - | Partial |
+
+### Language Features
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| expressions | Partial | class, generators, async need work |
+| statements | Partial | for-of, generators |
+| function-code | Good | |
+| arguments-object | Partial | |
+| literals | Good | |
+| identifiers | Good | |
+| module-code | Skipped | ESM not supported |
+| eval-code | Partial | Direct eval only |
+
+### Built-in Objects
+
+| Object | Status | Notes |
+|--------|--------|-------|
+| Object | Good | keys, values, entries, assign, etc. |
+| Array | Good | Most methods work |
+| String | Good | Most methods work |
+| Number | Good | |
+| Math | Good | |
+| Function | Partial | No dynamic Function() |
+| Date | Minimal | Basic operations only |
+| RegExp | Minimal | Literal parsing incomplete |
+| Promise | Partial | async/await works |
+| Proxy | Partial | Basic traps |
+| Reflect | Partial | |
+| Symbol | Not supported | Using @@iterator workaround |
+| Temporal | Not tested | |
+| TypedArray | Not tested | |
+| WeakMap/Set | Not tested | |
 
 ---
 
-## 次にやるべきこと
+## Skip Reasons (14,029 tests)
 
-### 高優先度
+| Reason | Count | Notes |
+|--------|-------|-------|
+| flag:async | 5,513 | Async tests (some supported) |
+| includes:temporalHelpers.js | 2,690 | Temporal API |
+| includes:testTypedArray.js | 1,123 | TypedArray |
+| banned:eval | 1,418 | Dynamic eval features |
+| includes:regExpUtils.js | 574 | RegExp helpers |
+| banned:with | 497 | with statement (deprecated) |
+| banned:Function | 322 | Dynamic Function() |
+| Other includes | ~1,900 | Various test helpers |
 
-1. **async generator の yield* 対応**
-   - yield* の thenable 処理
+---
+
+## Next Steps
+
+### High Priority
+
+1. **yield\* for async generators**
+   - Thenable handling in yield*
 
 2. **iterator.return() / throw()**
-   - ループ中断時のクリーンアップ
-   - for-of の early termination
+   - Cleanup on loop break
+   - for-of early termination
 
-3. **行終端子の処理改善**
-   - CR (U+000D) をコメント終端として認識
+3. **RegExp literal parser**
+   - `/pattern/flags` syntax
 
-### 中優先度
+### Medium Priority
 
-4. **正規表現リテラル パーサー**
-   - `/pattern/flags` 構文
-
-5. **Symbol 完全対応**
-   - Symbol.iterator → @@iterator (現在の代替)
+4. **Symbol support**
+   - Symbol.iterator (currently @@iterator workaround)
    - Well-known symbols
 
-### 低優先度 (ES2024+)
+5. **More built-ins**
+   - Set, Map
+   - WeakMap, WeakSet
+
+### Low Priority (ES2024+)
 
 - `using` declaration
 - import defer
@@ -41,28 +97,21 @@
 
 ---
 
-## 完了した項目
+## Not Supported
 
-- ✅ strict mode 重複パラメータ禁止
-- ✅ strict mode での eval/arguments 代入禁止
-- ✅ for-await-of パーサー修正
-- ✅ async generator 基本対応
+These features are intentionally not implemented:
 
----
-
-## 対応しない項目
-
-- with statement (非推奨、3,469件スキップ)
-- eval の一部高度な機能
-- 末尾呼び出し最適化 (TCO)
+- **with statement** - Deprecated, 497 tests skipped
+- **Dynamic eval features** - Limited to direct eval
+- **Tail call optimization** - Not implemented
+- **ES modules** - Parser accepts but not fully executed
 
 ---
 
-## スキップ理由の内訳 (4,302件)
+## Completed
 
-| 理由 | 件数 |
-|------|------|
-| with statement | 3,469 |
-| module syntax | 319 |
-| fixture | 252 |
-| missing includes | 262 |
+- Strict mode duplicate parameter validation
+- Strict mode eval/arguments assignment prohibition
+- for-await-of parser fix
+- Async generator basic support
+- Line terminator handling (CR, LS, PS)
