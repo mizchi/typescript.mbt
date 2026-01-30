@@ -26,6 +26,7 @@ pub fn JSInterpreter::new() -> JSInterpreter {
     generators: [],
     current_gen_id: None,
     microtasks: [],
+    symbol_counter: 0,
   }
   interp.install_builtins()
   interp

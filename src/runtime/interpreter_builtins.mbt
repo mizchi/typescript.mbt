@@ -103,6 +103,9 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let obj_keys = self.make_native("Object.keys")
   self.set_function_length(obj_keys, 1.0)
   let _ = js_set_prop(object_ctor, "keys", obj_keys)
+  let obj_get_syms = self.make_native("Object.getOwnPropertySymbols")
+  self.set_function_length(obj_get_syms, 1.0)
+  let _ = js_set_prop(object_ctor, "getOwnPropertySymbols", obj_get_syms)
   let obj_values = self.make_native("Object.values")
   self.set_function_length(obj_values, 1.0)
   let _ = js_set_prop(object_ctor, "values", obj_values)
@@ -977,6 +980,11 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let _ = js_set_prop(assert_obj, "throws", self.make_native("assert.throws"))
   self.global_env.define_var("assert", assert_obj)
   let _ = js_set_prop(global_obj, "assert", assert_obj)
+
+  // compareArray (deprecated, but still used in some test262 tests)
+  let compare_array_fn = self.make_native("compareArray")
+  self.global_env.define_var("compareArray", compare_array_fn)
+  let _ = js_set_prop(global_obj, "compareArray", compare_array_fn)
 
   // print
   let print_fn = self.make_native("print")
@@ -2435,6 +2443,30 @@ fn JSInterpreter::define_property(
   if self.is_proxy(target) {
     return self.proxy_define_property(target, key, desc)
   }
+  // Static "prototype" property on a function/class is not allowed to be redefined as a method
+  // (ES6 14.5.14: It is a TypeError to attempt to define a static "prototype" method on a class)
+  if key == "prototype" {
+    match target {
+      Function(_) => {
+        // Check if this is trying to define a method (has "value" that is a function)
+        match desc {
+          Object(_) | Function(_) => {
+            let has_value = self.has_own_prop(desc, "value")
+            let has_get = self.has_own_prop(desc, "get")
+            let has_set = self.has_own_prop(desc, "set")
+            if has_value || has_get || has_set {
+              return self.set_error_kind(
+                "TypeError",
+                "Cannot define property 'prototype' on a class constructor",
+              )
+            }
+          }
+          _ => ()
+        }
+      }
+      _ => ()
+    }
+  }
   let is_obj = match desc {
     Object(_) | Function(_) => true
     _ => false
@@ -3643,7 +3675,11 @@ fn JSInterpreter::call_native(
     }
     "Object.defineProperty" => {
       let target = if args.length() > 0 { args[0] } else { Undefined }
-      let raw_key = if args.length() > 1 { args[1].to_js_string() } else { "" }
+      let raw_key = if args.length() > 1 {
+        self.to_property_key(args[1])
+      } else {
+        ""
+      }
       let key = self.normalize_prop_key(raw_key)
       let desc = if args.length() > 2 { args[2] } else { Undefined }
       let receiver = match target {
@@ -3820,11 +3856,17 @@ fn JSInterpreter::call_native(
       match target {
         Function(closure) =>
           for prop in closure.props {
-            names.push(String(prop.key))
+            // Skip symbol keys
+            if not(prop.key.has_prefix("Symbol(")) {
+              names.push(String(prop.key))
+            }
           }
         Object(map) =>
           for prop in map.props {
-            names.push(String(prop.key))
+            // Skip symbol keys
+            if not(prop.key.has_prefix("Symbol(")) {
+              names.push(String(prop.key))
+            }
           }
         Array(arr) => {
           for i in 0..<arr.items.length() {
@@ -3833,39 +3875,115 @@ fn JSInterpreter::call_native(
             }
           }
           for prop in arr.props {
-            names.push(String(prop.key))
+            // Skip symbol keys
+            if not(prop.key.has_prefix("Symbol(")) {
+              names.push(String(prop.key))
+            }
           }
           names.push(String("length"))
         }
         _ => ()
       }
+      // Reorder: integer indices first (ascending), then string keys (creation order)
+      let integer_keys : Array[(Int, String)] = []
+      let string_keys : Array[String] = []
+      for item in names {
+        match item {
+          String(s) => {
+            // Check if s is a valid array index (non-negative integer)
+            let is_index = s.length() > 0 && {
+              let mut valid = true
+              let has_leading_zero = s.length() > 1 && s[0] == '0'
+              for i = 0; i < s.length(); i = i + 1 {
+                let c = s[i]
+                if c < '0' || c > '9' {
+                  valid = false
+                  break
+                }
+              }
+              valid && not(has_leading_zero)
+            }
+            if is_index {
+              // Parse the integer
+              let mut n = 0
+              for i = 0; i < s.length(); i = i + 1 {
+                n = n * 10 + (s[i].to_int() - '0'.to_int())
+              }
+              integer_keys.push((n, s))
+            } else {
+              string_keys.push(s)
+            }
+          }
+          _ => ()
+        }
+      }
+      // Sort integer keys by numeric value
+      integer_keys.sort_by(fn(a, b) { a.0.compare(b.0) })
+      // Build result: integer indices first, then string keys
+      let reordered : Array[JSValue] = []
+      for pair in integer_keys {
+        reordered.push(String(pair.1))
+      }
+      for key in string_keys {
+        reordered.push(String(key))
+      }
+      // Special handling for Function
       match target {
         Function(_) => {
           let others : Array[JSValue] = []
           let mut has_length = false
           let mut has_name = false
-          for item in names {
+          for item in reordered {
             match item {
               String("length") => has_length = true
               String("name") => has_name = true
               _ => others.push(item)
             }
           }
-          let reordered : Array[JSValue] = []
+          let final_result : Array[JSValue] = []
           if has_length {
-            reordered.push(String("length"))
+            final_result.push(String("length"))
           }
           if has_name {
-            reordered.push(String("name"))
+            final_result.push(String("name"))
           }
           for item in others {
-            reordered.push(item)
+            final_result.push(item)
           }
-          return js_array_from(reordered)
+          return js_array_from(final_result)
         }
         _ => ()
       }
-      js_array_from(names)
+      js_array_from(reordered)
+    }
+    "Object.getOwnPropertySymbols" => {
+      let target = if args.length() > 0 { args[0] } else { Undefined }
+      let symbols : Array[JSValue] = []
+      match target {
+        Function(closure) =>
+          for prop in closure.props {
+            // Only include symbol keys
+            if prop.key.has_prefix("Symbol(") {
+              symbols.push(String(prop.key))
+            }
+          }
+        Object(map) =>
+          for prop in map.props {
+            // Only include symbol keys
+            if prop.key.has_prefix("Symbol(") {
+              symbols.push(String(prop.key))
+            }
+          }
+        Array(arr) =>
+          for prop in arr.props {
+            // Only include symbol keys
+            if prop.key.has_prefix("Symbol(") {
+              symbols.push(String(prop.key))
+            }
+          }
+        _ => ()
+      }
+      js_array_from(symbols)
     }
     "Object.keys" => {
       let target = if args.length() > 0 { args[0] } else { Undefined }
@@ -4326,7 +4444,7 @@ fn JSInterpreter::call_native(
           let formal_count = calc_formal_parameter_count(func.params)
           self.set_function_length(closure, formal_count.to_double())
           let proto = self.new_object()
-          let _ = js_set_prop(proto, "constructor", closure)
+          let _ = js_define_data_prop(proto, "constructor", closure, true, false, true)
           let _ = js_define_data_prop(
             closure, "prototype", proto, true, false, true,
           )
@@ -4685,12 +4803,15 @@ fn JSInterpreter::call_native(
         }
       }
     }
-    "Symbol" =>
+    "Symbol" => {
+      let id = self.symbol_counter
+      self.symbol_counter += 1
       if args.length() > 0 {
-        String("Symbol(" + args[0].to_js_string() + ")")
+        String("Symbol(" + args[0].to_js_string() + ")#" + id.to_string())
       } else {
-        String("Symbol()")
+        String("Symbol()#" + id.to_string())
       }
+    }
     "Boolean" =>
       if args.length() > 0 {
         let prim = JSValue::Bool(args[0].to_boolean())
@@ -5049,7 +5170,7 @@ fn JSInterpreter::call_native(
     "Reflect.has" => {
       let target = if args.length() > 0 { args[0] } else { Undefined }
       let key_val = if args.length() > 1 { args[1] } else { Undefined }
-      let key = self.normalize_prop_key(key_val.to_js_string())
+      let key = self.normalize_prop_key(self.to_property_key(key_val))
       if self.is_proxy(target) {
         Bool(self.proxy_has(target, key))
       } else {
@@ -5060,7 +5181,7 @@ fn JSInterpreter::call_native(
       let target = if args.length() > 0 { args[0] } else { Undefined }
       let key_val = if args.length() > 1 { args[1] } else { Undefined }
       let desc = if args.length() > 2 { args[2] } else { Undefined }
-      let key = self.normalize_prop_key(key_val.to_js_string())
+      let key = self.normalize_prop_key(self.to_property_key(key_val))
       if self.is_proxy(target) {
         let result = self.proxy_define_property(target, key, desc)
         match self.peek_error() {
@@ -5365,7 +5486,8 @@ fn JSInterpreter::call_native(
     "print" => {
       let parts : Array[String] = []
       for arg in args {
-        parts.push(arg.to_js_string())
+        // Strip symbol IDs for display
+        parts.push(strip_symbol_id(arg.to_js_string()))
       }
       println(parts.join(" "))
       Undefined
@@ -5532,6 +5654,18 @@ fn JSInterpreter::call_native(
         }
       } else {
         Undefined
+      }
+    "compareArray" =>
+      if args.length() >= 2 {
+        let actual = args[0]
+        let expected = args[1]
+        let result = compare_array(actual, expected, None)
+        match result {
+          Success => Bool(true)
+          Failure(_) => Bool(false)
+        }
+      } else {
+        Bool(false)
       }
     "assert.throws" => {
       if args.length() < 2 {

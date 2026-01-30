@@ -25,7 +25,7 @@ pub fn JSInterpreter::run_module(
     self.set_function_length(closure, formal_count.to_double())
     self.set_function_name(closure, func.name)
     let proto = self.new_object()
-    let _ = js_set_prop(proto, "constructor", closure)
+    let _ = js_define_data_prop(proto, "constructor", closure, true, false, true)
     let _ = js_define_data_prop(closure, "prototype", proto, true, false, true)
     self.global_env.define_var(func.name, closure)
   }

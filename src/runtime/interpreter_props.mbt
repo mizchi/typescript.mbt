@@ -811,9 +811,10 @@ fn JSInterpreter::to_property_key(
   self : JSInterpreter,
   value : JSValue,
 ) -> String {
-  // For symbols, return the symbol representation
+  // For symbols, return the symbol representation (includes unique ID)
   match value {
-    String(s) if s.has_prefix("Symbol(") => s
+    String(s) if s.has_prefix("Symbol(") && s.contains("#") => s
+    String(s) if s.has_prefix("Symbol(") => s // Well-known symbols like Symbol(Symbol.iterator)
     _ => self.to_string_value(value)
   }
 }

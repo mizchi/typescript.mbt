@@ -240,6 +240,30 @@ pub fn JSValue::to_boolean(self : JSValue) -> Bool {
 let js_nan : Double = 0.0 / 0.0
 
 ///|
+// / Strip the internal ID suffix from symbol strings for display
+pub fn strip_symbol_id(s : String) -> String {
+  // Find the last # and strip the ID suffix
+  if not(s.has_prefix("Symbol(")) || not(s.contains("#")) {
+    return s
+  }
+  let mut last_hash_idx = -1
+  for i = 0; i < s.length(); i = i + 1 {
+    if s[i] == '#' {
+      last_hash_idx = i
+    }
+  }
+  if last_hash_idx > 0 {
+    let buf = StringBuilder::new()
+    for i = 0; i < last_hash_idx; i = i + 1 {
+      buf.write_string(s[i].to_int().unsafe_to_char().to_string())
+    }
+    buf.to_string()
+  } else {
+    s
+  }
+}
+
+///|
 // / ToString - JSstringconversion
 pub fn JSValue::to_js_string(self : JSValue) -> String {
   match self {

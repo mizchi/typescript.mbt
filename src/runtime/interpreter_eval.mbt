@@ -720,8 +720,26 @@ pub fn JSInterpreter::eval_expr(
           }
         } else if key.has_prefix("@@get:") || key.has_prefix("@@set:") {
           let is_get = key.has_prefix("@@get:")
-          let real_key = (key[6:] catch { _ => "" }).to_string()
-          let func_val = self.eval_expr(val_expr, env)
+          let raw_key = (key[6:] catch { _ => "" }).to_string()
+          // Check if this is a computed accessor key
+          let (real_key, func_val) = if raw_key.has_prefix("@@computed:") {
+            match val_expr {
+              @ast.TsExpr::ComputedProp(key_expr, func_expr) => {
+                let key_val = self.eval_expr(key_expr, env)
+                let prop_key = self.to_property_key(key_val)
+                let func_val = self.eval_expr(func_expr, env)
+                (prop_key, func_val)
+              }
+              _ => {
+                // Fallback: evaluate as regular accessor
+                let func_val = self.eval_expr(val_expr, env)
+                (raw_key, func_val)
+              }
+            }
+          } else {
+            let func_val = self.eval_expr(val_expr, env)
+            (raw_key, func_val)
+          }
           match find_prop_index(props, real_key) {
             Some(i) => {
               let existing = props[i]
@@ -957,7 +975,7 @@ pub fn JSInterpreter::eval_expr(
         self.set_function_name(closure, func.name)
       }
       let proto = self.new_object()
-      let _ = js_set_prop(proto, "constructor", closure)
+      let _ = js_define_data_prop(proto, "constructor", closure, true, false, true)
       let _ = js_define_data_prop(
         closure, "prototype", proto, true, false, true,
       )

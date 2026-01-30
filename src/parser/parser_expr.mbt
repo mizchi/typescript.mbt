@@ -1113,10 +1113,15 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
             not(self.check(LParen)) &&
             not(self.check(Comma)) &&
             not(self.check(RBrace)) {
+            let mut acc_computed_key : @ast.TsExpr? = None
             let acc_key = if self.match_(LBracket) {
               let key_expr = self.parse_assignment()
               let _ = self.expect(RBracket)
-              self.computed_key_name(key_expr)
+              // Store the computed key expression for runtime evaluation
+              acc_computed_key = Some(key_expr)
+              let idx = computed_idx
+              computed_idx += 1
+              "@@computed:" + idx.to_string()
             } else {
               match self.advance().kind {
                 Ident(n) => n
@@ -1175,6 +1180,9 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
             } else {
               "@@set:" + acc_key
             }
+            // Mark that we need to use the computed key
+            is_computed_key = acc_computed_key is Some(_)
+            computed_key_expr = acc_computed_key
             let _ = self.expect(LParen)
             let params = self.parse_params()
             let _ = self.expect(RParen)
@@ -1310,10 +1318,15 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
             not(self.check(LParen)) &&
             not(self.check(Comma)) &&
             not(self.check(RBrace)) {
+            let mut acc_computed_key : @ast.TsExpr? = None
             let acc_key = if self.match_(LBracket) {
               let key_expr = self.parse_assignment()
               let _ = self.expect(RBracket)
-              self.computed_key_name(key_expr)
+              // Store the computed key expression for runtime evaluation
+              acc_computed_key = Some(key_expr)
+              let idx = computed_idx
+              computed_idx += 1
+              "@@computed:" + idx.to_string()
             } else {
               match self.advance().kind {
                 Ident(n) => n
@@ -1372,6 +1385,9 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
             } else {
               "@@set:" + acc_key
             }
+            // Mark that we need to use the computed key
+            is_computed_key = acc_computed_key is Some(_)
+            computed_key_expr = acc_computed_key
             let _ = self.expect(LParen)
             let params = self.parse_params()
             let _ = self.expect(RParen)

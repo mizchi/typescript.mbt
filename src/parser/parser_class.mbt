@@ -64,18 +64,6 @@ fn Parser::parse_class_method_key(self : Parser) -> ClassKey raise ParseError {
 }
 
 ///|
-fn Parser::computed_key_name(_self : Parser, key_expr : @ast.TsExpr) -> String {
-  match key_expr {
-    StringLit(s) => s
-    IntLit(i) => i.to_string()
-    NumberLit(n) => n.to_string()
-    @ast.TsExpr::Var(name) => name
-    @ast.TsExpr::PropAccess(@ast.TsExpr::Var("Symbol"), prop) => "@@" + prop
-    _ => "<computed>"
-  }
-}
-
-///|
 fn Parser::is_super_call_stmt(_self : Parser, stmt : @ast.TsStmt) -> Bool {
   match stmt {
     Expr(Call("super", _)) => true
@@ -254,9 +242,31 @@ fn Parser::parse_class_stub(self : Parser) -> @ast.TsExpr raise ParseError {
   }
   let tmp_name = if class_name == "" { "<anon>" } else { class_name }
   let instance_assigns : Array[@ast.TsStmt] = []
-  let field_temps : Array[String?] = []
+  let key_temps : Array[String?] = []  // Temp var names for ALL elements' computed keys
+  let key_init_stmts : Array[@ast.TsStmt] = []  // Initialization statements for computed keys
   let mut key_index = 0
+
+  // First pass: collect all computed keys and generate temp variables
   for element in elements {
+    match element {
+      Field(_, key, _) | Method(_, key, _, _) =>
+        match key {
+          Name(_) => key_temps.push(None)
+          Computed(key_expr) => {
+            let temp_name = "__class_key_" + key_index.to_string()
+            key_index += 1
+            key_temps.push(Some(temp_name))
+            // Generate: let __class_key_N = key_expr;
+            key_init_stmts.push(
+              Let(@ast.TsBinding::Ident(temp_name), Any, key_expr),
+            )
+          }
+        }
+    }
+  }
+
+  // Second pass: generate instance field assignments (for non-static fields)
+  for idx, element in elements {
     match element {
       Field(is_static, key, init_opt) =>
         if not(is_static) {
@@ -265,32 +275,32 @@ fn Parser::parse_class_stub(self : Parser) -> @ast.TsExpr raise ParseError {
             None => @ast.TsExpr::Var("undefined")
           }
           match key {
-            Name(field_name) => {
+            Name(field_name) =>
               instance_assigns.push(
                 PropAssign(@ast.TsExpr::Var("this"), field_name, init),
               )
-              field_temps.push(None)
-            }
-            Computed(_) => {
-              let temp_name = "__class_key_" + key_index.to_string()
-              key_index += 1
-              instance_assigns.push(
-                IndexAssign(
-                  @ast.TsExpr::Var("this"),
-                  @ast.TsExpr::Var(temp_name),
-                  init,
-                ),
-              )
-              field_temps.push(Some(temp_name))
-            }
+            Computed(_) =>
+              match key_temps[idx] {
+                Some(temp_name) =>
+                  instance_assigns.push(
+                    IndexAssign(
+                      @ast.TsExpr::Var("this"),
+                      @ast.TsExpr::Var(temp_name),
+                      init,
+                    ),
+                  )
+                None => ()
+              }
           }
-        } else {
-          field_temps.push(None)
         }
-      _ => field_temps.push(None)
+      _ => ()
     }
   }
   let stmts : Array[@ast.TsStmt] = []
+  // Add computed key initializations first (in order of appearance)
+  for stmt in key_init_stmts {
+    stmts.push(stmt)
+  }
   let ctor_func = match ctor_opt {
     Some(func) => func
     None =>
@@ -406,7 +416,11 @@ fn Parser::parse_class_stub(self : Parser) -> @ast.TsExpr raise ParseError {
               }
             }
           Computed(_) => {
-            let key_expr = class_key_expr(key)
+            // Use the pre-evaluated temp variable for the computed key
+            let key_expr = match key_temps[idx] {
+              Some(temp_name) => @ast.TsExpr::Var(temp_name)
+              None => class_key_expr(key) // Fallback
+            }
             let desc = match accessor_kind {
               Some(kind) => {
                 let prop_key = if kind == "get" { "get" } else { "set" }
@@ -447,7 +461,11 @@ fn Parser::parse_class_stub(self : Parser) -> @ast.TsExpr raise ParseError {
                 PropAssign(@ast.TsExpr::Var(tmp_name), field_name, init),
               )
             Computed(_) => {
-              let key_expr = class_key_expr(key)
+              // Use the pre-evaluated temp variable for the computed key
+              let key_expr = match key_temps[idx] {
+                Some(temp_name) => @ast.TsExpr::Var(temp_name)
+                None => class_key_expr(key) // Fallback
+              }
               let desc = @ast.TsExpr::ObjectLit([
                 ("value", init),
                 ("writable", @ast.TsExpr::BoolLit(true)),
@@ -464,19 +482,8 @@ fn Parser::parse_class_stub(self : Parser) -> @ast.TsExpr raise ParseError {
               stmts.push(Expr(define_call))
             }
           }
-        } else {
-          match key {
-            Name(_) => ()
-            Computed(_) => {
-              let temp_name = match field_temps[idx] {
-                Some(name) => name
-                None => "__class_key__"
-              }
-              let key_expr = class_key_expr(key)
-              stmts.push(Let(@ast.TsBinding::Ident(temp_name), Any, key_expr))
-            }
-          }
         }
+        // Note: non-static computed field keys are already handled in instance_assigns
       }
     }
   }
@@ -509,9 +516,31 @@ fn Parser::parse_class_decl(self : Parser) -> @ast.TsStmt raise ParseError {
   }
   let (ctor_opt, elements) = self.parse_class_body()
   let instance_assigns : Array[@ast.TsStmt] = []
-  let field_temps : Array[String?] = []
+  let key_temps : Array[String?] = []  // Temp var names for ALL elements' computed keys
+  let key_init_stmts : Array[@ast.TsStmt] = []  // Initialization statements for computed keys
   let mut key_index = 0
+
+  // First pass: collect all computed keys and generate temp variables
   for element in elements {
+    match element {
+      Field(_, key, _) | Method(_, key, _, _) =>
+        match key {
+          Name(_) => key_temps.push(None)
+          Computed(key_expr) => {
+            let temp_name = "__class_key_" + key_index.to_string()
+            key_index += 1
+            key_temps.push(Some(temp_name))
+            // Generate: let __class_key_N = key_expr;
+            key_init_stmts.push(
+              Let(@ast.TsBinding::Ident(temp_name), Any, key_expr),
+            )
+          }
+        }
+    }
+  }
+
+  // Second pass: generate instance field assignments (for non-static fields)
+  for idx, element in elements {
     match element {
       Field(is_static, key, init_opt) =>
         if not(is_static) {
@@ -520,32 +549,32 @@ fn Parser::parse_class_decl(self : Parser) -> @ast.TsStmt raise ParseError {
             None => @ast.TsExpr::Var("undefined")
           }
           match key {
-            Name(field_name) => {
+            Name(field_name) =>
               instance_assigns.push(
                 PropAssign(@ast.TsExpr::Var("this"), field_name, init),
               )
-              field_temps.push(None)
-            }
-            Computed(_) => {
-              let temp_name = "__class_key_" + key_index.to_string()
-              key_index += 1
-              instance_assigns.push(
-                IndexAssign(
-                  @ast.TsExpr::Var("this"),
-                  @ast.TsExpr::Var(temp_name),
-                  init,
-                ),
-              )
-              field_temps.push(Some(temp_name))
-            }
+            Computed(_) =>
+              match key_temps[idx] {
+                Some(temp_name) =>
+                  instance_assigns.push(
+                    IndexAssign(
+                      @ast.TsExpr::Var("this"),
+                      @ast.TsExpr::Var(temp_name),
+                      init,
+                    ),
+                  )
+                None => ()
+              }
           }
-        } else {
-          field_temps.push(None)
         }
-      _ => field_temps.push(None)
+      _ => ()
     }
   }
   let stmts : Array[@ast.TsStmt] = []
+  // Add computed key initializations first (in order of appearance)
+  for stmt in key_init_stmts {
+    stmts.push(stmt)
+  }
   match base {
     Some(base_name) =>
       if base_name == name {
@@ -661,7 +690,11 @@ fn Parser::parse_class_decl(self : Parser) -> @ast.TsStmt raise ParseError {
               }
             }
           Computed(_) => {
-            let key_expr = class_key_expr(key)
+            // Use the pre-evaluated temp variable for the computed key
+            let key_expr = match key_temps[idx] {
+              Some(temp_name) => @ast.TsExpr::Var(temp_name)
+              None => class_key_expr(key) // Fallback
+            }
             let desc = match accessor_kind {
               Some(kind) => {
                 let prop_key = if kind == "get" { "get" } else { "set" }
@@ -700,7 +733,11 @@ fn Parser::parse_class_decl(self : Parser) -> @ast.TsStmt raise ParseError {
             Name(field_name) =>
               stmts.push(PropAssign(@ast.TsExpr::Var(name), field_name, init))
             Computed(_) => {
-              let key_expr = class_key_expr(key)
+              // Use the pre-evaluated temp variable for the computed key
+              let key_expr = match key_temps[idx] {
+                Some(temp_name) => @ast.TsExpr::Var(temp_name)
+                None => class_key_expr(key) // Fallback
+              }
               let desc = @ast.TsExpr::ObjectLit([
                 ("value", init),
                 ("writable", @ast.TsExpr::BoolLit(true)),
@@ -717,19 +754,8 @@ fn Parser::parse_class_decl(self : Parser) -> @ast.TsStmt raise ParseError {
               stmts.push(Expr(define_call))
             }
           }
-        } else {
-          match key {
-            Name(_) => ()
-            Computed(_) => {
-              let temp_name = match field_temps[idx] {
-                Some(name) => name
-                None => "__class_key__"
-              }
-              let key_expr = class_key_expr(key)
-              stmts.push(Let(@ast.TsBinding::Ident(temp_name), Any, key_expr))
-            }
-          }
         }
+        // Note: non-static computed field keys are already handled in instance_assigns
       }
     }
   }
