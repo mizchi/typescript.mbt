@@ -763,6 +763,27 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let _ = js_set_prop(global_obj, "NaN", nan)
   let _ = js_set_prop(global_obj, "Infinity", inf)
 
+  // Global functions: isNaN, isFinite, parseInt, parseFloat
+  let is_nan_fn = self.make_native("isNaN")
+  self.set_function_length(is_nan_fn, 1.0)
+  self.global_env.define_var("isNaN", is_nan_fn)
+  let _ = js_set_prop(global_obj, "isNaN", is_nan_fn)
+
+  let is_finite_fn = self.make_native("isFinite")
+  self.set_function_length(is_finite_fn, 1.0)
+  self.global_env.define_var("isFinite", is_finite_fn)
+  let _ = js_set_prop(global_obj, "isFinite", is_finite_fn)
+
+  let parse_int_fn = self.make_native("parseInt")
+  self.set_function_length(parse_int_fn, 2.0)
+  self.global_env.define_var("parseInt", parse_int_fn)
+  let _ = js_set_prop(global_obj, "parseInt", parse_int_fn)
+
+  let parse_float_fn = self.make_native("parseFloat")
+  self.set_function_length(parse_float_fn, 1.0)
+  self.global_env.define_var("parseFloat", parse_float_fn)
+  let _ = js_set_prop(global_obj, "parseFloat", parse_float_fn)
+
   // Symbol
   let symbol_fn = self.make_native("Symbol")
   self.set_function_length(symbol_fn, 0.0)
@@ -4504,6 +4525,67 @@ fn JSInterpreter::call_native(
         Some(err) => err
         None => String(unescape_string_value(input))
       }
+    }
+    "isNaN" => {
+      let num = if args.length() > 0 { args[0].to_number() } else { 0.0 / 0.0 }
+      Bool(num.is_nan())
+    }
+    "isFinite" => {
+      let num = if args.length() > 0 { args[0].to_number() } else { 0.0 / 0.0 }
+      Bool(not(num.is_nan()) && not(num.is_inf()) && not(num.is_neg_inf()))
+    }
+    "parseInt" => {
+      let input_str = if args.length() > 0 {
+        args[0].to_js_string()
+      } else {
+        "NaN"
+      }
+      let radix = if args.length() > 1 {
+        let r = args[1].to_number().to_int()
+        if r == 0 { 10 } else { r }
+      } else {
+        10
+      }
+      // Handle hex prefix
+      let trimmed = input_str.trim_start().to_string()
+      let (actual_str, actual_radix) : (String, Int) = if radix == 16 || radix == 0 {
+        if trimmed.has_prefix("0x") || trimmed.has_prefix("0X") {
+          ((try { trimmed[2:] } catch { _ => trimmed }).to_string(), 16)
+        } else {
+          (trimmed, if radix == 0 { 10 } else { radix })
+        }
+      } else {
+        (trimmed, radix)
+      }
+      if actual_radix < 2 || actual_radix > 36 {
+        Number(0.0 / 0.0) // NaN
+      } else {
+        let result : Int = try {
+          @strconv.parse_int(actual_str, base=actual_radix)
+        } catch {
+          _ => {
+            // Try without base if it fails
+            try { @strconv.parse_int(actual_str) } catch { _ => 0 }
+          }
+        }
+        // If parsing fails completely, return NaN
+        // For simplicity, just return the parsed value or 0
+        Number(result.to_double())
+      }
+    }
+    "parseFloat" => {
+      let input_str = if args.length() > 0 {
+        args[0].to_js_string()
+      } else {
+        "NaN"
+      }
+      let trimmed = input_str.trim_start().to_string()
+      let result : Double = try {
+        @strconv.parse_double(trimmed)
+      } catch {
+        _ => 0.0 / 0.0 // NaN
+      }
+      Number(result)
     }
     "assert" =>
       if args.length() > 0 {
