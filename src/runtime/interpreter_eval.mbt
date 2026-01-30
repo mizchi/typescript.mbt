@@ -327,6 +327,17 @@ pub fn JSInterpreter::eval_expr(
         @ast.TsUnaryOp::Delete =>
           match operand {
             @ast.TsExpr::PropAccess(obj_expr, prop) => {
+              // delete super.x throws ReferenceError (IsSuperReference check)
+              match obj_expr {
+                @ast.TsExpr::Var(name) if name == "super" => {
+                  let _ = self.set_error_kind(
+                    "ReferenceError",
+                    "Unsupported reference to 'super'",
+                  )
+                  return self.error_or_undefined()
+                }
+                _ => ()
+              }
               let obj = self.eval_expr(obj_expr, env)
               // Delete on null/undefined throws TypeError
               match obj {
@@ -346,9 +357,29 @@ pub fn JSInterpreter::eval_expr(
                 }
                 _ => ()
               }
-              Bool(js_delete_prop(obj, prop))
+              // In strict mode, deleting non-configurable property throws TypeError
+              let result = js_delete_prop(obj, prop)
+              if not(result) && env.has("__strict__") {
+                let _ = self.set_error_kind(
+                  "TypeError",
+                  "Cannot delete property '\{prop}' of #<Object>",
+                )
+                return self.error_or_undefined()
+              }
+              Bool(result)
             }
             @ast.TsExpr::IndexAccess(obj_expr, idx_expr) => {
+              // delete super[x] throws ReferenceError (IsSuperReference check)
+              match obj_expr {
+                @ast.TsExpr::Var(name) if name == "super" => {
+                  let _ = self.set_error_kind(
+                    "ReferenceError",
+                    "Unsupported reference to 'super'",
+                  )
+                  return self.error_or_undefined()
+                }
+                _ => ()
+              }
               let obj = self.eval_expr(obj_expr, env)
               let idx = self.eval_expr(idx_expr, env)
               let key = idx.to_js_string()
@@ -370,7 +401,16 @@ pub fn JSInterpreter::eval_expr(
                 }
                 _ => ()
               }
-              Bool(js_delete_prop(obj, key))
+              // In strict mode, deleting non-configurable property throws TypeError
+              let result = js_delete_prop(obj, key)
+              if not(result) && env.has("__strict__") {
+                let _ = self.set_error_kind(
+                  "TypeError",
+                  "Cannot delete property '\{key}' of #<Object>",
+                )
+                return self.error_or_undefined()
+              }
+              Bool(result)
             }
             @ast.TsExpr::Var(name) =>
               if env.has(name) {

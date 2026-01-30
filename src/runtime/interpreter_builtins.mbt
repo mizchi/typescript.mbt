@@ -349,6 +349,25 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let _ = js_define_data_prop(
     number_ctor, "MAX_SAFE_INTEGER", max_safe, false, false, false,
   )
+  let min_safe = JSValue::Number(-9007199254740991.0)
+  let _ = js_define_data_prop(
+    number_ctor, "MIN_SAFE_INTEGER", min_safe, false, false, false,
+  )
+  // MAX_VALUE: approximately 1.7976931348623157e+308
+  let max_value = JSValue::Number(1.7976931348623157e+308)
+  let _ = js_define_data_prop(
+    number_ctor, "MAX_VALUE", max_value, false, false, false,
+  )
+  // MIN_VALUE: approximately 5e-324
+  let min_value = JSValue::Number(5.0e-324)
+  let _ = js_define_data_prop(
+    number_ctor, "MIN_VALUE", min_value, false, false, false,
+  )
+  // EPSILON: 2^-52
+  let epsilon = JSValue::Number(2.220446049250313e-16)
+  let _ = js_define_data_prop(
+    number_ctor, "EPSILON", epsilon, false, false, false,
+  )
   self.global_env.define_var("Number", number_ctor)
   let _ = js_set_prop(global_obj, "Number", number_ctor)
   let string_proto = self.new_object()
@@ -1041,13 +1060,14 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   self.global_env.define_var("global", global_obj)
   self.global_env.define_var("this", global_obj)
   self.global_env.define_var("undefined", Undefined)
-  let _ = js_set_prop(global_obj, "undefined", Undefined)
+  // Global constants: writable:false, enumerable:false, configurable:false (ES5.1 15.1.1)
+  let _ = js_define_data_prop(global_obj, "undefined", Undefined, false, false, false)
   let nan = JSValue::Number(0.0 / 0.0)
   let inf = JSValue::Number(1.0 / 0.0)
   self.global_env.define_var("NaN", nan)
   self.global_env.define_var("Infinity", inf)
-  let _ = js_set_prop(global_obj, "NaN", nan)
-  let _ = js_set_prop(global_obj, "Infinity", inf)
+  let _ = js_define_data_prop(global_obj, "NaN", nan, false, false, false)
+  let _ = js_define_data_prop(global_obj, "Infinity", inf, false, false, false)
 
   // Global functions: isNaN, isFinite, parseInt, parseFloat
   let is_nan_fn = self.make_native("isNaN")
