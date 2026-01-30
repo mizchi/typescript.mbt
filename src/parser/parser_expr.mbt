@@ -445,6 +445,9 @@ fn Parser::parse_unary(self : Parser) -> @ast.TsExpr raise ParseError {
   } else if self.match_(Bang) {
     let operand = self.parse_unary()
     UnaryOp(Not, operand)
+  } else if self.match_(Tilde) {
+    let operand = self.parse_unary()
+    UnaryOp(BitwiseNot, operand)
   } else if self.match_(PlusPlus) {
     // ++x ()
     let operand = self.parse_unary()
@@ -1087,7 +1090,7 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
           let mut is_ident_key = false
           let mut is_computed_key = false
           let mut computed_key_expr : @ast.TsExpr? = None
-          let _ = self.match_(Star)
+          let is_generator = self.match_(Star)
           let key = if self.match_(LBracket) {
             let key_expr = self.parse_assignment()
             let _ = self.expect(RBracket)
@@ -1236,7 +1239,10 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
             } else {
               Any
             }
+            let prev_function = self.in_function
+            self.in_function = true
             let body = self.parse_block()
+            self.in_function = prev_function
             @ast.TsExpr::FuncExpr(@ast.TsFunc::{
               name: func_name,
               params,
@@ -1258,13 +1264,22 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
             } else {
               Any
             }
+            let prev_generator = self.in_generator
+            let prev_function = self.in_function
+            if is_generator {
+              self.in_generator = true
+            }
+            self.in_function = true
             let body = self.parse_block()
+            self.in_generator = prev_generator
+            self.in_function = prev_function
             @ast.TsExpr::FuncExpr({
               name: prop_key,
               params,
               return_type,
               body,
-              is_generator: false, is_async: false,
+              is_generator,
+              is_async: false,
             })
           } else if is_ident_key && (self.check(Comma) || self.check(RBrace)) {
             Var(prop_key)
@@ -1292,7 +1307,7 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
           let mut is_ident_key = false
           let mut is_computed_key = false
           let mut computed_key_expr : @ast.TsExpr? = None
-          let _ = self.match_(Star)
+          let is_generator = self.match_(Star)
           let key = if self.match_(LBracket) {
             let key_expr = self.parse_assignment()
             let _ = self.expect(RBracket)
@@ -1441,7 +1456,10 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
             } else {
               Any
             }
+            let prev_function = self.in_function
+            self.in_function = true
             let body = self.parse_block()
+            self.in_function = prev_function
             @ast.TsExpr::FuncExpr(@ast.TsFunc::{
               name: func_name,
               params,
@@ -1463,13 +1481,22 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
             } else {
               Any
             }
+            let prev_generator = self.in_generator
+            let prev_function = self.in_function
+            if is_generator {
+              self.in_generator = true
+            }
+            self.in_function = true
             let body = self.parse_block()
+            self.in_generator = prev_generator
+            self.in_function = prev_function
             @ast.TsExpr::FuncExpr({
               name: prop_key,
               params,
               return_type,
               body,
-              is_generator: false, is_async: false,
+              is_generator,
+              is_async: false,
             })
           } else if is_ident_key && (self.check(Comma) || self.check(RBrace)) {
             Var(prop_key)

@@ -393,6 +393,19 @@ pub fn js_not(val : JSValue) -> JSValue {
 }
 
 ///|
+// / Bitwise NOT (~)
+pub fn js_bitwise_not(val : JSValue) -> JSValue {
+  // Convert to Int32 (JavaScript ToInt32)
+  let n = val.to_number()
+  if n.is_nan() || n.is_inf() {
+    Number((-1).to_double()) // ~0 = -1
+  } else {
+    let i32 = n.to_int()
+    Number((i32.lnot()).to_double())
+  }
+}
+
+///|
 // / typeofoperator
 pub fn js_typeof(val : JSValue) -> JSValue {
   String(
@@ -401,8 +414,20 @@ pub fn js_typeof(val : JSValue) -> JSValue {
       Null => "object" // JS
       Bool(_) => "boolean"
       Number(_) => "number"
-      String(_) => "string"
-      Object(_) => "object"
+      String(s) =>
+        // Symbols are represented as strings "Symbol(...)#N"
+        if s.has_prefix("Symbol(") {
+          "symbol"
+        } else {
+          "string"
+        }
+      Object(_) =>
+        // Check for special object types
+        match js_get_prop(val, "__class") {
+          String("Symbol") => "symbol"
+          String("BigInt") => "bigint"
+          _ => "object"
+        }
       Array(_) => "object"
       Function(_) => "function"
       BreakSignal(_) | ContinueSignal(_) | Empty => "undefined" // internal

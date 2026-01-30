@@ -151,6 +151,7 @@ pub(all) enum TsBinOp {
 pub(all) enum TsUnaryOp {
   Neg // -
   Not // !
+  BitwiseNot // ~
   Plus // + (unary)
   Typeof // typeof
   Void // void

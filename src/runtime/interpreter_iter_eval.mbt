@@ -28,6 +28,30 @@ fn JSInterpreter::make_generator(
   call_env.define_var("new", new_meta)
   let args_obj = js_array_from(args)
   call_env.define_var("arguments", args_obj)
+  // Set up super support for generators (same as call_function)
+  let func : JSValue = Function(closure)
+  let super_proto = js_get_prop(func, "__super_proto")
+  match super_proto {
+    Undefined => {
+      // Check for __home_object (object literal methods)
+      let home_object = js_get_prop(func, "__home_object")
+      match home_object {
+        Object(map) =>
+          match map.prototype {
+            Some(proto) => {
+              call_env.define_var("__super_proto", proto)
+              call_env.define_var("__super_this", call_env.get("this"))
+            }
+            None => ()
+          }
+        _ => ()
+      }
+    }
+    _ => {
+      call_env.define_var("__super_proto", super_proto)
+      call_env.define_var("__super_this", call_env.get("this"))
+    }
+  }
   match closure.body {
     Ast(func_def) => {
       let has_param_expr = has_param_expressions(func_def.params)

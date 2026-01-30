@@ -78,6 +78,7 @@ pub enum TokenKind {
   AmpAmpEq // &&=
   PipePipeEq // ||=
   Bang // !
+  Tilde // ~
   Eq // =
   Question // ?
   QuestionQuestion // ??
@@ -947,9 +948,44 @@ fn Lexer::scan_string(self : Lexer, quote : Char) -> TokenKind {
               let _ = self.advance()
               buf.write_char('\u000b'.to_int().unsafe_to_char())
             }
-            Some('0') => {
+            Some(d) if d >= '0' && d <= '7' => {
+              // Legacy octal escape sequence
               let _ = self.advance()
-              buf.write_char('\u0000'.to_int().unsafe_to_char())
+              let first_digit = d.to_int() - '0'.to_int()
+              // Check for more octal digits
+              match self.peek() {
+                Some(d2) if d2 >= '0' && d2 <= '7' => {
+                  // Could be 2 or 3 digit octal
+                  let second_digit = d2.to_int() - '0'.to_int()
+                  if first_digit <= 3 {
+                    // ZeroToThree: can be 2 or 3 digit
+                    let _ = self.advance()
+                    match self.peek() {
+                      Some(d3) if d3 >= '0' && d3 <= '7' => {
+                        // 3-digit octal: \000 - \377
+                        let _ = self.advance()
+                        let third_digit = d3.to_int() - '0'.to_int()
+                        let code = first_digit * 64 + second_digit * 8 + third_digit
+                        buf.write_char(code.unsafe_to_char())
+                      }
+                      _ => {
+                        // 2-digit octal: \00 - \37
+                        let code = first_digit * 8 + second_digit
+                        buf.write_char(code.unsafe_to_char())
+                      }
+                    }
+                  } else {
+                    // FourToSeven: exactly 2 digits
+                    let _ = self.advance()
+                    let code = first_digit * 8 + second_digit
+                    buf.write_char(code.unsafe_to_char())
+                  }
+                }
+                _ => {
+                  // Single digit octal: \0 - \7
+                  buf.write_char(first_digit.unsafe_to_char())
+                }
+              }
             }
             Some('x') => {
               let _ = self.advance()
@@ -1031,6 +1067,26 @@ fn Lexer::scan_string(self : Lexer, quote : Char) -> TokenKind {
             Some('"') => {
               let _ = self.advance()
               buf.write_char('"')
+            }
+            // Line continuation: backslash followed by line terminator
+            Some('\n') => {
+              // \<LF> - skip the newline (empty code unit sequence)
+              let _ = self.advance()
+            }
+            Some('\r') => {
+              // \<CR> or \<CR><LF> - skip both (empty code unit sequence)
+              let _ = self.advance()
+              if self.peek() == Some('\n') {
+                let _ = self.advance()
+              }
+            }
+            Some('\u2028') => {
+              // \<LS> (U+2028 LINE SEPARATOR) - skip
+              let _ = self.advance()
+            }
+            Some('\u2029') => {
+              // \<PS> (U+2029 PARAGRAPH SEPARATOR) - skip
+              let _ = self.advance()
             }
             Some(other) => {
               let _ = self.advance()
@@ -1121,9 +1177,44 @@ fn Lexer::scan_template_parts(self : Lexer) -> (Array[String], Array[String]) {
               let _ = self.advance()
               buf.write_char('\u000b'.to_int().unsafe_to_char())
             }
-            Some('0') => {
+            Some(d) if d >= '0' && d <= '7' => {
+              // Legacy octal escape sequence
               let _ = self.advance()
-              buf.write_char('\u0000'.to_int().unsafe_to_char())
+              let first_digit = d.to_int() - '0'.to_int()
+              // Check for more octal digits
+              match self.peek() {
+                Some(d2) if d2 >= '0' && d2 <= '7' => {
+                  // Could be 2 or 3 digit octal
+                  let second_digit = d2.to_int() - '0'.to_int()
+                  if first_digit <= 3 {
+                    // ZeroToThree: can be 2 or 3 digit
+                    let _ = self.advance()
+                    match self.peek() {
+                      Some(d3) if d3 >= '0' && d3 <= '7' => {
+                        // 3-digit octal: \000 - \377
+                        let _ = self.advance()
+                        let third_digit = d3.to_int() - '0'.to_int()
+                        let code = first_digit * 64 + second_digit * 8 + third_digit
+                        buf.write_char(code.unsafe_to_char())
+                      }
+                      _ => {
+                        // 2-digit octal: \00 - \37
+                        let code = first_digit * 8 + second_digit
+                        buf.write_char(code.unsafe_to_char())
+                      }
+                    }
+                  } else {
+                    // FourToSeven: exactly 2 digits
+                    let _ = self.advance()
+                    let code = first_digit * 8 + second_digit
+                    buf.write_char(code.unsafe_to_char())
+                  }
+                }
+                _ => {
+                  // Single digit octal: \0 - \7
+                  buf.write_char(first_digit.unsafe_to_char())
+                }
+              }
             }
             Some('x') => {
               let _ = self.advance()
@@ -1311,9 +1402,44 @@ fn Lexer::scan_template(self : Lexer) -> TokenKind {
               let _ = self.advance()
               buf.write_char('\u000b'.to_int().unsafe_to_char())
             }
-            Some('0') => {
+            Some(d) if d >= '0' && d <= '7' => {
+              // Legacy octal escape sequence
               let _ = self.advance()
-              buf.write_char('\u0000'.to_int().unsafe_to_char())
+              let first_digit = d.to_int() - '0'.to_int()
+              // Check for more octal digits
+              match self.peek() {
+                Some(d2) if d2 >= '0' && d2 <= '7' => {
+                  // Could be 2 or 3 digit octal
+                  let second_digit = d2.to_int() - '0'.to_int()
+                  if first_digit <= 3 {
+                    // ZeroToThree: can be 2 or 3 digit
+                    let _ = self.advance()
+                    match self.peek() {
+                      Some(d3) if d3 >= '0' && d3 <= '7' => {
+                        // 3-digit octal: \000 - \377
+                        let _ = self.advance()
+                        let third_digit = d3.to_int() - '0'.to_int()
+                        let code = first_digit * 64 + second_digit * 8 + third_digit
+                        buf.write_char(code.unsafe_to_char())
+                      }
+                      _ => {
+                        // 2-digit octal: \00 - \37
+                        let code = first_digit * 8 + second_digit
+                        buf.write_char(code.unsafe_to_char())
+                      }
+                    }
+                  } else {
+                    // FourToSeven: exactly 2 digits
+                    let _ = self.advance()
+                    let code = first_digit * 8 + second_digit
+                    buf.write_char(code.unsafe_to_char())
+                  }
+                }
+                _ => {
+                  // Single digit octal: \0 - \7
+                  buf.write_char(first_digit.unsafe_to_char())
+                }
+              }
             }
             Some('x') => {
               let _ = self.advance()
@@ -1673,12 +1799,16 @@ pub fn Lexer::next_token(self : Lexer) -> Token {
             _ => Star
           }
         '/' =>
-          match self.peek() {
-            Some('=') => {
-              let _ = self.advance()
-              SlashEq
+          if self.allow_regex {
+            self.scan_regex()
+          } else {
+            match self.peek() {
+              Some('=') => {
+                let _ = self.advance()
+                SlashEq
+              }
+              _ => Slash
             }
-            _ => if self.allow_regex { self.scan_regex() } else { Slash }
           }
         '%' =>
           match self.peek() {
@@ -1738,6 +1868,7 @@ pub fn Lexer::next_token(self : Lexer) -> Token {
               }
             _ => Bang
           }
+        '~' => Tilde
         '<' =>
           match self.peek() {
             Some('=') => {

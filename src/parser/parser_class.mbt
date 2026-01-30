@@ -205,7 +205,16 @@ fn Parser::parse_class_body(
       } else {
         Any
       }
+      // Save and set function context for method body
+      let prev_generator = self.in_generator
+      let prev_function = self.in_function
+      if is_generator {
+        self.in_generator = true
+      }
+      self.in_function = true
       let body = self.parse_block()
+      self.in_generator = prev_generator
+      self.in_function = prev_function
       let func : @ast.TsFunc = {
         name: method_name,
         params,
@@ -332,6 +341,15 @@ fn Parser::parse_class_stub(self : Parser) -> @ast.TsExpr raise ParseError {
     }
   }
   let stmts : Array[@ast.TsStmt] = []
+  // Class body is implicitly strict mode
+  stmts.push(Expr(@ast.TsExpr::StringLit("use strict")))
+  // Define __super_proto early for static field arrow functions to capture
+  let super_proto_expr = match base {
+    Some(base_name) => @ast.TsExpr::Var(base_name)
+    None =>
+      @ast.TsExpr::PropAccess(@ast.TsExpr::Var("Function"), "prototype")
+  }
+  stmts.push(Let(@ast.TsBinding::Ident("__super_proto"), Any, super_proto_expr))
   // Add computed key initializations first (in order of appearance)
   for stmt in key_init_stmts {
     stmts.push(stmt)
@@ -407,7 +425,16 @@ fn Parser::parse_class_stub(self : Parser) -> @ast.TsExpr raise ParseError {
       )
       stmts.push(PropAssign(proto_expr, "__proto__", base_proto))
     }
-    None => ()
+    None => {
+      // Even without extends, super.xxx in constructor refers to Object.prototype
+      let object_proto = @ast.TsExpr::PropAccess(
+        @ast.TsExpr::Var("Object"),
+        "prototype",
+      )
+      stmts.push(
+        PropAssign(@ast.TsExpr::Var(tmp_name), "__super_proto", object_proto),
+      )
+    }
   }
   for idx, element in elements {
     match element {
@@ -427,27 +454,80 @@ fn Parser::parse_class_stub(self : Parser) -> @ast.TsExpr raise ParseError {
                 } else {
                   "@@set:" + method_name
                 }
-                stmts.push(PropAssign(target, prop_key, func_expr))
+                // For getter/setter with super, set __super_proto on the function
+                let super_proto = if is_static {
+                  // Static: super refers to parent class (or Function.prototype)
+                  match base {
+                    Some(base_name) => @ast.TsExpr::Var(base_name)
+                    None =>
+                      @ast.TsExpr::PropAccess(
+                        @ast.TsExpr::Var("Function"),
+                        "prototype",
+                      )
+                  }
+                } else {
+                  // Instance: super refers to parent.prototype (or Object.prototype)
+                  match base {
+                    Some(base_name) =>
+                      @ast.TsExpr::PropAccess(
+                        @ast.TsExpr::Var(base_name),
+                        "prototype",
+                      )
+                    None =>
+                      @ast.TsExpr::PropAccess(
+                        @ast.TsExpr::Var("Object"),
+                        "prototype",
+                      )
+                  }
+                }
+                let accessor_tmp = "__" + kind + "_" + method_name
+                stmts.push(
+                  Let(@ast.TsBinding::Ident(accessor_tmp), Any, func_expr),
+                )
+                stmts.push(
+                  PropAssign(
+                    @ast.TsExpr::Var(accessor_tmp),
+                    "__super_proto",
+                    super_proto,
+                  ),
+                )
+                stmts.push(
+                  PropAssign(target, prop_key, @ast.TsExpr::Var(accessor_tmp)),
+                )
               }
               None => {
                 let prop_key = "@@define:" + method_name
                 stmts.push(PropAssign(target, prop_key, func_expr))
-                match base {
-                  Some(base_name) =>
-                    if not(is_static) {
-                      let base_proto = @ast.TsExpr::PropAccess(
+                // Set __super_proto for both instance and static methods
+                let super_proto = if is_static {
+                  // Static: super refers to parent class (or Function.prototype)
+                  match base {
+                    Some(base_name) => @ast.TsExpr::Var(base_name)
+                    None =>
+                      @ast.TsExpr::PropAccess(
+                        @ast.TsExpr::Var("Function"),
+                        "prototype",
+                      )
+                  }
+                } else {
+                  // Instance: super refers to parent.prototype (or Object.prototype)
+                  match base {
+                    Some(base_name) =>
+                      @ast.TsExpr::PropAccess(
                         @ast.TsExpr::Var(base_name),
                         "prototype",
                       )
-                      let method_ref = @ast.TsExpr::PropAccess(
-                        proto_expr, method_name,
+                    None =>
+                      @ast.TsExpr::PropAccess(
+                        @ast.TsExpr::Var("Object"),
+                        "prototype",
                       )
-                      stmts.push(
-                        PropAssign(method_ref, "__super_proto", base_proto),
-                      )
-                    }
-                  None => ()
+                  }
                 }
+                let method_ref = @ast.TsExpr::PropAccess(target, method_name)
+                stmts.push(
+                  PropAssign(method_ref, "__super_proto", super_proto),
+                )
               }
             }
           Computed(_) => {
@@ -621,6 +701,15 @@ fn Parser::parse_class_decl(self : Parser) -> @ast.TsStmt raise ParseError {
     }
   }
   let stmts : Array[@ast.TsStmt] = []
+  // Class body is implicitly strict mode
+  stmts.push(Expr(@ast.TsExpr::StringLit("use strict")))
+  // Define __super_proto early for static field arrow functions to capture
+  let super_proto_expr = match base {
+    Some(base_name) => @ast.TsExpr::Var(base_name)
+    None =>
+      @ast.TsExpr::PropAccess(@ast.TsExpr::Var("Function"), "prototype")
+  }
+  stmts.push(Let(@ast.TsBinding::Ident("__super_proto"), Any, super_proto_expr))
   // Add computed key initializations first (in order of appearance)
   for stmt in key_init_stmts {
     stmts.push(stmt)
@@ -700,7 +789,16 @@ fn Parser::parse_class_decl(self : Parser) -> @ast.TsStmt raise ParseError {
       )
       stmts.push(PropAssign(proto_expr, "__proto__", base_proto))
     }
-    None => ()
+    None => {
+      // Even without extends, super.xxx in constructor refers to Object.prototype
+      let object_proto = @ast.TsExpr::PropAccess(
+        @ast.TsExpr::Var("Object"),
+        "prototype",
+      )
+      stmts.push(
+        PropAssign(@ast.TsExpr::Var(name), "__super_proto", object_proto),
+      )
+    }
   }
   for idx, element in elements {
     match element {
@@ -716,27 +814,80 @@ fn Parser::parse_class_decl(self : Parser) -> @ast.TsStmt raise ParseError {
                 } else {
                   "@@set:" + method_name
                 }
-                stmts.push(PropAssign(target, prop_key, func_expr))
+                // For getter/setter with super, set __super_proto on the function
+                let super_proto = if is_static {
+                  // Static: super refers to parent class (or Function.prototype)
+                  match base {
+                    Some(base_name) => @ast.TsExpr::Var(base_name)
+                    None =>
+                      @ast.TsExpr::PropAccess(
+                        @ast.TsExpr::Var("Function"),
+                        "prototype",
+                      )
+                  }
+                } else {
+                  // Instance: super refers to parent.prototype (or Object.prototype)
+                  match base {
+                    Some(base_name) =>
+                      @ast.TsExpr::PropAccess(
+                        @ast.TsExpr::Var(base_name),
+                        "prototype",
+                      )
+                    None =>
+                      @ast.TsExpr::PropAccess(
+                        @ast.TsExpr::Var("Object"),
+                        "prototype",
+                      )
+                  }
+                }
+                let accessor_tmp = "__" + kind + "_" + method_name
+                stmts.push(
+                  Let(@ast.TsBinding::Ident(accessor_tmp), Any, func_expr),
+                )
+                stmts.push(
+                  PropAssign(
+                    @ast.TsExpr::Var(accessor_tmp),
+                    "__super_proto",
+                    super_proto,
+                  ),
+                )
+                stmts.push(
+                  PropAssign(target, prop_key, @ast.TsExpr::Var(accessor_tmp)),
+                )
               }
               None => {
                 let prop_key = "@@define:" + method_name
                 stmts.push(PropAssign(target, prop_key, func_expr))
-                match base {
-                  Some(base_name) =>
-                    if not(is_static) {
-                      let base_proto = @ast.TsExpr::PropAccess(
+                // Set __super_proto for both instance and static methods
+                let super_proto = if is_static {
+                  // Static: super refers to parent class (or Function.prototype)
+                  match base {
+                    Some(base_name) => @ast.TsExpr::Var(base_name)
+                    None =>
+                      @ast.TsExpr::PropAccess(
+                        @ast.TsExpr::Var("Function"),
+                        "prototype",
+                      )
+                  }
+                } else {
+                  // Instance: super refers to parent.prototype (or Object.prototype)
+                  match base {
+                    Some(base_name) =>
+                      @ast.TsExpr::PropAccess(
                         @ast.TsExpr::Var(base_name),
                         "prototype",
                       )
-                      let method_ref = @ast.TsExpr::PropAccess(
-                        proto_expr, method_name,
+                    None =>
+                      @ast.TsExpr::PropAccess(
+                        @ast.TsExpr::Var("Object"),
+                        "prototype",
                       )
-                      stmts.push(
-                        PropAssign(method_ref, "__super_proto", base_proto),
-                      )
-                    }
-                  None => ()
+                  }
                 }
+                let method_ref = @ast.TsExpr::PropAccess(target, method_name)
+                stmts.push(
+                  PropAssign(method_ref, "__super_proto", super_proto),
+                )
               }
             }
           Computed(_) => {

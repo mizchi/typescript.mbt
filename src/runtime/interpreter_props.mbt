@@ -424,6 +424,19 @@ fn JSInterpreter::set_prop_value(
       }
     _ => ()
   }
+  // Check if object is non-extensible and we're adding a new property
+  if strict && not(self.has_own_prop(obj, key)) {
+    match js_get_prop(obj, "__non_extensible") {
+      Bool(true) => {
+        let _ = self.set_error_kind(
+          "TypeError",
+          "Cannot add property \{key}, object is not extensible",
+        )
+        return
+      }
+      _ => ()
+    }
+  }
   let _ = js_set_prop(obj, key, value)
 }
 

@@ -229,6 +229,7 @@ fn infer_literal_type(expr : @ast.TsExpr) -> @ast.TsType {
       match op {
         @ast.TsUnaryOp::Neg | @ast.TsUnaryOp::Plus => infer_literal_type(e)
         @ast.TsUnaryOp::Not => @ast.TsType::Boolean
+        @ast.TsUnaryOp::BitwiseNot => @ast.TsType::Number // i32 result
         @ast.TsUnaryOp::Typeof => @ast.TsType::String_
         @ast.TsUnaryOp::Void => @ast.TsType::Any
         @ast.TsUnaryOp::Delete => @ast.TsType::Boolean
@@ -443,6 +444,7 @@ fn infer_type(ctx : CodeGenCtx, expr : @ast.TsExpr) -> @ast.TsType {
       match op {
         @ast.TsUnaryOp::Neg | @ast.TsUnaryOp::Plus => infer_type(ctx, operand)
         @ast.TsUnaryOp::Not => @ast.TsType::Boolean
+        @ast.TsUnaryOp::BitwiseNot => @ast.TsType::Number
         @ast.TsUnaryOp::Typeof => @ast.TsType::String_
         @ast.TsUnaryOp::Void => @ast.TsType::Any
         @ast.TsUnaryOp::Delete => @ast.TsType::Boolean
@@ -1871,6 +1873,11 @@ fn compile_unaryop(
     @ast.TsUnaryOp::Delete =>
       raise CodeGenError(
         "delete is not supported in Wasm compiler (use interpreter)",
+      )
+    @ast.TsUnaryOp::BitwiseNot =>
+      // ~x: bitwise NOT (i32)
+      raise CodeGenError(
+        "Bitwise NOT is not supported in Wasm compiler (use interpreter)",
       )
   }
 }
