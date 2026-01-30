@@ -1,408 +1,75 @@
-# test262 修正計画
+# test262 進捗
 
-## 現状サマリー (2026-01-30)
+## 現状 (2026-01-30)
 
-| カテゴリ | Passed | Failed | Skipped | 合計 |
-|---------|--------|--------|---------|------|
-| language/statements | 6,017 | 2,337 | 983 | 9,337 |
-| language/expressions | 5,859 | 2,409 | 2,825 | 11,093 |
-| language/module-code | 386 | 203 | 148 | 737 |
-| template-literal | 43 | 14 | 0 | 57 |
-| for-of | 589 | 104 | 58 | 751 |
-| async-generator (expr) | 434 | 125 | 64 | 623 |
-| async-generator (stmt) | 204 | 65 | 32 | 301 |
-| **許可リスト** | - | - | - | **34,268** |
-| **スキップリスト** | - | - | - | 18,698 |
-
-### 最新の修正 (async generator + Map/Set) - 完了
-- **for-await-of パーサーバグ修正**
-  - `for await` が `ForOf` ではなく `ForAwaitOf` として正しくパースされるように
-  - これにより `exec_for_await_of_loop` が呼び出されるようになった
-- **Async generator の Promise ラッピング**
-  - `Generator.prototype.next/return/throw` が async generator の場合 Promise を返す
-  - `@@asyncIterator` メソッドを async generator に追加
-- **Map/Set 完全実装**
-  - `Map`: `get`, `set`, `has`, `delete`, `clear`, `forEach`, `keys`, `values`, `entries`, `size`
-  - `Set`: `add`, `has`, `delete`, `clear`, `forEach`, `keys`, `values`, `entries`, `size`
-  - イテレータプロトコル対応 (for-of で反復可能)
-  - SameValueZero 比較セマンティクス
-- **async-generator テスト: 638/924 passed (69%)**
-
-### 以前の修正 (template literal + iterator) - 完了
-- **テンプレートリテラル対応**
-  - バッククォート文字列 `` `hello ${name}` `` が動作
-  - 式の評価順序修正（各式を括弧で囲む）
-  - 複数行テンプレート対応
-  - template-literal テスト: 43/57 passed (75.4%)
-- **run コマンド修正**
-  - 非モジュールコードを `function main() {}` でラップ
-  - 通常のJSファイルが実行可能に
-- **許可リスト大幅増加: 27,623 → 34,268 (+6,645件)**
-- **スキップリスト削減: 25,343 → 18,698 (-6,645件)**
-
-### 以前の修正 (module syntax 対応) - 完了
-- **test262_scan.py からimport/export/yield/function* のバンを解除**
-  - BANNED_PATTERNS から Generator/Iterator と Module パターンを削除
-  - `flags: [module]` のスキップを解除
-- **`run` コマンドでモジュールを自動検出して実行**
-  - `has_module_syntax()` でimport/export構文を検出
-  - モジュールファイルは `eval_module()` で評価
-- **`export var/let/const` の名前収集バグを修正**
-  - `collect_decl_names_from_stmt` に `Var` ケースを追加
-  - `collect_binding_names` ヘルパーを追加（destructuring対応）
-  - `export var x = 42;` が正しくエクスポートリストに追加されるように
-- **許可リストが大幅増加: 19,810 → 24,788 (+4,978件)**
-- **module-code テスト結果:**
-  - passed=386, failed=203, skipped=148 (FIXTURE)
-  - 基本的なimport/export, re-export, export * が動作
-
-### 以前の修正 (generator CPS対応 + yield*) - 完了
-- **for/while/do-while ループ内の yield 対応**
-  - `exec_for_loop_gen` と `exec_while_loop_gen` を追加
-  - 継続渡しスタイル (CPS) で yield からの再開をサポート
-- **try-catch-finally 内の yield 対応**
-  - `exec_try_catch_gen` を追加
-  - try ブロック内の yield から再開可能
-- **`stmt_has_yield` / `block_has_yield` 判定関数を追加**
-  - yield を含む構造のみ CPS 版を使用（パフォーマンス最適化）
-- **yield* が元のイテレータ result をそのまま返すように修正**
-  - `GenSignal::YieldRaw` / `GenSignal::SuspendRaw` を追加
-  - yield* の結果で done フラグが自動追加されなくなった
-- **eval_expr_gen に配列リテラル、条件演算子の generator 対応を追加**
-  - `[yield x]` や `(yield x) ? a : b` が正しく動作
-- **パーサー修正: yield の引数を AssignmentExpression でパース**
-  - `yield 'hit' in obj` が正しく `yield ('hit' in obj)` としてパースされる
-- **Passed: 14,169 → 14,215 (+46)**
-
-### 以前の修正 (strict mode + prototype lookup) - 完了
-- **グローバル定数を non-writable に**
-  - `Infinity`, `NaN`, `undefined` を `writable: false, enumerable: false, configurable: false` に
-  - strict mode で代入すると TypeError
-- **Number 定数追加**
-  - `Number.MAX_VALUE`, `MIN_VALUE`, `EPSILON`, `MIN_SAFE_INTEGER`
-- **delete super.x で ReferenceError**
-  - `delete super.property` や `delete super[key]` で ReferenceError
-- **strict mode で non-configurable プロパティの delete で TypeError**
-- **__proto__ in object literals**
-  - `{ __proto__: obj }` がプロトタイプを設定 (own property として追加しない)
-- **プリミティブのプロパティアクセス**
-  - `(1).foo` が `Number.prototype.foo` を検索
-  - 同様に String, Boolean も対応
-- **Passed: 14,097 → 14,169 (+72)**
-
-### 以前の修正 (private method/accessor エラー処理) - 完了
-- **プライベートメソッドへの代入禁止**
-  - `this.#privateMethod += 1` のような compound assignment で TypeError
-  - PrivateSet で method kind の場合は常にエラー
-- **getter-only プライベートアクセサへの代入禁止**
-  - `get #field()` のみ定義され `set` がない場合、代入時に TypeError
-  - プロトタイプチェーンを辿って getter/setter を検出
-- **getter/setter 両方あるプライベートアクセサの setter 呼び出し**
-  - プロトタイプチェーン上の setter を正しく呼び出し
-- **delete null/undefined でTypeError**
-  - `delete null.prop` や `delete undefined.prop` で TypeError を投げる
-- **Passed: 13,991 → 14,097 (+106)**
-
-### 以前の修正 (async/await テストサポート) - 完了
-- **async フラグのスキップ解除**
-  - async/await構文は既に動作していたが、テストがスキップされていた
-  - `$DONE` コールバックパターンでエラー検出
-  - `get_last_error()` API追加でテストランナーからエラー取得
-- **asyncHelpers.js ハーネス実装**
-  - `asyncTest()` - 非同期テストラッパー
-  - `assert.throwsAsync()` - 非同期例外アサーション
-- **Passed: 13,194 → 13,714 (+520)**
-- **Skipped: 7,923 → 4,066 (-3,857)**
-- ※ 以前スキップされていた3,857件が実行されるようになり、うち520件がパス
-
-### 以前の修正 (propertyHelper.js サポート) - 完了
-- **propertyHelper.js ハーネス実装**
-  - `verifyProperty()` - プロパティディスクリプタの検証
-  - `verifyCallableProperty()` - 関数プロパティの検証
-  - `verifyWritable/NotWritable()` - writable属性の検証
-  - `verifyEnumerable/NotEnumerable()` - enumerable属性の検証
-  - `verifyConfigurable/NotConfigurable()` - configurable属性の検証
-  - `isSameValue()`, `isWritable()`, `isEnumerable()`, `isConfigurable()`
-- **依存機能の確認 (すべて動作済み)**
-  - `Object.getOwnPropertyDescriptor`
-  - `Object.defineProperty`
-  - `Object.getOwnPropertyNames`
-  - `Function.prototype.call.bind`
-  - `Array.isArray`, `propertyIsEnumerable`
-- **追加ハーネス**
-  - `fnGlobalObject.js` - グローバルオブジェクト取得
-  - `isConstructor.js` - コンストラクタ判定
-  - `deepEqual.js` - 深い比較
-  - `decimalToHexString.js` - 16進数変換
-  - `proxyTrapsHelper.js` - Proxyトラップヘルパー
-- **Passed: 12,366 → 13,194 (+828)**
-- **Skipped: 9,109 → 7,923 (-1,186)**
-
-### 以前の修正 (private fields / methods 対応) - 完了
-- **プライベートフィールド/メソッドのアクセス制御実装**
-  - `#field` 構文のパース (既存)
-  - ブランドベースのアクセス制御 (WeakMap的セマンティクス)
-  - インスタンスプライベートフィールド (`#field = value`)
-  - インスタンスプライベートメソッド (`#method() {}`)
-  - 静的プライベートフィールド (`static #field = value`)
-  - 静的プライベートメソッド (`static #method() {}`)
-  - 不正アクセス時の TypeError 発生
-- **ブランド実装の詳細**
-  - 各クラスにユニークなブランドID (`__private_brand__N`) を生成
-  - プライベート名をブランド付きにマングリング (`#field` → `__private_brand_0__#field`)
-  - インスタンス生成時にブランドプロパティを設定
-  - プロパティアクセス時にブランドチェックを実行
-- **class/elements テスト: 465 → 531 passed (+66)**
-- **Passed: 12,300 → 12,366 (+66)**
-
-### 以前の修正 (strict mode + TDZ 対応) - 一部完了
-- **compound assignment で未宣言変数を参照するとReferenceError**
-  - `x *= 1` で x が存在しない場合、ReferenceError を投げるように修正
-  - CompoundAssignExpr (式としての compound assignment) も対応
-- **class body は暗黙的に strict mode**
-  - class IIFE の先頭に "use strict" を追加
-  - class メソッド内での未宣言変数への代入が ReferenceError になる
-- **非拡張オブジェクトへのプロパティ追加禁止 (strict mode)**
-  - `Object.preventExtensions()` されたオブジェクトに新しいプロパティを追加すると TypeError
-- **writable:false プロパティへの代入禁止 (strict mode)**
-  - compound assignment (`obj.prop <<= value`) でも set_prop_value を使用
-  - PropAccess と IndexAccess の両方で strict mode チェック
-- **for-of / for-in の TDZ (Temporal Dead Zone) 対応**
-  - `for (let x of [x])` や `for (let x in { x })` で TDZ エラーを投げる
-  - iterable/object 式を binding 環境で評価するように修正
-- **Passed: 12,240 → 12,300 (+60)**
-
-### 以前の修正 (super対応) - 完了
-- クラスのコンストラクタ/メソッド内での super.xxx 参照が動作するよう修正
-- extends なしでも super は Object.prototype を参照
-- static メソッドでは super は親クラス（または Function.prototype）を参照
-- getter/setter 内での super 対応
-- オブジェクトリテラルのメソッド内での super（`__home_object` 実装）
-- generator メソッド内での super 対応
-- クラスフィールドのアロー関数内での super 対応
-- `__super_proto` 等の内部プロパティを non-enumerable に設定
-- **"super is not defined" エラー: 18 → 0 件に解消**
-
----
-
-## SKIPの内訳 (18,698件)
-
-| 理由 | 件数 | 対応方針 |
-|------|------|--------|
-| flag:async | 5,513 | テスト実行可能だが一部失敗 |
-| negative (負のテスト) | 4,669 | 対応しない |
-| includes:temporalHelpers.js | 2,690 | 低 (Temporal API) |
-| banned:eval | 1,418 | 対応しない |
-| includes:testTypedArray.js | 1,123 | 低 |
-| includes:testBigIntTypedArray.js | 692 | 低 |
-| includes:regExpUtils.js | 574 | 低 |
-| banned:with | 497 | 対応しない |
-| banned:Function | 322 | 対応しない |
-| includes:resizableArrayBufferUtils.js | 188 | 低 (ES2024) |
-| includes:testIntl.js | 175 | 低 (Intl) |
-| includes:detachArrayBuffer.js | 102 | 低 |
-| banned:import-defer | 88 | 低 (ES2024) |
-| includes:tcoHelper.js | 34 | 対応しない (TCO) |
-
-### 完了したスキップ理由
-- ~~async flag~~ → テスト実行可能に (+520 passed)
-- ~~propertyHelper.js~~ → ハーネス実装完了
-- ~~fnGlobalObject.js~~ → ハーネス実装完了
-- ~~asyncHelpers.js~~ → ハーネス実装完了
-- ~~module syntax (flags: [module])~~ → 実行可能に (+386 passed in module-code)
-- ~~banned: import/export~~ → 許可リストに追加
-- ~~banned: function*/yield~~ → 許可リストに追加
-- ~~banned: template~~ → テンプレートリテラル実装 (+5,741テスト追加)
-- ~~banned: async/await~~ → async/await実装済み (+904テスト追加)
-
----
-
-## ERRORの内訳 (パースエラー)
-
-| エラーパターン | 件数 | 対応方針 |
-|----------------|------|----------|
-| Unexpected token: Import | 184 | dynamic import構文 |
-| Expected RBrace, got Eof | 146 | パーサー修正 |
-| Expected 'from' in import/export | 75 | import defer構文 |
-| Expected Colon, got Star | 62 | オブジェクトメソッド短縮構文 |
-| Expected LBrace, got LParen | 24 | class式パース |
-| Unexpected token: Slash | 23 | 正規表現リテラル |
-| Expected identifier, got Eof | 20 | 不完全パース |
-| Expected base class name, got Class | 11 | class extends |
-
----
-
-## FAILの内訳
-
-### エラータイプ別
-
-| エラーパターン | 件数 | 優先度 |
-|----------------|------|--------|
-| Expected an error to be thrown | 663 | 高 |
-| Expected SyntaxError but got TypeError | 69 | 中 |
-| negative mismatch (parse phase) | 67 | 中 |
-| Cannot read properties of null/undefined | 0 | 完了 |
-| value is not callable | 44 | 高 |
-| Expected SyntaxError but got ReferenceError | 44 | 中 |
-| Assertion failed | 34 | 中 |
-| super is not defined | 0 | 完了 |
-| using is not defined | 21 | 低 (ES2024) |
-| Spread value is not iterable | 16 | 中 |
+| カテゴリ | Passed | Total | 達成率 |
+|---------|--------|-------|--------|
+| language/statements | 6,527 | 9,337 | 70% |
+| language/expressions | 6,145 | 11,093 | 55% |
+| language/module-code | 387 | 737 | 52% |
+| **language 合計** | **13,059** | **21,167** | **62%** |
 
 ### 機能別
 
-| 機能領域 | FAIL数 | 主な問題 |
-|---------|--------|----------|
-| class | 547 | strict mode, static, ネストクラスprivate |
-| compound-assignment | 115 | strict mode エラー処理 |
-| for-of | 98 | イテレータ、destructuring |
-| super | 49 | super参照解決 |
-| object | 44 | メソッド定義、getter/setter |
-| assignment | 36 | strict mode |
-| generators | 32 | yield式の値 |
-| yield | 30 | generator関連 |
-| logical-assignment | 30 | ??=, &&=, ||= |
-| function | 35 | strict mode |
+| 機能 | Passed | Total | 達成率 |
+|------|--------|-------|--------|
+| async-generator | 638 | 924 | 69% |
+| template-literal | 43 | 57 | 75% |
+| for-of | 589 | 751 | 78% |
 
 ---
 
-## 優先度順 修正タスク
+## 次にやるべきこと
 
-### P0: 高優先度 (影響範囲大)
+### 高優先度
 
-1. **[ ] strict mode エラー処理 (~800件)**
-   - 未宣言変数へのassignでReferenceErrorを投げる
+1. **strict mode エラー処理**
    - arguments/eval への代入禁止
    - 重複引数名禁止
-   - 関連: compound-assignment, assignment, class
+   - 影響: ~800件
 
-2. **[x] superキーワード対応 (完了)**
-   - [x] クラスコンストラクタ/メソッド内での super.xxx
-   - [x] extends なしでも Object.prototype を参照
-   - [x] static メソッド内での super
-   - [x] getter/setter 内での super
-   - [x] オブジェクトリテラルのメソッド内での super (`__home_object`)
-   - [x] generator 内での super
-   - [x] クラスフィールドのアロー関数内での super
-   - ファイル: `parser_class.mbt`, `interpreter_eval.mbt`, `interpreter_iter_eval.mbt`
+2. **async generator の yield* 対応**
+   - 現在 125件失敗中
+   - yield* の thenable 処理
 
-3. **[x] null/undefined のプロパティアクセス (完了)**
-   - [x] 適切なTypeError投げ (strict mode無関係に常にエラー)
-   - [x] メッセージ改善 (`Cannot read/set properties of null/undefined`)
-   - ファイル: `interpreter_props.mbt`, `interpreter_eval.mbt`
+3. **iterator.return() / throw()**
+   - ループ中断時のクリーンアップ
+   - for-of の early termination
 
-4. **[x] イテレータプロトコル対応 (部分完了)**
-   - [x] for-of での正しいイテレータ呼び出し
-   - [x] @@iterator 対応 (Symbol.iterator 代替)
-   - [x] for-await-of での @@asyncIterator 対応
-   - [x] Map/Set イテレータ実装
-   - [ ] iterator.return() / throw() 呼び出し (クリーンアップ)
+### 中優先度
 
-### P1: 中優先度
+4. **正規表現リテラル パーサー**
+   - `/pattern/flags` 構文
+   - 影響: ~23件のパースエラー
 
-5. **[x] private fields / methods (完了)**
-   - [x] `#field` 構文のパース
-   - [x] ブランドベースのアクセス制御 (WeakMap的セマンティクス)
-   - [x] インスタンスプライベートフィールド/メソッド
-   - [x] 静的プライベートフィールド/メソッド
-   - [x] 不正アクセス時のTypeError
-   - [ ] 残課題: プライベートメソッドの `.name` プロパティ
-   - [ ] 残課題: ネストしたクラスでの外部クラスprivateアクセス
-   - ファイル: `parser_class.mbt`, `parser_expr.mbt`, `parser_core.mbt`, `interpreter_props.mbt`
+5. **Symbol 完全対応**
+   - Symbol.iterator → @@iterator (現在の代替)
+   - Well-known symbols
 
-6. **[ ] generator関数の値 (~60件)**
-   - yield式の戻り値
-   - .next(value) の引数伝播
+### 低優先度 (ES2024+)
 
-7. **[ ] オブジェクトリテラル拡張**
-   - shorthand method: `{ foo() {} }`
-   - computed property names in methods
-   - getter/setter with super
-
-8. **[ ] パースエラー修正 (~300件)**
-   - ~~dynamic import `import()`~~ ✓完了
-   - `import.meta` ✓完了
-   - 正規表現リテラル `/pattern/flags`
-   - オブジェクトメソッド短縮構文
-
-9. **[x] propertyHelper.js 対応 (完了)**
-   - Object.getOwnPropertyDescriptor ✓
-   - Object.defineProperty ✓
-   - property descriptor support ✓
-   - **+814 passed, -1164 skipped**
-
-### P2: 低優先度
-
-10. **[x] module構文基本対応 (完了)**
-    - [x] `import { x } from "mod"` - named imports
-    - [x] `import x from "mod"` - default import
-    - [x] `import * as ns from "mod"` - namespace import
-    - [x] `export { x, y as z }` - named exports
-    - [x] `export default expr` - default export
-    - [x] `export * from "mod"` - star re-export
-    - [x] `export { x } from "mod"` - named re-export
-    - [ ] import defer (ES2024)
-    - [ ] import attributes (ES2024)
-
-11. **[x] async/await (完了)**
-    - Promise対応 ✓
-    - async function ✓
-    - async generator ✓ (for-await-of 動作)
-    - **+520 passed, -3,857 skipped**
-    - **async-generator: 638/924 passed (69%)**
-
-12. **[ ] using declaration (ES2024, ~50件)**
-    - `using` キーワード
-    - Symbol.dispose
+- `using` declaration
+- import defer
+- import attributes
 
 ---
 
 ## 対応しない項目
 
-- **with statement** (3,451件): 非推奨、strict modeで禁止
-- **tcoHelper.js** (34件): 末尾呼び出し最適化
-- **eval strict mode の一部**: 複雑すぎる仕様
+- with statement (非推奨)
+- eval の一部高度な機能
+- 末尾呼び出し最適化 (TCO)
 
 ---
 
-## 次のアクション
+## スキップ理由の内訳 (18,698件)
 
-1. ~~private fields / methods の実装~~ ✓完了
-2. ~~propertyHelper.js 対応~~ ✓完了
-3. ~~async/await テストサポート~~ ✓完了
-4. ~~dynamic import / import.meta~~ ✓完了
-5. strict mode エラー処理の残り (arguments/eval代入禁止、重複引数名)
-6. ~~generator関数内のループ/try-catch での yield~~ ✓完了
-7. ~~async generator + for-await-of~~ ✓完了 (638/924 passed)
-8. ~~Map/Set 実装~~ ✓完了
-9. async generator の yield* 対応の改善 (~125件失敗中)
-10. パーサーの正規表現リテラル対応
-11. ~~module構文対応~~ ✓完了 (基本機能)
-12. モジュールのexport default匿名関数のnameプロパティ修正
-
----
-
-## 進捗サマリー
-
-| 日付 | Passed | Failed | Skipped | 主な変更 |
-|------|--------|--------|---------|----------|
-| 開始時 | 12,240 | - | - | baseline |
-| strict+TDZ | 12,300 | - | - | +60 |
-| private fields | 12,366 | - | - | +66 |
-| propertyHelper | 13,194 | 2,759 | 7,923 | +828 |
-| async/await | 13,714 | 6,096 | 4,066 | +520 |
-| dynamic import | 13,991 | 5,819 | 4,066 | +277 |
-| private method/accessor | 14,097 | 5,713 | 4,066 | +106 |
-| strict mode + proto | 14,169 | 5,641 | 4,066 | +72 |
-| generator CPS + yield* | 14,215 | 5,595 | 4,066 | +46 |
-| module syntax | 14,500+ | - | - | +386 (module-code) |
-| test262 scan更新 | - | - | - | 許可リスト27,623件 |
-| template literal + async解禁 | - | - | - | 許可リスト34,268件 |
-| async generator + Map/Set | - | - | - | for-await-of修正、Map/Set実装 |
-
-**総合改善: +2,260+ passed tests**
-**許可リスト: 19,810 → 34,268 (+14,458件)**
-**スキップリスト: 18,698件**
-**template-literal: passed=43, failed=14 (75.4%)**
-**for-of: passed=589, failed=104, skipped=58 (78.4%)**
-**async-generator: passed=638, failed=190, skipped=96 (69%)**
+| 理由 | 件数 |
+|------|------|
+| negative (エラーを期待するテスト) | 4,669 |
+| temporalHelpers.js (Temporal API) | 2,690 |
+| eval 関連 | 1,418 |
+| TypedArray 関連 | 1,815 |
+| with statement | 497 |
+| Function constructor | 322 |
+| Intl (国際化) | 175 |
