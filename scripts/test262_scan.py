@@ -78,6 +78,8 @@ BANNED_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("async", re.compile(r"\basync\b")),
     # Template literals (not yet implemented)
     ("template", re.compile(r"`")),
+    # With statement (deprecated, not supported)
+    ("with", re.compile(r"\bwith\s*\(")),
 ]
 
 
