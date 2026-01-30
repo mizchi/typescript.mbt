@@ -80,6 +80,8 @@ BANNED_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("template", re.compile(r"`")),
     # With statement (deprecated, not supported)
     ("with", re.compile(r"\bwith\s*\(")),
+    # Eval (complex semantics, not fully supported)
+    ("eval", re.compile(r"\beval\s*\(")),
 ]
 
 
