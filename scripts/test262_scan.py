@@ -84,9 +84,6 @@ SUPPORTED_INCLUDES = {
 
 
 BANNED_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
-    # Async
-    ("await", re.compile(r"\bawait\b")),
-    ("async", re.compile(r"\basync\b")),
     # Template literals (not yet implemented)
     ("template", re.compile(r"`")),
     # With statement (deprecated, not supported)
