@@ -1027,13 +1027,9 @@ pub fn JSInterpreter::eval_expr(
       let obj = self.eval_expr(obj_expr, env)
       let idx = self.eval_expr(idx_expr, env)
       let val = self.eval_expr(val_expr, env)
-      match obj {
-        Array(_) | Object(_) | Function(_) => {
-          let key = idx.to_js_string()
-          self.set_prop_value(obj, key, val, strict=env.has("__strict__"))
-        }
-        _ => ()
-      }
+      let key = idx.to_js_string()
+      // set_prop_value handles null/undefined TypeError
+      self.set_prop_value(obj, key, val, strict=env.has("__strict__"))
       val
     }
     @ast.TsExpr::Cond(cond, then_expr, else_expr) => {

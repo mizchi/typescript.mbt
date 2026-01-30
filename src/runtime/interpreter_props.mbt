@@ -340,16 +340,25 @@ fn JSInterpreter::set_prop_value(
     let _ = self.proxy_set(obj, key, value, obj)
     return
   }
+  // Setting a property on null/undefined always throws TypeError (regardless of strict mode)
   match obj {
-    Undefined | Null => {
-      if strict {
-        let _ = self.set_error_kind(
-          "TypeError",
-          "Cannot set properties of null or undefined (setting '\{key}')",
-        )
-      }
+    Null => {
+      let _ = self.set_error_kind(
+        "TypeError",
+        "Cannot set properties of null (setting '\{key}')",
+      )
       return
     }
+    Undefined => {
+      let _ = self.set_error_kind(
+        "TypeError",
+        "Cannot set properties of undefined (setting '\{key}')",
+      )
+      return
+    }
+    _ => ()
+  }
+  match obj {
     Function(closure) =>
       for prop in closure.props {
         if prop.key == key {
@@ -453,9 +462,17 @@ fn JSInterpreter::get_prop_value_with_receiver(
     return self.proxy_get(target, key, receiver)
   }
   match target {
-    Undefined | Null => {
+    Null => {
       let _ = self.set_error_kind(
-        "TypeError", "Cannot read properties of null or undefined",
+        "TypeError",
+        "Cannot read properties of null (reading '\{key}')",
+      )
+      return Undefined
+    }
+    Undefined => {
+      let _ = self.set_error_kind(
+        "TypeError",
+        "Cannot read properties of undefined (reading '\{key}')",
       )
       return Undefined
     }
