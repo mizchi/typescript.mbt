@@ -2,12 +2,13 @@
 
 ## 現状サマリー (2026-01-30)
 
-| ステータス | 件数 |
-|-----------|------|
-| Passed | 14,215+ |
-| Failed | - |
-| Skipped | - |
-| **Total** | 24,788 (allowlist) |
+| カテゴリ | Passed | Failed | Skipped | 合計 |
+|---------|--------|--------|---------|------|
+| language/statements | 6,017 | 2,337 | 983 | 9,337 |
+| language/expressions | 5,859 | 2,409 | 2,825 | 11,093 |
+| language/module-code | 386 | 203 | 148 | 737 |
+| **許可リスト** | - | - | - | **27,623** |
+| **スキップリスト** | - | - | - | 25,343 |
 
 ### 最新の修正 (module syntax 対応) - 完了
 - **test262_scan.py からimport/export/yield/function* のバンを解除**
@@ -154,16 +155,27 @@
 
 ---
 
-## SKIPの内訳 (更新中)
+## SKIPの内訳 (25,343件)
 
-| 理由 | 件数 | 優先度 |
+| 理由 | 件数 | 対応方針 |
 |------|------|--------|
-| with statement not supported | 3,451 | 対応しない |
-| fixture | 252 | - |
-| missing includes: tcoHelper.js | 34 | 低 (対応しない) |
-| missing includes: resizableArrayBufferUtils.js | 7 | 低 (ES2024) |
-| missing includes: testTypedArray.js | 2 | 低 |
-| missing includes: wellKnownIntrinsicObjects.js | 1 | 低 |
+| banned:template (テンプレートリテラル) | 6,002 | 未実装 |
+| flag:async | 5,513 | 部分対応済み |
+| negative (負のテスト) | 4,669 | 対応しない |
+| includes:temporalHelpers.js | 2,690 | 低 (Temporal API) |
+| includes:testTypedArray.js | 1,123 | 低 |
+| banned:eval | 976 | 対応しない |
+| banned:async | 842 | 部分対応済み |
+| includes:testBigIntTypedArray.js | 692 | 低 |
+| includes:regExpUtils.js | 574 | 低 |
+| banned:with | 428 | 対応しない |
+| banned:await | 368 | 部分対応済み |
+| banned:Function | 278 | 対応しない |
+| includes:resizableArrayBufferUtils.js | 188 | 低 (ES2024) |
+| includes:testIntl.js | 175 | 低 (Intl) |
+| includes:detachArrayBuffer.js | 102 | 低 |
+| banned:import-defer | 76 | 低 (ES2024) |
+| includes:tcoHelper.js | 34 | 対応しない (TCO) |
 
 ### 完了したスキップ理由
 - ~~async flag~~ → テスト実行可能に (+520 passed)
@@ -350,7 +362,9 @@
 | strict mode + proto | 14,169 | 5,641 | 4,066 | +72 |
 | generator CPS + yield* | 14,215 | 5,595 | 4,066 | +46 |
 | module syntax | 14,500+ | - | - | +386 (module-code) |
+| test262 scan更新 | - | - | - | 許可リスト27,623件 |
 
 **総合改善: +2,260+ passed tests**
-**許可リスト: 19,810 → 24,788 (+4,978件)**
+**許可リスト: 19,810 → 27,623 (+7,813件)**
+**スキップリスト: 25,343件**
 **module-code: passed=386, failed=203, skipped=148**
