@@ -193,6 +193,9 @@ fn Parser::parse_class_body(
   self : Parser,
 ) -> (@ast.TsFunc?, Array[ClassElement]) raise ParseError {
   let _ = self.expect(LBrace)
+  // Class body is implicitly strict mode
+  let prev_strict = self.in_strict
+  self.in_strict = true
   let mut ctor : @ast.TsFunc? = None
   let elements : Array[ClassElement] = []
   while not(self.check(RBrace)) && not(self.check(Eof)) {
@@ -288,6 +291,7 @@ fn Parser::parse_class_body(
     }
   }
   let _ = self.expect(RBrace)
+  self.in_strict = prev_strict
   (ctor, elements)
 }
 

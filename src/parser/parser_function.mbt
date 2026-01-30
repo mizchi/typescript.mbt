@@ -37,6 +37,39 @@ fn Parser::parse_params(self : Parser) -> Array[@ast.TsParam] raise ParseError {
       params.push(self.parse_param())
     }
   }
+  // Check for duplicate parameter names
+  // In strict mode or with non-simple parameters (default, rest, destructuring),
+  // duplicate names are forbidden
+  let has_default = params.iter().any(fn(p) { not(p.default is None) })
+  let has_rest = params.iter().any(fn(p) { p.is_rest })
+  let has_destructuring = params.iter().any(
+    fn(p) {
+      match p.binding {
+        Some(@ast.TsBinding::Array(_)) | Some(@ast.TsBinding::Object(_)) => true
+        _ => false
+      }
+    },
+  )
+  let is_simple = not(has_default) && not(has_rest) && not(has_destructuring)
+  // Collect all bound names
+  let all_names : Array[String] = []
+  for param in params {
+    match param.binding {
+      Some(binding) => self.collect_binding_names(binding, all_names)
+      None => ()
+    }
+  }
+  // Check for duplicates
+  let seen : Map[String, Bool] = {}
+  for name in all_names {
+    if seen.contains(name) {
+      // In strict mode or with non-simple params, duplicates are errors
+      if self.in_strict || not(is_simple) {
+        raise ParseError("Duplicate parameter name '\{name}' not allowed")
+      }
+    }
+    seen[name] = true
+  }
   params
 }
 

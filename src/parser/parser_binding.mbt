@@ -128,6 +128,40 @@ fn Parser::binding_first_name(
 }
 
 ///|
+/// Collect all bound names from a binding pattern
+fn Parser::collect_binding_names(
+  self : Parser,
+  binding : @ast.TsBinding,
+  names : Array[String],
+) -> Unit {
+  match binding {
+    @ast.TsBinding::Ident(n) => names.push(n)
+    @ast.TsBinding::Array(arr) => {
+      for item in arr.items {
+        match item {
+          Some(elem) => self.collect_binding_names(elem.binding, names)
+          None => ()
+        }
+      }
+      match arr.rest {
+        Some(rest) => self.collect_binding_names(rest, names)
+        None => ()
+      }
+    }
+    @ast.TsBinding::Object(obj) => {
+      for prop in obj.props {
+        self.collect_binding_names(prop.binding, names)
+      }
+      match obj.rest {
+        Some(name) => names.push(name)
+        None => ()
+      }
+    }
+    @ast.TsBinding::Target(_) => ()
+  }
+}
+
+///|
 fn Parser::parse_binding_element(
   self : Parser,
 ) -> @ast.TsBindingElem raise ParseError {
