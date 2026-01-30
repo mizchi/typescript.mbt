@@ -2991,6 +2991,20 @@ pub fn JSInterpreter::exec_stmt(
       }
       if prop.has_prefix("@@define:") {
         let real_key = (prop[9:] catch { _ => "" }).to_string()
+        // ES6 14.5.14: It is a Syntax Error if PropName of ClassElement is "prototype"
+        // Check if this is a static method named "prototype" on a function/class
+        if real_key == "prototype" {
+          match obj {
+            Function(_) =>
+              return Some(
+                self.set_error_kind(
+                  "TypeError",
+                  "Classes may not have a static property named 'prototype'",
+                ),
+              )
+            _ => ()
+          }
+        }
         let _ = js_define_data_prop(obj, real_key, val, true, false, true)
 
       } else if prop.has_prefix("@@get:") || prop.has_prefix("@@set:") {
@@ -3021,6 +3035,20 @@ pub fn JSInterpreter::exec_stmt(
 
         let is_get = prop.has_prefix("@@get:")
         let real_key = (prop[6:] catch { _ => "" }).to_string()
+        // ES6 14.5.14: It is a Syntax Error if PropName of ClassElement is "prototype"
+        // Check if this is a static accessor named "prototype" on a function/class
+        if real_key == "prototype" {
+          match obj {
+            Function(_) =>
+              return Some(
+                self.set_error_kind(
+                  "TypeError",
+                  "Classes may not have a static property named 'prototype'",
+                ),
+              )
+            _ => ()
+          }
+        }
         let (prev_get, prev_set) = find_accessor(obj, real_key)
         let getter = if is_get { Some(val) } else { prev_get }
         let setter = if is_get { prev_set } else { Some(val) }
