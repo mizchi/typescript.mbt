@@ -11,6 +11,8 @@ pub enum TokenKind {
   Bool(Bool)
   Str(String) // stringliteral
   Regex(String, String) // /pattern/flags
+  // Template literal: (cooked_strings, raw_strings, expr_sources)
+  Template(Array[String], Array[String], Array[String])
   Ident(String)
   PrivateIdent(String)
   Function
@@ -253,7 +255,9 @@ fn Lexer::skip_whitespace(self : Lexer) -> Unit {
         let _ = self.advance()
         while true {
           match self.peek() {
-            Some('\n') | None => break
+            // Line terminators: LF, CR, LS, PS
+            Some('\n') | Some('\r') | Some('\u2028') | Some('\u2029') | None =>
+              break
             _ => {
               let _ = self.advance()
 
@@ -272,7 +276,9 @@ fn Lexer::skip_whitespace(self : Lexer) -> Unit {
             let _ = self.advance()
             while true {
               match self.peek() {
-                Some('\n') | None => break
+                // Line terminators: LF, CR, LS, PS
+                Some('\n') | Some('\r') | Some('\u2028') | Some('\u2029') | None =>
+                  break
                 _ => {
                   let _ = self.advance()
 
@@ -1132,10 +1138,15 @@ fn Lexer::scan_template_expr_source(self : Lexer) -> String {
 }
 
 ///|
-fn Lexer::scan_template_parts(self : Lexer) -> (Array[String], Array[String]) {
-  let parts : Array[String] = []
+// Returns (cooked_parts, raw_parts, expr_sources)
+fn Lexer::scan_template_parts_with_raw(
+  self : Lexer,
+) -> (Array[String], Array[String], Array[String]) {
+  let cooked_parts : Array[String] = []
+  let raw_parts : Array[String] = []
   let exprs : Array[String] = []
-  let mut buf = StringBuilder::new()
+  let mut cooked_buf = StringBuilder::new()
+  let mut raw_buf = StringBuilder::new()
   while true {
     match self.peek() {
       None => break
@@ -1146,40 +1157,50 @@ fn Lexer::scan_template_parts(self : Lexer) -> (Array[String], Array[String]) {
         } else if c == '$' && self.peek_next() == Some('{') {
           let _ = self.advance()
           let _ = self.advance()
-          parts.push(buf.to_string())
-          buf = StringBuilder::new()
+          cooked_parts.push(cooked_buf.to_string())
+          raw_parts.push(raw_buf.to_string())
+          cooked_buf = StringBuilder::new()
+          raw_buf = StringBuilder::new()
           let expr_src = self.scan_template_expr_source()
           exprs.push(expr_src)
         } else if c == '\\' {
+          raw_buf.write_char('\\')
           let _ = self.advance()
           match self.peek() {
             Some('n') => {
               let _ = self.advance()
-              buf.write_char('\n')
+              cooked_buf.write_char('\n')
+              raw_buf.write_char('n')
             }
             Some('t') => {
               let _ = self.advance()
-              buf.write_char('\t')
+              cooked_buf.write_char('\t')
+              raw_buf.write_char('t')
             }
             Some('r') => {
               let _ = self.advance()
-              buf.write_char('\r')
+              cooked_buf.write_char('\r')
+              raw_buf.write_char('r')
             }
             Some('b') => {
               let _ = self.advance()
-              buf.write_char('\u0008'.to_int().unsafe_to_char())
+              cooked_buf.write_char('\u0008'.to_int().unsafe_to_char())
+              raw_buf.write_char('b')
             }
             Some('f') => {
               let _ = self.advance()
-              buf.write_char('\u000c'.to_int().unsafe_to_char())
+              cooked_buf.write_char('\u000c'.to_int().unsafe_to_char())
+              raw_buf.write_char('f')
             }
             Some('v') => {
               let _ = self.advance()
-              buf.write_char('\u000b'.to_int().unsafe_to_char())
+              cooked_buf.write_char('\u000b'.to_int().unsafe_to_char())
+              raw_buf.write_char('v')
             }
             Some(d) if d >= '0' && d <= '7' => {
               // Legacy octal escape sequence
               let _ = self.advance()
+              raw_buf.write_char(d)
               let first_digit = d.to_int() - '0'.to_int()
               // Check for more octal digits
               match self.peek() {
@@ -1189,40 +1210,53 @@ fn Lexer::scan_template_parts(self : Lexer) -> (Array[String], Array[String]) {
                   if first_digit <= 3 {
                     // ZeroToThree: can be 2 or 3 digit
                     let _ = self.advance()
+                    raw_buf.write_char(d2)
                     match self.peek() {
                       Some(d3) if d3 >= '0' && d3 <= '7' => {
                         // 3-digit octal: \000 - \377
                         let _ = self.advance()
+                        raw_buf.write_char(d3)
                         let third_digit = d3.to_int() - '0'.to_int()
                         let code = first_digit * 64 + second_digit * 8 + third_digit
-                        buf.write_char(code.unsafe_to_char())
+                        cooked_buf.write_char(code.unsafe_to_char())
                       }
                       _ => {
                         // 2-digit octal: \00 - \37
                         let code = first_digit * 8 + second_digit
-                        buf.write_char(code.unsafe_to_char())
+                        cooked_buf.write_char(code.unsafe_to_char())
                       }
                     }
                   } else {
                     // FourToSeven: exactly 2 digits
                     let _ = self.advance()
+                    raw_buf.write_char(d2)
                     let code = first_digit * 8 + second_digit
-                    buf.write_char(code.unsafe_to_char())
+                    cooked_buf.write_char(code.unsafe_to_char())
                   }
                 }
                 _ => {
                   // Single digit octal: \0 - \7
-                  buf.write_char(first_digit.unsafe_to_char())
+                  cooked_buf.write_char(first_digit.unsafe_to_char())
                 }
               }
             }
             Some('x') => {
               let _ = self.advance()
+              raw_buf.write_char('x')
               let mut code = 0
               let mut ok = true
               for _ in 0..<2 {
                 match self.read_hex_digit() {
-                  Some(d) => code = code * 16 + d
+                  Some(d) => {
+                    code = code * 16 + d
+                    // Add hex char to raw
+                    let hex_char = if d < 10 {
+                      (d + '0'.to_int()).unsafe_to_char()
+                    } else {
+                      (d - 10 + 'a'.to_int()).unsafe_to_char()
+                    }
+                    raw_buf.write_char(hex_char)
+                  }
                   None => {
                     ok = false
                     break
@@ -1230,22 +1264,25 @@ fn Lexer::scan_template_parts(self : Lexer) -> (Array[String], Array[String]) {
                 }
               }
               if ok {
-                write_codepoint(buf, code)
+                write_codepoint(cooked_buf, code)
               } else {
-                buf.write_char('x')
+                cooked_buf.write_char('x')
               }
             }
             Some('u') => {
               let _ = self.advance()
+              raw_buf.write_char('u')
               let mut code = 0
               let mut ok = true
               let mut digits = 0
               if self.peek() == Some('{') {
                 let _ = self.advance()
+                raw_buf.write_char('{')
                 while true {
                   match self.peek() {
                     Some('}') => {
                       let _ = self.advance()
+                      raw_buf.write_char('}')
                       break
                     }
                     Some(_) =>
@@ -1253,6 +1290,12 @@ fn Lexer::scan_template_parts(self : Lexer) -> (Array[String], Array[String]) {
                         Some(d) => {
                           code = code * 16 + d
                           digits = digits + 1
+                          let hex_char = if d < 10 {
+                            (d + '0'.to_int()).unsafe_to_char()
+                          } else {
+                            (d - 10 + 'a'.to_int()).unsafe_to_char()
+                          }
+                          raw_buf.write_char(hex_char)
                         }
                         None => {
                           ok = false
@@ -1271,6 +1314,12 @@ fn Lexer::scan_template_parts(self : Lexer) -> (Array[String], Array[String]) {
                     Some(d) => {
                       code = code * 16 + d
                       digits = digits + 1
+                      let hex_char = if d < 10 {
+                        (d + '0'.to_int()).unsafe_to_char()
+                      } else {
+                        (d - 10 + 'a'.to_int()).unsafe_to_char()
+                      }
+                      raw_buf.write_char(hex_char)
                     }
                     None => {
                       ok = false
@@ -1280,86 +1329,50 @@ fn Lexer::scan_template_parts(self : Lexer) -> (Array[String], Array[String]) {
                 }
               }
               if ok && digits > 0 {
-                write_codepoint(buf, code)
+                write_codepoint(cooked_buf, code)
               } else {
-                buf.write_char('u')
+                cooked_buf.write_char('u')
               }
             }
             Some('\\') => {
               let _ = self.advance()
-              buf.write_char('\\')
+              cooked_buf.write_char('\\')
+              raw_buf.write_char('\\')
             }
             Some('`') => {
               let _ = self.advance()
-              buf.write_char('`')
+              cooked_buf.write_char('`')
+              raw_buf.write_char('`')
             }
             Some(other) => {
               let _ = self.advance()
-              buf.write_char(other)
+              cooked_buf.write_char(other)
+              raw_buf.write_char(other)
             }
             None => break
           }
         } else {
           let _ = self.advance()
-          buf.write_char(c)
+          cooked_buf.write_char(c)
+          raw_buf.write_char(c)
         }
     }
   }
-  parts.push(buf.to_string())
-  (parts, exprs)
-}
-
-///|
-fn Lexer::tokenize_fragment(
-  _self : Lexer,
-  src : String,
-  pos : Int,
-) -> Array[Token] {
-  let sub = Lexer::new(src)
-  let tokens : Array[Token] = []
-  while true {
-    let tok = sub.next_token()
-    match tok.kind {
-      Eof => break
-      _ => tokens.push({ kind: tok.kind, pos })
-    }
-  }
-  tokens
+  cooked_parts.push(cooked_buf.to_string())
+  raw_parts.push(raw_buf.to_string())
+  (cooked_parts, raw_parts, exprs)
 }
 
 ///|
 fn Lexer::enqueue_template_tokens(self : Lexer, pos : Int) -> Unit {
-  let (parts, exprs) = self.scan_template_parts()
-  let tokens : Array[Token] = []
-  if exprs.length() == 0 {
-    tokens.push({ kind: Str(parts[0]), pos })
-  } else {
-    tokens.push({ kind: LParen, pos })
-    let last_index = parts.length() - 1
-    for i in 0..<exprs.length() {
-      let part = if i < parts.length() { parts[i] } else { "" }
-      tokens.push({ kind: Str(part), pos })
-      tokens.push({ kind: Plus, pos })
-      // Wrap expression in parentheses to ensure proper evaluation order
-      tokens.push({ kind: LParen, pos })
-      let expr_tokens = self.tokenize_fragment(exprs[i], pos)
-      for tok in expr_tokens {
-        tokens.push(tok)
-      }
-      tokens.push({ kind: RParen, pos })
-      tokens.push({ kind: Plus, pos })
-    }
-    let tail = if last_index >= 0 { parts[last_index] } else { "" }
-    tokens.push({ kind: Str(tail), pos })
-    tokens.push({ kind: RParen, pos })
-  }
+  let (cooked_parts, raw_parts, exprs) = self.scan_template_parts_with_raw()
+  // Create a single Template token containing all parts and expression sources
+  let token = { kind: Template(cooked_parts, raw_parts, exprs), pos }
   if self.pending_index >= self.pending.length() {
-    self.pending = tokens
+    self.pending = [token]
     self.pending_index = 0
   } else {
-    for tok in tokens {
-      self.pending.push(tok)
-    }
+    self.pending.push(token)
   }
 }
 
