@@ -1031,10 +1031,12 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
       // objectliteral: { key: value, ... }
       let _ = self.advance()
       let fields : Array[(String, @ast.TsExpr)] = []
+      let mut spread_idx = 0
       if not(self.check(RBrace)) {
         if self.match_ellipsis() {
-          let _ = self.parse_assignment()
-
+          let spread_expr = self.parse_assignment()
+          fields.push(("@@spread:" + spread_idx.to_string(), spread_expr))
+          spread_idx += 1
         } else {
           // field
           let mut is_ident_key = false
@@ -1218,7 +1220,9 @@ fn Parser::parse_primary(self : Parser) -> @ast.TsExpr raise ParseError {
             break // trailing comma
           }
           if self.match_ellipsis() {
-            let _ = self.parse_assignment()
+            let spread_expr = self.parse_assignment()
+            fields.push(("@@spread:" + spread_idx.to_string(), spread_expr))
+            spread_idx += 1
             continue
           }
           let mut is_ident_key = false

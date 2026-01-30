@@ -536,7 +536,149 @@ pub fn JSInterpreter::eval_expr(
 
       for field in fields {
         let (key, val_expr) = field
-        if key.has_prefix("@@get:") || key.has_prefix("@@set:") {
+        if key.has_prefix("@@spread:") {
+          // Handle object spread: copy all enumerable own properties
+          let spread_val = self.eval_expr(val_expr, env)
+          match spread_val {
+            Object(map) => {
+              for prop in map.props {
+                // Only copy enumerable properties
+                if prop.enumerable {
+                  // Override any existing property with the same key
+                  match find_prop_index(props, prop.key) {
+                    Some(i) =>
+                      props[i] = {
+                        key: prop.key,
+                        value: prop.value,
+                        writable: true,
+                        enumerable: true,
+                        configurable: true,
+                        get: None,
+                        set: None,
+                      }
+                    None =>
+                      props.push({
+                        key: prop.key,
+                        value: prop.value,
+                        writable: true,
+                        enumerable: true,
+                        configurable: true,
+                        get: None,
+                        set: None,
+                      })
+                  }
+                }
+              }
+            }
+            Array(arr) => {
+              // Spread array into object: {0: a, 1: b, ...}
+              for i = 0; i < arr.length; i = i + 1 {
+                let idx_key = i.to_string()
+                let item = arr.items[i]
+                match find_prop_index(props, idx_key) {
+                  Some(j) =>
+                    props[j] = {
+                      key: idx_key,
+                      value: item,
+                      writable: true,
+                      enumerable: true,
+                      configurable: true,
+                      get: None,
+                      set: None,
+                    }
+                  None =>
+                    props.push({
+                      key: idx_key,
+                      value: item,
+                      writable: true,
+                      enumerable: true,
+                      configurable: true,
+                      get: None,
+                      set: None,
+                    })
+                }
+              }
+              // Add length property
+              let len_key = "length"
+              match find_prop_index(props, len_key) {
+                Some(j) =>
+                  props[j] = {
+                    key: len_key,
+                    value: Number(arr.length.to_double()),
+                    writable: true,
+                    enumerable: true,
+                    configurable: true,
+                    get: None,
+                    set: None,
+                  }
+                None =>
+                  props.push({
+                    key: len_key,
+                    value: Number(arr.length.to_double()),
+                    writable: true,
+                    enumerable: true,
+                    configurable: true,
+                    get: None,
+                    set: None,
+                  })
+              }
+            }
+            String(s) => {
+              // Spread string into object: {0: 'a', 1: 'b', ...}
+              for i = 0; i < s.length(); i = i + 1 {
+                let idx_key = i.to_string()
+                let char_val = JSValue::String(s[i].to_string())
+                match find_prop_index(props, idx_key) {
+                  Some(j) =>
+                    props[j] = {
+                      key: idx_key,
+                      value: char_val,
+                      writable: true,
+                      enumerable: true,
+                      configurable: true,
+                      get: None,
+                      set: None,
+                    }
+                  None =>
+                    props.push({
+                      key: idx_key,
+                      value: char_val,
+                      writable: true,
+                      enumerable: true,
+                      configurable: true,
+                      get: None,
+                      set: None,
+                    })
+                }
+              }
+              // Add length property
+              let len_key = "length"
+              match find_prop_index(props, len_key) {
+                Some(j) =>
+                  props[j] = {
+                    key: len_key,
+                    value: Number(s.length().to_double()),
+                    writable: true,
+                    enumerable: true,
+                    configurable: true,
+                    get: None,
+                    set: None,
+                  }
+                None =>
+                  props.push({
+                    key: len_key,
+                    value: Number(s.length().to_double()),
+                    writable: true,
+                    enumerable: true,
+                    configurable: true,
+                    get: None,
+                    set: None,
+                  })
+              }
+            }
+            _ => () // null/undefined/primitive: no properties to spread
+          }
+        } else if key.has_prefix("@@get:") || key.has_prefix("@@set:") {
           let is_get = key.has_prefix("@@get:")
           let real_key = (key[6:] catch { _ => "" }).to_string()
           let func_val = self.eval_expr(val_expr, env)
@@ -3103,6 +3245,69 @@ fn JSInterpreter::hoist_block_lexical(
 }
 
 ///|
+/// Hoist var declarations to local environment (ignoring parent scope).
+/// Used when separating parameter and body environments.
+fn JSInterpreter::hoist_var_to_local(
+  self : JSInterpreter,
+  block : @ast.TsBlock,
+  env : JSEnv,
+) -> Unit {
+  for stmt in block.stmts {
+    self.hoist_var_stmt_to_local(stmt, env)
+  }
+}
+
+///|
+fn JSInterpreter::hoist_var_stmt_to_local(
+  self : JSInterpreter,
+  stmt : @ast.TsStmt,
+  env : JSEnv,
+) -> Unit {
+  match stmt {
+    @ast.TsStmt::Var(binding, _, _) => {
+      let names : Array[String] = []
+      collect_binding_names(binding, names)
+      for name in names {
+        // Always define locally, even if parent has same name
+        if not(env.has_local(name)) {
+          env.define_var(name, Undefined)
+        }
+      }
+    }
+    @ast.TsStmt::If(_, then_block, else_block) => {
+      self.hoist_var_to_local(then_block, env)
+      match else_block {
+        Some(block) => self.hoist_var_to_local(block, env)
+        None => ()
+      }
+    }
+    @ast.TsStmt::Block(block) => self.hoist_var_to_local(block, env)
+    @ast.TsStmt::While(_, body) => self.hoist_var_to_local(body, env)
+    @ast.TsStmt::DoWhile(_, body) => self.hoist_var_to_local(body, env)
+    @ast.TsStmt::For(_, _, _, body) => self.hoist_var_to_local(body, env)
+    @ast.TsStmt::ForOf(_, _, _, _, body) => self.hoist_var_to_local(body, env)
+    @ast.TsStmt::ForIn(_, _, _, _, body) => self.hoist_var_to_local(body, env)
+    @ast.TsStmt::Try(try_block, _catch_binding, catch_block, finally_block) => {
+      self.hoist_var_to_local(try_block, env)
+      match catch_block {
+        Some(block) => self.hoist_var_to_local(block, env)
+        None => ()
+      }
+      match finally_block {
+        Some(block) => self.hoist_var_to_local(block, env)
+        None => ()
+      }
+    }
+    @ast.TsStmt::Switch(_, cases) =>
+      for case_ in cases {
+        self.hoist_var_to_local(case_.body, env)
+      }
+    @ast.TsStmt::Label(_, body) => self.hoist_var_stmt_to_local(body, env)
+    _ => ()
+  }
+}
+
+///|
 // / check
 fn JSInterpreter::is_callable(_self : JSInterpreter, value : JSValue) -> Bool {
   match value {
@@ -3313,6 +3518,9 @@ pub fn JSInterpreter::call_function(
           self.bind_params(func_def.params, args, call_env)
           if has_param_expr {
             body_env = js_new_env(Some(call_env))
+            // Hoist var declarations to body_env (not call_env)
+            // This ensures parameter expression closures don't see body vars
+            self.hoist_var_to_local(func_def.body, body_env)
           }
         }
         _ =>
