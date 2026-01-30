@@ -204,6 +204,7 @@ fn Parser::parse_class_body(
       continue
     }
     let mut is_static = false
+    let mut is_async_method = false
     let mut has_modifier = true
     let mut parsed_static_block = false
     while has_modifier {
@@ -225,6 +226,7 @@ fn Parser::parse_class_body(
         Ident(n) if n == "async" =>
           if self.peek_at(1).kind != LParen {
             let _ = self.advance()
+            is_async_method = true
             has_modifier = true
           }
         _ => ()
@@ -270,7 +272,7 @@ fn Parser::parse_class_body(
         return_type,
         body,
         is_generator,
-        is_async: false,
+        is_async: is_async_method,
       }
       if accessor_kind is None && key is Name("constructor") && not(is_static) {
         ctor = Some(func)
