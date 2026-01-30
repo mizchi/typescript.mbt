@@ -7,10 +7,24 @@
 | language/statements | 6,017 | 2,337 | 983 | 9,337 |
 | language/expressions | 5,859 | 2,409 | 2,825 | 11,093 |
 | language/module-code | 386 | 203 | 148 | 737 |
-| **許可リスト** | - | - | - | **27,623** |
-| **スキップリスト** | - | - | - | 25,343 |
+| template-literal | 43 | 14 | 0 | 57 |
+| for-of | 589 | 104 | 58 | 751 |
+| **許可リスト** | - | - | - | **34,268** |
+| **スキップリスト** | - | - | - | 18,698 |
 
-### 最新の修正 (module syntax 対応) - 完了
+### 最新の修正 (template literal + iterator) - 完了
+- **テンプレートリテラル対応**
+  - バッククォート文字列 `` `hello ${name}` `` が動作
+  - 式の評価順序修正（各式を括弧で囲む）
+  - 複数行テンプレート対応
+  - template-literal テスト: 43/57 passed (75.4%)
+- **run コマンド修正**
+  - 非モジュールコードを `function main() {}` でラップ
+  - 通常のJSファイルが実行可能に
+- **許可リスト大幅増加: 27,623 → 34,268 (+6,645件)**
+- **スキップリスト削減: 25,343 → 18,698 (-6,645件)**
+
+### 以前の修正 (module syntax 対応) - 完了
 - **test262_scan.py からimport/export/yield/function* のバンを解除**
   - BANNED_PATTERNS から Generator/Iterator と Module パターンを削除
   - `flags: [module]` のスキップを解除
@@ -155,26 +169,23 @@
 
 ---
 
-## SKIPの内訳 (25,343件)
+## SKIPの内訳 (18,698件)
 
 | 理由 | 件数 | 対応方針 |
 |------|------|--------|
-| banned:template (テンプレートリテラル) | 6,002 | 未実装 |
-| flag:async | 5,513 | 部分対応済み |
+| flag:async | 5,513 | テスト実行可能だが一部失敗 |
 | negative (負のテスト) | 4,669 | 対応しない |
 | includes:temporalHelpers.js | 2,690 | 低 (Temporal API) |
+| banned:eval | 1,418 | 対応しない |
 | includes:testTypedArray.js | 1,123 | 低 |
-| banned:eval | 976 | 対応しない |
-| banned:async | 842 | 部分対応済み |
 | includes:testBigIntTypedArray.js | 692 | 低 |
 | includes:regExpUtils.js | 574 | 低 |
-| banned:with | 428 | 対応しない |
-| banned:await | 368 | 部分対応済み |
-| banned:Function | 278 | 対応しない |
+| banned:with | 497 | 対応しない |
+| banned:Function | 322 | 対応しない |
 | includes:resizableArrayBufferUtils.js | 188 | 低 (ES2024) |
 | includes:testIntl.js | 175 | 低 (Intl) |
 | includes:detachArrayBuffer.js | 102 | 低 |
-| banned:import-defer | 76 | 低 (ES2024) |
+| banned:import-defer | 88 | 低 (ES2024) |
 | includes:tcoHelper.js | 34 | 対応しない (TCO) |
 
 ### 完了したスキップ理由
@@ -185,6 +196,8 @@
 - ~~module syntax (flags: [module])~~ → 実行可能に (+386 passed in module-code)
 - ~~banned: import/export~~ → 許可リストに追加
 - ~~banned: function*/yield~~ → 許可リストに追加
+- ~~banned: template~~ → テンプレートリテラル実装 (+5,741テスト追加)
+- ~~banned: async/await~~ → async/await実装済み (+904テスト追加)
 
 ---
 
@@ -363,8 +376,10 @@
 | generator CPS + yield* | 14,215 | 5,595 | 4,066 | +46 |
 | module syntax | 14,500+ | - | - | +386 (module-code) |
 | test262 scan更新 | - | - | - | 許可リスト27,623件 |
+| template literal + async解禁 | - | - | - | 許可リスト34,268件 |
 
 **総合改善: +2,260+ passed tests**
-**許可リスト: 19,810 → 27,623 (+7,813件)**
-**スキップリスト: 25,343件**
-**module-code: passed=386, failed=203, skipped=148**
+**許可リスト: 19,810 → 34,268 (+14,458件)**
+**スキップリスト: 18,698件**
+**template-literal: passed=43, failed=14 (75.4%)**
+**for-of: passed=589, failed=104, skipped=58 (78.4%)**
