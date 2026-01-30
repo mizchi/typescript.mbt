@@ -73,30 +73,17 @@ SUPPORTED_INCLUDES = {"assert.js", "sta.js", "compareArray.js", "nans.js"}
 
 
 BANNED_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
-    ("var", re.compile(r"\bvar\b")),
-    ("typeof", re.compile(r"\btypeof\b")),
-    ("delete", re.compile(r"\bdelete\b")),
-    ("try", re.compile(r"\btry\b")),
-    ("catch", re.compile(r"\bcatch\b")),
-    ("finally", re.compile(r"\bfinally\b")),
-    ("throw", re.compile(r"\bthrow\b")),
-    ("switch", re.compile(r"\bswitch\b")),
-    ("case", re.compile(r"\bcase\b")),
-    ("default", re.compile(r"\bdefault\b")),
-    ("do", re.compile(r"\bdo\b")),
-    ("class", re.compile(r"\bclass\b")),
-    ("extends", re.compile(r"\bextends\b")),
-    ("super", re.compile(r"\bsuper\b")),
-    ("this", re.compile(r"\bthis\b")),
+    # Generator/Iterator
     ("function*", re.compile(r"\bfunction\s*\*")),
     ("yield", re.compile(r"\byield\b")),
+    # Async
     ("await", re.compile(r"\bawait\b")),
     ("async", re.compile(r"\basync\b")),
+    # Module
     ("import", re.compile(r"\bimport\b")),
     ("export", re.compile(r"\bexport\b")),
-    ("for-in", re.compile(r"\bfor\s*\([^;]*\bin\b")),
+    # Template literals (not yet implemented)
     ("template", re.compile(r"`")),
-    ("bigint", re.compile(r"\b\d+n\b")),
 ]
 
 

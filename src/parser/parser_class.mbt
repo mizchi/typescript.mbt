@@ -39,6 +39,7 @@ fn Parser::parse_class_method_key(self : Parser) -> ClassKey raise ParseError {
     Str(s) => s
     Number(n) => "\{n}"
     Int(n) => "\{n}"
+    // Reserved words can be used as method names in ES6+
     Return => "return"
     If => "if"
     Else => "else"
@@ -58,6 +59,26 @@ fn Parser::parse_class_method_key(self : Parser) -> ClassKey raise ParseError {
     Var => "var"
     Class => "class"
     New => "new"
+    // Additional reserved words allowed as method names
+    Default => "default"
+    Do => "do"
+    In => "in"
+    Case => "case"
+    VoidType => "void"
+    With => "with"
+    Switch => "switch"
+    Typeof => "typeof"
+    Delete => "delete"
+    Export => "export"
+    Import => "import"
+    Debugger => "debugger"
+    Interface => "interface"
+    Instanceof => "instanceof"
+    Extends => "extends"
+    From => "from"
+    As => "as"
+    // Note: static, this, super, true, false, null, get, set, of, async, await
+    // are handled as Ident tokens with special names, not separate TokenKind
     k => raise ParseError("Expected method name, got \{k}")
   }
   Name(name)
