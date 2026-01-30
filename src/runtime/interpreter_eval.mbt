@@ -638,6 +638,8 @@ pub fn JSInterpreter::eval_expr(
     }
     @ast.TsExpr::ObjectLit(fields) => {
       let props : Array[JSProp] = []
+      // Track custom __proto__ value for prototype chain
+      let mut custom_proto : JSValue? = None
       fn find_prop_index(props : Array[JSProp], key : String) -> Int? {
         for i, prop in props {
           if prop.key == key {
@@ -882,6 +884,14 @@ pub fn JSInterpreter::eval_expr(
                 },
               })
           }
+        } else if key == "__proto__" {
+          // __proto__ in object literal sets the prototype, not a property
+          let value = self.eval_expr(val_expr, env)
+          // Only Object or Null can be used as prototype (ECMAScript spec)
+          match value {
+            Object(_) | Null | Function(_) => custom_proto = Some(value)
+            _ => () // Ignore non-object values for __proto__
+          }
         } else {
           let value = self.eval_expr(val_expr, env)
           match find_prop_index(props, key) {
@@ -908,7 +918,12 @@ pub fn JSInterpreter::eval_expr(
           }
         }
       }
-      let obj = js_object_with_props(props, Some(self.object_proto))
+      // Use custom prototype if __proto__ was set, otherwise use default Object.prototype
+      let proto = match custom_proto {
+        Some(p) => Some(p)
+        None => Some(self.object_proto)
+      }
+      let obj = js_object_with_props(props, proto)
       // Set __home_object on methods for super support in object literals
       match obj {
         Object(map) =>
