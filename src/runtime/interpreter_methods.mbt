@@ -717,6 +717,14 @@ fn JSInterpreter::string_method(
       }
       String("<a href=\"" + url + "\">" + s + "</a>")
     }
+    "anchor" => {
+      let name = if args.length() > 0 {
+        escape_html_attr(self.to_string_value(args[0]))
+      } else {
+        ""
+      }
+      String("<a name=\"" + name + "\">" + s + "</a>")
+    }
     "repeat" => {
       let count = if args.length() > 0 {
         args[0].to_number().to_int()
