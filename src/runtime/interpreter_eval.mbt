@@ -3785,37 +3785,49 @@ pub fn JSInterpreter::exec_stmt(
         self.hoist_block_var_only(case_.body, env)
         self.hoist_block_lexical(case_.body, switch_env)
       }
-      let mut matched = false
-      for case_ in cases {
-        if not(matched) {
-          match case_.test_expr {
-            None => matched = true
-            Some(test_expr) => {
+      // ES spec: First find matching case (skip default), then fallback to default
+      let mut matched_index : Int? = None
+      let mut default_index : Int? = None
+      for i, case_ in cases {
+        match case_.test_expr {
+          None => default_index = Some(i) // Remember default case location
+          Some(test_expr) => {
+            if matched_index is None {
               let test_val = self.eval_expr(test_expr, switch_env)
               match self.peek_error() {
                 Some(err) => return Some(err)
                 None => ()
               }
               match js_strict_eq(discr, test_val) {
-                Bool(true) => matched = true
+                Bool(true) => matched_index = Some(i)
                 _ => ()
               }
             }
           }
         }
-        if matched {
-          // Execute case body directly in switch_env
-          for stmt in case_.body.stmts {
-            match self.exec_stmt(stmt, switch_env) {
-              Some(BreakSignal(label)) =>
-                match label {
-                  None => return None
-                  Some(_) => return Some(BreakSignal(label))
-                }
-              Some(ContinueSignal(label)) => return Some(ContinueSignal(label))
-              Some(val) => return Some(val)
-              None => ()
-            }
+      }
+      // If no case matched, use default
+      let start_index = match matched_index {
+        Some(i) => i
+        None =>
+          match default_index {
+            Some(i) => i
+            None => cases.length() // No execution
+          }
+      }
+      // Execute from start_index (fall-through behavior)
+      for i = start_index; i < cases.length(); i = i + 1 {
+        let case_ = cases[i]
+        for stmt in case_.body.stmts {
+          match self.exec_stmt(stmt, switch_env) {
+            Some(BreakSignal(label)) =>
+              match label {
+                None => return None
+                Some(_) => return Some(BreakSignal(label))
+              }
+            Some(ContinueSignal(label)) => return Some(ContinueSignal(label))
+            Some(val) => return Some(val)
+            None => ()
           }
         }
       }
