@@ -294,6 +294,112 @@ test "weakmap: set returns the map" {
   assert_true(result is Bool(true))
 }
 
+// === VM GC Tests ===
+
+///|
+test "vm_gc: gc function exists" {
+  let interp = JSInterpreter::new()
+  let src =
+    #|function main() {
+    #|  return typeof gc;
+    #|}
+  let result = interp.run(src)
+  assert_true(result is String("function"))
+}
+
+///|
+test "vm_gc: gc returns number" {
+  let interp = JSInterpreter::new()
+  let src =
+    #|function main() {
+    #|  let result = gc();
+    #|  return typeof result;
+    #|}
+  let result = interp.run(src)
+  assert_true(result is String("number"))
+}
+
+///|
+test "vm_gc: basic gc run" {
+  let interp = JSInterpreter::new()
+  let src =
+    #|function main() {
+    #|  // Run GC - should not crash
+    #|  gc();
+    #|  return 42;
+    #|}
+  let result = interp.run(src)
+  match result {
+    Number(n) => assert_eq(n, 42.0)
+    _ => panic()
+  }
+}
+
+///|
+test "vm_gc: gc with weakmap" {
+  let interp = JSInterpreter::new()
+  let src =
+    #|function main() {
+    #|  let wm = new WeakMap();
+    #|  let obj = { x: 1 };
+    #|  wm.set(obj, "value");
+    #|  gc();
+    #|  // obj is still reachable
+    #|  return wm.has(obj);
+    #|}
+  let result = interp.run(src)
+  assert_true(result is Bool(true))
+}
+
+///|
+test "vm_gc: gc with weakset" {
+  let interp = JSInterpreter::new()
+  let src =
+    #|function main() {
+    #|  let ws = new WeakSet();
+    #|  let obj = { x: 1 };
+    #|  ws.add(obj);
+    #|  gc();
+    #|  // obj is still reachable
+    #|  return ws.has(obj);
+    #|}
+  let result = interp.run(src)
+  assert_true(result is Bool(true))
+}
+
+///|
+test "vm_gc: gc with weakref" {
+  let interp = JSInterpreter::new()
+  let src =
+    #|function main() {
+    #|  let obj = { x: 42 };
+    #|  let wr = new WeakRef(obj);
+    #|  gc();
+    #|  // obj is still reachable
+    #|  return wr.deref().x;
+    #|}
+  let result = interp.run(src)
+  match result {
+    Number(n) => assert_eq(n, 42.0)
+    _ => panic()
+  }
+}
+
+///|
+test "vm_gc: finalization registry basic" {
+  let interp = JSInterpreter::new()
+  let src =
+    #|function main() {
+    #|  let fr = new FinalizationRegistry((val) => {});
+    #|  let obj = {};
+    #|  fr.register(obj, "held");
+    #|  gc();
+    #|  return true;
+    #|}
+  let result = interp.run(src)
+  assert_true(result is Bool(true))
+}
+
 // === GC Integration Tests ===
 
 ///|

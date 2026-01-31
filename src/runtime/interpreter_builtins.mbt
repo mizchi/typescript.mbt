@@ -1356,6 +1356,12 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let print_fn = self.make_native("print")
   self.global_env.define_var("print", print_fn)
   let _ = js_set_prop(global_obj, "print", print_fn)
+
+  // gc - VM-level garbage collection
+  let gc_fn = self.make_native("gc")
+  self.set_function_length(gc_fn, 0.0)
+  self.global_env.define_var("gc", gc_fn)
+  let _ = js_set_prop(global_obj, "gc", gc_fn)
   let escape_fn = self.make_native("escape")
   self.set_function_length(escape_fn, 1.0)
   self.global_env.define_var("escape", escape_fn)
@@ -4979,6 +4985,29 @@ fn JSInterpreter::call_native(
       println(parts.join(" "))
       Undefined
     }
+    "gc" => {
+      // Run VM-level garbage collection
+      // Collect roots from global env and current scope
+      let roots : Array[JSValue] = []
+      // Add global object as root
+      let global_obj = self.global_env.get("globalThis")
+      roots.push(global_obj)
+      // Run GC
+      let collected = vm_gc_collect(roots, Some(self.global_env))
+      // Clean up weak collections
+      vm_gc_cleanup_weak_refs(collected)
+      vm_gc_cleanup_weak_maps(collected)
+      vm_gc_cleanup_weak_sets(collected)
+      // Get and run finalization callbacks
+      let callbacks = vm_gc_get_finalization_callbacks(collected)
+      for pair in callbacks {
+        let (callback, held_value) = pair
+        let _ = self.call_function(callback, Undefined, [held_value])
+
+      }
+      // Return number of collected objects
+      Number(collected.length().to_double())
+    }
     "escape" => {
       let input = if args.length() > 0 {
         self.to_string_value(args[0])
@@ -5410,6 +5439,8 @@ fn JSInterpreter::call_native(
       let _ = js_set_prop(wm_obj, "__class", String("WeakMap"))
       let entries : Array[JSValue] = []
       let _ = js_set_prop(wm_obj, "__weakmap_entries", js_array_from(entries))
+      // Register with VM GC
+      vm_gc_register_weak_map(wm_obj)
       // Initialize from iterable if provided
       if args.length() > 0 && not(args[0].is_nullish()) {
         let iterable = args[0]
@@ -5426,6 +5457,8 @@ fn JSInterpreter::call_native(
                   let val = js_get_prop(next_result, "value")
                   let key = js_get_prop(val, "0")
                   let value = js_get_prop(val, "1")
+                  // Register key with VM GC
+                  vm_gc_register_object(key)
                   let _ = self.weakmap_set_entry(wm_obj, key, value)
 
                 }
@@ -5444,6 +5477,8 @@ fn JSInterpreter::call_native(
     "WeakMap.prototype.set" => {
       let key = if args.length() > 0 { args[0] } else { Undefined }
       let value = if args.length() > 1 { args[1] } else { Undefined }
+      // Register key with VM GC
+      vm_gc_register_object(key)
       self.weakmap_set_entry(this_arg, key, value)
     }
     "WeakMap.prototype.has" => {
@@ -5462,6 +5497,8 @@ fn JSInterpreter::call_native(
       let _ = js_set_prop(ws_obj, "__class", String("WeakSet"))
       let entries : Array[JSValue] = []
       let _ = js_set_prop(ws_obj, "__weakset_entries", js_array_from(entries))
+      // Register with VM GC
+      vm_gc_register_weak_set(ws_obj)
       // Initialize from iterable if provided
       if args.length() > 0 && not(args[0].is_nullish()) {
         let iterable = args[0]
@@ -5476,6 +5513,8 @@ fn JSInterpreter::call_native(
                 Bool(true) => break
                 _ => {
                   let val = js_get_prop(next_result, "value")
+                  // Register value with VM GC
+                  vm_gc_register_object(val)
                   let _ = self.weakset_add_entry(ws_obj, val)
 
                 }
@@ -5489,6 +5528,8 @@ fn JSInterpreter::call_native(
     }
     "WeakSet.prototype.add" => {
       let value = if args.length() > 0 { args[0] } else { Undefined }
+      // Register value with VM GC
+      vm_gc_register_object(value)
       self.weakset_add_entry(this_arg, value)
     }
     "WeakSet.prototype.has" => {
@@ -5507,6 +5548,9 @@ fn JSInterpreter::call_native(
       let _ = js_set_prop(wr_obj, "__proto__", wr_proto)
       let _ = js_set_prop(wr_obj, "__class", String("WeakRef"))
       let _ = js_set_prop(wr_obj, "__weakref_target", target)
+      // Register target with VM GC
+      vm_gc_register_object(target)
+      vm_gc_register_weak_ref(wr_obj)
       wr_obj
     }
     "WeakRef.prototype.deref" => js_get_prop(this_arg, "__weakref_target")
@@ -5527,11 +5571,15 @@ fn JSInterpreter::call_native(
         "__fr_registrations",
         js_array_from(registrations),
       )
+      // Register with VM GC
+      vm_gc_register_finalization_registry(fr_obj)
       fr_obj
     }
     "FinalizationRegistry.prototype.register" => {
       let target = if args.length() > 0 { args[0] } else { Undefined }
       let held_value = if args.length() > 1 { args[1] } else { Undefined }
+      // Register target with VM GC
+      vm_gc_register_object(target)
       let unregister_token = if args.length() > 2 { args[2] } else { Undefined }
       self.fr_register(this_arg, target, held_value, unregister_token)
       Undefined
@@ -5540,10 +5588,43 @@ fn JSInterpreter::call_native(
       let unregister_token = if args.length() > 0 { args[0] } else { Undefined }
       Bool(self.fr_unregister(this_arg, unregister_token))
     }
-    "FinalizationRegistry.prototype.cleanupSome" =>
-      // In a real implementation, this would be called by the GC
-      // For now, we provide it as a no-op since MoonBit doesn't expose GC hooks
+    "FinalizationRegistry.prototype.cleanupSome" => {
+      // Run VM-level garbage collection and call this registry's callbacks
+      let roots : Array[JSValue] = []
+      let global_obj = self.global_env.get("globalThis")
+      roots.push(global_obj)
+      let collected = vm_gc_collect(roots, Some(self.global_env))
+      // Clean up weak collections
+      vm_gc_cleanup_weak_refs(collected)
+      vm_gc_cleanup_weak_maps(collected)
+      vm_gc_cleanup_weak_sets(collected)
+      // Get and run finalization callbacks (only for this registry)
+      let callback = js_get_prop(this_arg, "__fr_callback")
+      match js_get_prop(this_arg, "__fr_registrations") {
+        JSValue::Array(arr) => {
+          let mut i = 0
+          while i < arr.length {
+            match arr.items[i] {
+              JSValue::Array(entry) if entry.length >= 3 =>
+                match entry.items[0] {
+                  Number(target_id) if collected.contains(target_id.to_int()) => {
+                    let held_value = entry.items[1]
+                    let _ = self.call_function(callback, Undefined, [held_value])
+                    let _ = arr.items.remove(i)
+                    arr.length = arr.length - 1
+                    continue
+                  }
+                  _ => ()
+                }
+              _ => ()
+            }
+            i = i + 1
+          }
+        }
+        _ => ()
+      }
       Undefined
+    }
     _ => Undefined
   }
 }
