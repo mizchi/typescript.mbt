@@ -19,5 +19,11 @@
   ],
   "description": "TypeScript/JavaScript interpreter and compiler to WebAssembly",
   "source": "src",
-  "preferred-target": "native"
+  "preferred-target": "native",
+  "exclude": [
+    "fixtures",
+    "test262",
+    "test262.*",
+    "typescript"
+  ]
 }
