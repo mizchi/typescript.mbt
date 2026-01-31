@@ -1,4 +1,52 @@
 ///|
+fn number_to_radix_string(n : Double, radix : Int) -> String {
+  let digits : Array[Char] = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
+  if n.is_nan() {
+    return "NaN"
+  }
+  if n.is_inf() {
+    return if n > 0.0 { "Infinity" } else { "-Infinity" }
+  }
+  let is_negative = n < 0.0
+  let abs_n = if is_negative { -n } else { n }
+  let int_part = abs_n.floor().to_int64()
+  let frac_part = abs_n - int_part.to_double()
+  // Integer part
+  let result_chars : Array[Char] = []
+  if int_part == 0L {
+    result_chars.push('0')
+  } else {
+    let mut temp = int_part
+    while temp > 0L {
+      let digit_idx = (temp % radix.to_int64()).to_int()
+      result_chars.insert(0, digits[digit_idx])
+      temp = temp / radix.to_int64()
+    }
+  }
+  // Fractional part (limited precision)
+  if frac_part > 0.0 {
+    result_chars.push('.')
+    let mut frac = frac_part
+    let mut count = 0
+    while frac > 0.0 && count < 20 {
+      frac = frac * radix.to_double()
+      let digit_idx = frac.floor().to_int()
+      result_chars.push(digits[digit_idx])
+      frac = frac - digit_idx.to_double()
+      count = count + 1
+    }
+  }
+  if is_negative {
+    result_chars.insert(0, '-')
+  }
+  let buf = StringBuilder::new()
+  for c in result_chars {
+    buf.write_char(c)
+  }
+  buf.to_string()
+}
+
+///|
 fn JSInterpreter::install_collections(
   self : JSInterpreter,
   global_obj : JSValue,
@@ -3957,7 +4005,26 @@ fn JSInterpreter::call_native(
         Object(_) | Function(_) | Array(_) => js_get_prop(this_arg, "value")
         _ => this_arg
       }
-      String(prim.to_js_string())
+      let n = match prim {
+        Number(v) => v
+        _ => return String(prim.to_js_string())
+      }
+      // Handle radix argument (default 10)
+      let radix = if args.length() > 0 {
+        let r = self.to_number_value(args[0]).to_int()
+        if r < 2 || r > 36 {
+          let _ = self.set_error_kind("RangeError", "radix must be between 2 and 36")
+          return Undefined
+        }
+        r
+      } else {
+        10
+      }
+      if radix == 10 {
+        String(JSValue::Number(n).to_js_string())
+      } else {
+        String(number_to_radix_string(n, radix))
+      }
     }
     "Number.isNaN" =>
       if args.length() > 0 {
