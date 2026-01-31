@@ -709,7 +709,49 @@ fn contains(xs : Array[String], value : String) -> Bool {
 ///|
 fn include_prelude(name : String) -> String? {
   match name {
-    "assert.js" => Some("")
+    "assert.js" =>
+      Some(
+        (
+          #|assert._isSameValue = function (a, b) {
+          #|  if (a === b) {
+          #|    return a !== 0 || 1 / a === 1 / b;
+          #|  }
+          #|  return a !== a && b !== b;
+          #|};
+          #|assert._toString = function (value) {
+          #|  if (value === null) return "null";
+          #|  if (typeof value === "undefined") return "undefined";
+          #|  if (typeof value === "bigint") return value.toString() + "n";
+          #|  if (typeof value === "symbol") return value.toString();
+          #|  try { return String(value); } catch (e) { return Object.prototype.toString.call(value); }
+          #|};
+          #|function isPrimitive(value) {
+          #|  return !value || (typeof value !== "object" && typeof value !== "function");
+          #|}
+          #|function compareArray(a, b) {
+          #|  if (b.length !== a.length) return false;
+          #|  for (var i = 0; i < a.length; i++) {
+          #|    if (!assert._isSameValue(b[i], a[i])) return false;
+          #|  }
+          #|  return true;
+          #|}
+          #|compareArray.format = function (arrayLike) {
+          #|  return "[" + Array.prototype.map.call(arrayLike, String).join(", ") + "]";
+          #|};
+          #|assert.compareArray = function (actual, expected, message) {
+          #|  message = message === undefined ? "" : message;
+          #|  if (isPrimitive(actual)) {
+          #|    assert(false, "Actual argument [" + actual + "] shouldn't be primitive. " + message);
+          #|  } else if (isPrimitive(expected)) {
+          #|    assert(false, "Expected argument [" + expected + "] shouldn't be primitive. " + message);
+          #|  }
+          #|  var result = compareArray(actual, expected);
+          #|  if (result) return;
+          #|  var format = compareArray.format;
+          #|  assert(false, "Actual " + format(actual) + " and expected " + format(expected) + " should have the same contents. " + message);
+          #|};
+        ),
+      )
     "sta.js" => Some("")
     "compareArray.js" => Some("")
     "nans.js" =>
@@ -1042,9 +1084,75 @@ fn include_prelude(name : String) -> String? {
           #|};
         ),
       )
-    "testTypedArray.js" => Some("")
-    "detachArrayBuffer.js" => Some("")
-    "testBigIntTypedArray.js" => Some("")
+    "testTypedArray.js" =>
+      Some(
+        (
+          #|var floatArrayConstructors = [Float64Array, Float32Array];
+          #|var nonClampedIntArrayConstructors = [Int32Array, Int16Array, Int8Array, Uint32Array, Uint16Array, Uint8Array];
+          #|var intArrayConstructors = nonClampedIntArrayConstructors.concat([Uint8ClampedArray]);
+          #|var typedArrayConstructors = floatArrayConstructors.concat(intArrayConstructors);
+          #|var TypedArray = Object.getPrototypeOf(Int8Array);
+          #|function testWithTypedArrayConstructors(f, selected) {
+          #|  var constructors = selected || typedArrayConstructors;
+          #|  for (var i = 0; i < constructors.length; ++i) {
+          #|    var constructor = constructors[i];
+          #|    try {
+          #|      f(constructor);
+          #|    } catch (e) {
+          #|      e.message += " (Testing with " + constructor.name + ".)";
+          #|      throw e;
+          #|    }
+          #|  }
+          #|}
+          #|var nonAtomicsFriendlyTypedArrayConstructors = floatArrayConstructors.concat([Uint8ClampedArray]);
+          #|function testWithNonAtomicsFriendlyTypedArrayConstructors(f) {
+          #|  testWithTypedArrayConstructors(f, nonAtomicsFriendlyTypedArrayConstructors);
+          #|}
+          #|function testWithAtomicsFriendlyTypedArrayConstructors(f) {
+          #|  testWithTypedArrayConstructors(f, [Int32Array, Int16Array, Int8Array, Uint32Array, Uint16Array, Uint8Array]);
+          #|}
+          #|function testTypedArrayConversions(byteConversionValues, fn) {
+          #|  var values = byteConversionValues.values;
+          #|  var expected = byteConversionValues.expected;
+          #|  testWithTypedArrayConstructors(function(TA) {
+          #|    var name = TA.name.replace("Array", "");
+          #|    var exp = expected[name];
+          #|    if (!exp) return;
+          #|    for (var i = 0; i < values.length; ++i) {
+          #|      fn(TA, values[i], exp[i], i);
+          #|    }
+          #|  });
+          #|}
+        ),
+      )
+    "detachArrayBuffer.js" =>
+      Some(
+        (
+          #|function $DETACHBUFFER(buffer) {
+          #|  if (!$262 || typeof $262.detachArrayBuffer !== "function") {
+          #|    throw new Test262Error("No method available to detach an ArrayBuffer");
+          #|  }
+          #|  $262.detachArrayBuffer(buffer);
+          #|}
+        ),
+      )
+    "testBigIntTypedArray.js" =>
+      Some(
+        (
+          #|function testWithBigIntTypedArrayConstructors(f, selected) {
+          #|  var constructors = selected || [BigInt64Array, BigUint64Array];
+          #|  for (var i = 0; i < constructors.length; ++i) {
+          #|    var constructor = constructors[i];
+          #|    try {
+          #|      f(constructor);
+          #|    } catch (e) {
+          #|      e.message += " (Testing with " + constructor.name + ".)";
+          #|      throw e;
+          #|    }
+          #|  }
+          #|}
+        ),
+      )
     _ => None
   }
 }

@@ -101,6 +101,53 @@ pub fn assert_not_same_value(
 }
 
 ///|
+/// Get array-like length
+fn get_arraylike_length(value : JSValue) -> Int? {
+  match value {
+    JSValue::Array(arr) => Some(arr.items.length())
+    JSValue::Object(_) =>
+      match js_get_prop(value, "length") {
+        JSValue::Number(n) => Some(n.to_int())
+        _ => None
+      }
+    _ => None
+  }
+}
+
+///|
+/// Get element from array-like value
+fn get_arraylike_element(value : JSValue, index : Int) -> JSValue {
+  match value {
+    JSValue::Array(arr) =>
+      if index >= 0 && index < arr.items.length() {
+        arr.items[index]
+      } else {
+        JSValue::Undefined
+      }
+    JSValue::Object(_) =>
+      // Try TypedArray first
+      match get_typedarray_data(value) {
+        Some(data) => {
+          if index >= 0 && index < data.length {
+            // Return as BigInt for BigInt typed arrays
+            match data.kind {
+              BigInt64Array | BigUint64Array =>
+                JSValue::BigInt(BigInt::from_int64(typedarray_get_element(data, index).to_int64()))
+              _ => JSValue::Number(typedarray_get_element(data, index))
+            }
+          } else {
+            JSValue::Undefined
+          }
+        }
+        None =>
+          // Fall back to regular property access
+          js_get_prop(value, index.to_string())
+      }
+    _ => JSValue::Undefined
+  }
+}
+
+///|
 // / arraycomparison
 pub fn compare_array(
   actual : JSValue,
@@ -111,36 +158,39 @@ pub fn compare_array(
     Some(m) => m
     None => ""
   }
-  match (actual, expected) {
-    (JSValue::Array(arr1), JSValue::Array(arr2)) =>
-      if arr1.items.length() != arr2.items.length() {
-        Failure(
-          prefix +
-          "Array lengths differ: " +
-          arr1.items.length().to_string() +
-          " vs " +
-          arr2.items.length().to_string(),
-        )
-      } else {
-        let mut i = 0
-        while i < arr1.items.length() {
-          if !is_same_value(arr1.items[i], arr2.items[i]) {
-            let actual_elem = arr1.items[i].to_js_string()
-            let expected_elem = arr2.items[i].to_js_string()
-            return Failure(
-              prefix +
-              "Arrays differ at index " +
-              i.to_string() +
-              ": " +
-              actual_elem +
-              " vs " +
-              expected_elem,
-            )
-          }
-          i = i + 1
-        }
-        Success
-      }
-    _ => Failure(prefix + "Both arguments must be arrays")
+  let len1 = match get_arraylike_length(actual) {
+    Some(n) => n
+    None => return Failure(prefix + "Both arguments must be arrays")
   }
+  let len2 = match get_arraylike_length(expected) {
+    Some(n) => n
+    None => return Failure(prefix + "Both arguments must be arrays")
+  }
+  if len1 != len2 {
+    return Failure(
+      prefix +
+      "Array lengths differ: " +
+      len1.to_string() +
+      " vs " +
+      len2.to_string(),
+    )
+  }
+  let mut i = 0
+  while i < len1 {
+    let elem1 = get_arraylike_element(actual, i)
+    let elem2 = get_arraylike_element(expected, i)
+    if not(is_same_value(elem1, elem2)) {
+      return Failure(
+        prefix +
+        "Arrays differ at index " +
+        i.to_string() +
+        ": " +
+        elem1.to_js_string() +
+        " vs " +
+        elem2.to_js_string(),
+      )
+    }
+    i = i + 1
+  }
+  Success
 }
