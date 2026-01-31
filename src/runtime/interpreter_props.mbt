@@ -1169,6 +1169,8 @@ fn JSInterpreter::to_string_value(
 
 ///|
 // / JS ToNumber (Object valueOf/toString)
+// ToPrimitive with hint Number: try valueOf first, then toString
+// If both return objects, throw TypeError
 fn JSInterpreter::to_number_value(
   self : JSInterpreter,
   value : JSValue,
@@ -1184,11 +1186,12 @@ fn JSInterpreter::to_number_value(
         value.to_number()
       }
     Object(_) | Array(_) | Function(_) => {
+      let mut value_of_returned_object = false
       let value_of = js_get_prop(value, "valueOf")
       if self.is_callable(value_of) {
         let res = self.call_function(value_of, value, [])
         match res {
-          Object(_) | Array(_) | Function(_) => ()
+          Object(_) | Array(_) | Function(_) => value_of_returned_object = true
           _ => return res.to_number()
         }
       }
@@ -1196,13 +1199,65 @@ fn JSInterpreter::to_number_value(
       if self.is_callable(to_str) {
         let res = self.call_function(to_str, value, [])
         match res {
-          Object(_) | Array(_) | Function(_) => ()
+          Object(_) | Array(_) | Function(_) => {
+            // Both valueOf and toString returned objects - throw TypeError
+            let _ = self.set_error_kind(
+              "TypeError", "Cannot convert object to primitive value",
+            )
+            return 0.0 / 0.0 // NaN
+          }
           _ => return res.to_number()
         }
+      }
+      // toString not callable, check if valueOf was tried
+      if value_of_returned_object {
+        let _ = self.set_error_kind(
+          "TypeError", "Cannot convert object to primitive value",
+        )
+        return 0.0 / 0.0 // NaN
       }
       value.to_number()
     }
     _ => value.to_number()
+  }
+}
+
+///|
+// / ToPrimitive with hint Number - returns JSValue (for comparison operators)
+fn JSInterpreter::to_primitive_number(
+  self : JSInterpreter,
+  value : JSValue,
+) -> JSValue {
+  match value {
+    Object(_) | Array(_) | Function(_) => {
+      let value_of = js_get_prop(value, "valueOf")
+      if self.is_callable(value_of) {
+        let res = self.call_function(value_of, value, [])
+        match res {
+          Object(_) | Array(_) | Function(_) => () // Continue to toString
+          _ => return res
+        }
+      }
+      let to_str = js_get_prop(value, "toString")
+      if self.is_callable(to_str) {
+        let res = self.call_function(to_str, value, [])
+        match res {
+          Object(_) | Array(_) | Function(_) => {
+            let _ = self.set_error_kind(
+              "TypeError", "Cannot convert object to primitive value",
+            )
+            return Undefined
+          }
+          _ => return res
+        }
+      }
+      // valueOf was tried and returned object, toString not callable
+      let _ = self.set_error_kind(
+        "TypeError", "Cannot convert object to primitive value",
+      )
+      Undefined
+    }
+    _ => value
   }
 }
 

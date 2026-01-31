@@ -555,11 +555,38 @@ pub fn js_ne(left : JSValue, right : JSValue) -> JSValue {
 }
 
 ///|
+// / Compare two strings lexicographically (workaround for MoonBit string comparison bug)
+// / Returns: -1 if l < r, 0 if l == r, 1 if l > r
+fn str_compare(l : String, r : String) -> Int {
+  let len_l = l.length()
+  let len_r = r.length()
+  let min_len = if len_l < len_r { len_l } else { len_r }
+  for i = 0; i < min_len; i = i + 1 {
+    let cl = l[i].to_int()
+    let cr = r[i].to_int()
+    if cl < cr {
+      return -1
+    }
+    if cl > cr {
+      return 1
+    }
+  }
+  // All common characters are equal, shorter string is less
+  if len_l < len_r {
+    -1
+  } else if len_l > len_r {
+    1
+  } else {
+    0
+  }
+}
+
+///|
 // / (<) - Compare values, using string comparison for strings
 pub fn js_lt(left : JSValue, right : JSValue) -> JSValue {
   // If both are strings, compare lexicographically
   match (left, right) {
-    (String(l), String(r)) => Bool(l < r)
+    (String(l), String(r)) => Bool(str_compare(l, r) < 0)
     _ => Bool(left.to_number() < right.to_number())
   }
 }
@@ -568,7 +595,7 @@ pub fn js_lt(left : JSValue, right : JSValue) -> JSValue {
 // / (<=) - Compare values, using string comparison for strings
 pub fn js_le(left : JSValue, right : JSValue) -> JSValue {
   match (left, right) {
-    (String(l), String(r)) => Bool(l <= r)
+    (String(l), String(r)) => Bool(str_compare(l, r) <= 0)
     _ => Bool(left.to_number() <= right.to_number())
   }
 }
@@ -577,7 +604,7 @@ pub fn js_le(left : JSValue, right : JSValue) -> JSValue {
 // / (>) - Compare values, using string comparison for strings
 pub fn js_gt(left : JSValue, right : JSValue) -> JSValue {
   match (left, right) {
-    (String(l), String(r)) => Bool(l > r)
+    (String(l), String(r)) => Bool(str_compare(l, r) > 0)
     _ => Bool(left.to_number() > right.to_number())
   }
 }
@@ -586,7 +613,7 @@ pub fn js_gt(left : JSValue, right : JSValue) -> JSValue {
 // / (>=) - Compare values, using string comparison for strings
 pub fn js_ge(left : JSValue, right : JSValue) -> JSValue {
   match (left, right) {
-    (String(l), String(r)) => Bool(l >= r)
+    (String(l), String(r)) => Bool(str_compare(l, r) >= 0)
     _ => Bool(left.to_number() >= right.to_number())
   }
 }
