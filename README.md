@@ -63,10 +63,10 @@ See [TODO.md](./TODO.md) for detailed status.
 
 | Category | Tests | Notes |
 |----------|-------|-------|
-| Total | 23,876 | Tests in allowlist |
-| Passed | 15,936 | 66.7% |
-| Failed | 3,874 | |
-| Skipped | 4,066 | Missing harness, modules, etc. |
+| Total | 36,350 | Tests in allowlist |
+| Passed | 15,936 | (needs re-run) |
+| Failed | - | |
+| Skipped | 16,616 | async, negative, unsupported includes |
 
 ### Not Tested / Not Supported
 
