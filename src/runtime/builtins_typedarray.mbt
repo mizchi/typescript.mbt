@@ -1234,6 +1234,43 @@ fn JSInterpreter::typedarray_fill(
 }
 
 ///|
+/// ToInteger helper that properly handles Symbols and error propagation
+fn JSInterpreter::to_integer_or_error(
+  self : JSInterpreter,
+  value : JSValue,
+) -> Int? {
+  // Check for Symbol - throw TypeError
+  match value {
+    String(s) if is_symbol_string(s) => {
+      let _ = self.set_error_kind("TypeError", "Cannot convert a Symbol value to a number")
+      return None
+    }
+    Object(_) | Array(_) | Function(_) => {
+      // Call valueOf if available
+      let value_of = js_get_prop(value, "valueOf")
+      if self.is_callable(value_of) {
+        let res = self.call_function(value_of, value, [])
+        // Check if error was thrown
+        match self.last_error {
+          Some(_) => return None
+          None => ()
+        }
+        // Check result for Symbol
+        match res {
+          String(s) if is_symbol_string(s) => {
+            let _ = self.set_error_kind("TypeError", "Cannot convert a Symbol value to a number")
+            return None
+          }
+          _ => return Some(res.to_number().to_int())
+        }
+      }
+      Some(value.to_number().to_int())
+    }
+    _ => Some(value.to_number().to_int())
+  }
+}
+
+///|
 /// TypedArray.prototype.copyWithin(target, start, end?)
 fn JSInterpreter::typedarray_copy_within(
   self : JSInterpreter,
@@ -1246,20 +1283,36 @@ fn JSInterpreter::typedarray_copy_within(
         return self.set_error_kind("TypeError", "Buffer is detached")
       }
       let length = data.length
+      // Coerce target to integer (with error handling)
       let target_arg = if args.length() > 0 {
-        args[0].to_number().to_int()
+        match self.to_integer_or_error(args[0]) {
+          Some(n) => n
+          None => return self.error_or_undefined()
+        }
       } else {
         0
       }
+      // Coerce start to integer (with error handling)
       let start_arg = if args.length() > 1 {
-        args[1].to_number().to_int()
+        match self.to_integer_or_error(args[1]) {
+          Some(n) => n
+          None => return self.error_or_undefined()
+        }
       } else {
         0
       }
+      // Coerce end to integer (with error handling)
       let end_arg = if args.length() > 2 && not(args[2].is_undefined()) {
-        args[2].to_number().to_int()
+        match self.to_integer_or_error(args[2]) {
+          Some(n) => n
+          None => return self.error_or_undefined()
+        }
       } else {
         length
+      }
+      // Re-check if buffer was detached during coercion
+      if data.buffer.detached {
+        return self.set_error_kind("TypeError", "Buffer is detached")
       }
       // Resolve indices
       let target = if target_arg < 0 {
@@ -1975,7 +2028,19 @@ fn JSInterpreter::typedarray_keys(
 ) -> JSValue {
   match get_typedarray_data(this_arg) {
     Some(data) => {
+      if data.buffer.detached {
+        return self.set_error_kind("TypeError", "Cannot perform keys on a detached ArrayBuffer")
+      }
       let iter = self.new_object()
+      // Set up prototype chain to match Array iterators
+      let iterator_ctor = self.global_env.get("Iterator")
+      let iterator_proto = js_get_prop(iterator_ctor, "prototype")
+      match iterator_proto {
+        Object(_) | Function(_) | Array(_) => {
+          let _ = js_set_prop(iter, "__proto__", iterator_proto)
+        }
+        _ => ()
+      }
       let _ = js_set_prop(iter, "__iter_type", String("TypedArrayKeys"))
       let _ = js_set_prop(iter, "__iter_source", this_arg)
       let _ = js_set_prop(iter, "__iter_index", Number(0.0))
@@ -1984,11 +2049,12 @@ fn JSInterpreter::typedarray_keys(
         "__iter_length",
         Number(data.length.to_double()),
       )
-      let _ = js_set_prop(
-        iter,
-        "next",
-        self.make_native("TypedArrayIterator.next"),
-      )
+      let next_fn = self.make_native("TypedArrayIterator.next")
+      self.set_function_length(next_fn, 0.0)
+      let _ = js_set_prop(iter, "next", next_fn)
+      let iter_fn = self.make_native("Iterator.prototype[@@iterator]")
+      self.set_function_length(iter_fn, 0.0)
+      let _ = js_set_prop(iter, "@@iterator", iter_fn)
       iter
     }
     None => self.set_error_kind("TypeError", "Not a TypedArray")
@@ -2003,7 +2069,19 @@ fn JSInterpreter::typedarray_values(
 ) -> JSValue {
   match get_typedarray_data(this_arg) {
     Some(data) => {
+      if data.buffer.detached {
+        return self.set_error_kind("TypeError", "Cannot perform values on a detached ArrayBuffer")
+      }
       let iter = self.new_object()
+      // Set up prototype chain to match Array iterators
+      let iterator_ctor = self.global_env.get("Iterator")
+      let iterator_proto = js_get_prop(iterator_ctor, "prototype")
+      match iterator_proto {
+        Object(_) | Function(_) | Array(_) => {
+          let _ = js_set_prop(iter, "__proto__", iterator_proto)
+        }
+        _ => ()
+      }
       let _ = js_set_prop(iter, "__iter_type", String("TypedArrayValues"))
       let _ = js_set_prop(iter, "__iter_source", this_arg)
       let _ = js_set_prop(iter, "__iter_index", Number(0.0))
@@ -2012,11 +2090,12 @@ fn JSInterpreter::typedarray_values(
         "__iter_length",
         Number(data.length.to_double()),
       )
-      let _ = js_set_prop(
-        iter,
-        "next",
-        self.make_native("TypedArrayIterator.next"),
-      )
+      let next_fn = self.make_native("TypedArrayIterator.next")
+      self.set_function_length(next_fn, 0.0)
+      let _ = js_set_prop(iter, "next", next_fn)
+      let iter_fn = self.make_native("Iterator.prototype[@@iterator]")
+      self.set_function_length(iter_fn, 0.0)
+      let _ = js_set_prop(iter, "@@iterator", iter_fn)
       iter
     }
     None => self.set_error_kind("TypeError", "Not a TypedArray")
@@ -2031,7 +2110,19 @@ fn JSInterpreter::typedarray_entries(
 ) -> JSValue {
   match get_typedarray_data(this_arg) {
     Some(data) => {
+      if data.buffer.detached {
+        return self.set_error_kind("TypeError", "Cannot perform entries on a detached ArrayBuffer")
+      }
       let iter = self.new_object()
+      // Set up prototype chain to match Array iterators
+      let iterator_ctor = self.global_env.get("Iterator")
+      let iterator_proto = js_get_prop(iterator_ctor, "prototype")
+      match iterator_proto {
+        Object(_) | Function(_) | Array(_) => {
+          let _ = js_set_prop(iter, "__proto__", iterator_proto)
+        }
+        _ => ()
+      }
       let _ = js_set_prop(iter, "__iter_type", String("TypedArrayEntries"))
       let _ = js_set_prop(iter, "__iter_source", this_arg)
       let _ = js_set_prop(iter, "__iter_index", Number(0.0))
@@ -2040,11 +2131,12 @@ fn JSInterpreter::typedarray_entries(
         "__iter_length",
         Number(data.length.to_double()),
       )
-      let _ = js_set_prop(
-        iter,
-        "next",
-        self.make_native("TypedArrayIterator.next"),
-      )
+      let next_fn = self.make_native("TypedArrayIterator.next")
+      self.set_function_length(next_fn, 0.0)
+      let _ = js_set_prop(iter, "next", next_fn)
+      let iter_fn = self.make_native("Iterator.prototype[@@iterator]")
+      self.set_function_length(iter_fn, 0.0)
+      let _ = js_set_prop(iter, "@@iterator", iter_fn)
       iter
     }
     None => self.set_error_kind("TypeError", "Not a TypedArray")
