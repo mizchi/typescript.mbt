@@ -1415,6 +1415,12 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let is_array_fn = self.make_native("Array.isArray")
   self.set_function_length(is_array_fn, 1.0)
   set_proto_method(array_ctor, "isArray", is_array_fn)
+  let array_of_fn = self.make_native("Array.of")
+  self.set_function_length(array_of_fn, 0.0)
+  set_proto_method(array_ctor, "of", array_of_fn)
+  let array_from_fn = self.make_native("Array.from")
+  self.set_function_length(array_from_fn, 1.0)
+  set_proto_method(array_ctor, "from", array_from_fn)
   self.global_env.define_var("Array", array_ctor)
   set_global_ctor(global_obj, "Array", array_ctor)
 
@@ -4282,6 +4288,68 @@ fn JSInterpreter::call_native(
       } else {
         Bool(false)
       }
+    "Array.of" => {
+      // Array.of(element0, element1, ..., elementN)
+      // Creates a new Array instance from the arguments
+      js_array_from(args)
+    }
+    "Array.from" => {
+      // Array.from(arrayLike [, mapFn [, thisArg]])
+      if args.length() == 0 {
+        let _ = self.set_error_kind("TypeError", "Cannot convert undefined or null to object")
+        return Undefined
+      }
+      let array_like = args[0]
+      let has_map_fn = args.length() > 1 && not(args[0 + 1].is_undefined())
+      let map_fn_val = if has_map_fn { args[0 + 1] } else { Undefined }
+      let this_arg_for_map = if args.length() > 2 { args[2] } else { Undefined }
+      // Handle different types of arrayLike
+      let result_items : Array[JSValue] = []
+      match array_like {
+        Array(arr) => {
+          let len = arr.items.length()
+          for i = 0; i < len; i = i + 1 {
+            let val = arr.items[i]
+            if has_map_fn {
+              let mapped = self.call_function(map_fn_val, this_arg_for_map, [val, Number(i.to_double())])
+              result_items.push(mapped)
+            } else {
+              result_items.push(val)
+            }
+          }
+        }
+        String(s) => {
+          let chars : Array[Char] = s.iter().collect()
+          for i = 0; i < chars.length(); i = i + 1 {
+            let char_val = JSValue::String(chars[i].to_string())
+            if has_map_fn {
+              let mapped = self.call_function(map_fn_val, this_arg_for_map, [char_val, Number(i.to_double())])
+              result_items.push(mapped)
+            } else {
+              result_items.push(char_val)
+            }
+          }
+        }
+        _ => {
+          // Handle array-like objects with length property
+          let len_val = js_get_prop(array_like, "length")
+          let len = match len_val {
+            Number(n) => n.to_int()
+            _ => 0
+          }
+          for i = 0; i < len; i = i + 1 {
+            let val = js_get_prop(array_like, i.to_string())
+            if has_map_fn {
+              let mapped = self.call_function(map_fn_val, this_arg_for_map, [val, Number(i.to_double())])
+              result_items.push(mapped)
+            } else {
+              result_items.push(val)
+            }
+          }
+        }
+      }
+      js_array_from(result_items)
+    }
     "Date" =>
       match this_arg {
         Object(_) => {
