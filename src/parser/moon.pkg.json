@@ -2,7 +2,7 @@
   "import": [
     "moonbitlang/core/strconv",
     {
-      "path": "moonbitlang/typescript/ast",
+      "path": "mizchi/ts/ast",
       "alias": "ast"
     }
   ],

@@ -17,21 +17,21 @@
       "alias": "wasm_runtime"
     },
     {
-      "path": "moonbitlang/typescript/ast",
+      "path": "mizchi/ts/ast",
       "alias": "ast"
     },
     {
-      "path": "moonbitlang/typescript/analysis",
+      "path": "mizchi/ts/analysis",
       "alias": "analysis"
     },
     {
-      "path": "moonbitlang/typescript/codegen",
+      "path": "mizchi/ts/codegen",
       "alias": "codegen"
     }
   ],
   "wbtest-import": [
     {
-      "path": "moonbitlang/typescript/parser",
+      "path": "mizchi/ts/parser",
       "alias": "parser"
     }
   ]

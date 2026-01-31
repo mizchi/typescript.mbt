@@ -6,19 +6,19 @@
     "moonbitlang/core/env",
     "moonbitlang/core/encoding/utf8",
     {
-      "path": "moonbitlang/typescript/ast",
+      "path": "mizchi/ts/ast",
       "alias": "ast"
     },
     {
-      "path": "moonbitlang/typescript/runtime",
+      "path": "mizchi/ts/runtime",
       "alias": "runtime"
     },
     {
-      "path": "moonbitlang/typescript/parser",
+      "path": "mizchi/ts/parser",
       "alias": "parser"
     },
     {
-      "path": "moonbitlang/typescript/codegen",
+      "path": "mizchi/ts/codegen",
       "alias": "codegen"
     },
     {
@@ -26,18 +26,18 @@
       "alias": "encode"
     },
     {
-      "path": "moonbitlang/typescript/analysis",
+      "path": "mizchi/ts/analysis",
       "alias": "analysis"
     }
   ],
   "test-import": [
     "moonbitlang/core/bench",
     {
-      "path": "moonbitlang/typescript/parser",
+      "path": "mizchi/ts/parser",
       "alias": "parser"
     },
     {
-      "path": "moonbitlang/typescript/aot",
+      "path": "mizchi/ts/aot",
       "alias": "aot"
     }
   ]

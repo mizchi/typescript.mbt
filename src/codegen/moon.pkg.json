@@ -9,15 +9,15 @@
       "alias": "encode"
     },
     {
-      "path": "moonbitlang/typescript/ast",
+      "path": "mizchi/ts/ast",
       "alias": "ast"
     },
     {
-      "path": "moonbitlang/typescript/parser",
+      "path": "mizchi/ts/parser",
       "alias": "parser"
     },
     {
-      "path": "moonbitlang/typescript/analysis",
+      "path": "mizchi/ts/analysis",
       "alias": "analysis"
     }
   ],

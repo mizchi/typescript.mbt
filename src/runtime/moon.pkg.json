@@ -4,15 +4,15 @@
     "moonbitlang/core/strconv",
     "moonbitlang/regexp",
     {
-      "path": "moonbitlang/typescript/ast",
+      "path": "mizchi/ts/ast",
       "alias": "ast"
     },
     {
-      "path": "moonbitlang/typescript/parser",
+      "path": "mizchi/ts/parser",
       "alias": "parser"
     },
     {
-      "path": "moonbitlang/typescript/lib",
+      "path": "mizchi/ts/lib",
       "alias": "lib"
     }
   ]
