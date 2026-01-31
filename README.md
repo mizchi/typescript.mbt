@@ -61,12 +61,19 @@ The interpreter executes the AST directly and is the main path for test262.
 
 See [TODO.md](./TODO.md) for detailed status.
 
-| Category | Tests | Notes |
-|----------|-------|-------|
-| Total | 46,285 | Tests in allowlist |
-| Passed | ~23,000 | ~50% (estimated) |
-| Failed | ~23,000 | |
-| Skipped | 6,681 | unsupported includes only |
+### Pass Rate by Category (2026-02-01)
+
+| Category | Passed | Failed | Skipped | Total | Pass Rate |
+|----------|--------|--------|---------|-------|-----------|
+| **Math** | 291 | 35 | 1 | 327 | **89.0%** |
+| **Boolean** | 38 | 13 | 0 | 51 | **74.5%** |
+| **Number** | 249 | 84 | 2 | 335 | **74.3%** |
+| **Promise** | 459 | 180 | 0 | 639 | **71.8%** |
+| **String** | 796 | 412 | 7 | 1215 | **65.5%** |
+| **language/expressions** | 6347 | 1921 | 2825 | 11093 | **57.2%** |
+| **Function** | 285 | 154 | 70 | 509 | **56.0%** |
+| **Object** | 1671 | 1712 | 28 | 3411 | **49.0%** |
+| **Date** | 269 | 310 | 15 | 594 | **45.3%** |
 
 ### Not Tested / Not Supported
 
