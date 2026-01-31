@@ -1,8 +1,0 @@
-# Full test262 run with temporary exclusions
-# Lines starting with ! are exclusions.
-
-test262/test/**
-
-# Temporary: regex tests hang or are incomplete
-!test262/test/staging/sm/RegExp/**
-!test262/test/built-ins/RegExp/**

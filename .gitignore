@@ -18,8 +18,13 @@ Thumbs.db
 # Node.js
 node_modules/
 
-# test262 run logs
-test262.compound.run.log
+# test262 run logs and temporary files
+test262*.run.log
+test262*.log
+test262.current.txt
+test262.last_done.txt
+test262*.glob.txt
+test262.list.txt
 
 # Generated test262 files
 test262.allowlist.txt
