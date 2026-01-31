@@ -11,37 +11,13 @@ fn JSInterpreter::install_collections(
   set_proto_method(map_proto, "get", self.make_native("Map.prototype.get"))
   set_proto_method(map_proto, "set", self.make_native("Map.prototype.set"))
   set_proto_method(map_proto, "has", self.make_native("Map.prototype.has"))
-  let _ = js_set_prop(
-    map_proto,
-    "delete",
-    self.make_native("Map.prototype.delete"),
-  )
-  let _ = js_set_prop(
-    map_proto,
-    "clear",
-    self.make_native("Map.prototype.clear"),
-  )
+  set_proto_method(map_proto, "delete", self.make_native("Map.prototype.delete"))
+  set_proto_method(map_proto, "clear", self.make_native("Map.prototype.clear"))
   set_proto_method(map_proto, "keys", self.make_native("Map.prototype.keys"))
-  let _ = js_set_prop(
-    map_proto,
-    "values",
-    self.make_native("Map.prototype.values"),
-  )
-  let _ = js_set_prop(
-    map_proto,
-    "entries",
-    self.make_native("Map.prototype.entries"),
-  )
-  let _ = js_set_prop(
-    map_proto,
-    "forEach",
-    self.make_native("Map.prototype.forEach"),
-  )
-  let _ = js_set_prop(
-    map_proto,
-    "@@iterator",
-    self.make_native("Map.prototype.entries"),
-  )
+  set_proto_method(map_proto, "values", self.make_native("Map.prototype.values"))
+  set_proto_method(map_proto, "entries", self.make_native("Map.prototype.entries"))
+  set_proto_method(map_proto, "forEach", self.make_native("Map.prototype.forEach"))
+  set_proto_method(map_proto, "@@iterator", self.make_native("Map.prototype.entries"))
   let _ = js_define_data_prop(
     map_ctor, "prototype", map_proto, true, false, true,
   )
@@ -55,41 +31,13 @@ fn JSInterpreter::install_collections(
   let set_proto = self.new_object()
   set_proto_method(set_proto, "add", self.make_native("Set.prototype.add"))
   set_proto_method(set_proto, "has", self.make_native("Set.prototype.has"))
-  let _ = js_set_prop(
-    set_proto,
-    "delete",
-    self.make_native("Set.prototype.delete"),
-  )
-  let _ = js_set_prop(
-    set_proto,
-    "clear",
-    self.make_native("Set.prototype.clear"),
-  )
-  let _ = js_set_prop(
-    set_proto,
-    "keys",
-    self.make_native("Set.prototype.values"),
-  )
-  let _ = js_set_prop(
-    set_proto,
-    "values",
-    self.make_native("Set.prototype.values"),
-  )
-  let _ = js_set_prop(
-    set_proto,
-    "entries",
-    self.make_native("Set.prototype.entries"),
-  )
-  let _ = js_set_prop(
-    set_proto,
-    "forEach",
-    self.make_native("Set.prototype.forEach"),
-  )
-  let _ = js_set_prop(
-    set_proto,
-    "@@iterator",
-    self.make_native("Set.prototype.values"),
-  )
+  set_proto_method(set_proto, "delete", self.make_native("Set.prototype.delete"))
+  set_proto_method(set_proto, "clear", self.make_native("Set.prototype.clear"))
+  set_proto_method(set_proto, "keys", self.make_native("Set.prototype.values"))
+  set_proto_method(set_proto, "values", self.make_native("Set.prototype.values"))
+  set_proto_method(set_proto, "entries", self.make_native("Set.prototype.entries"))
+  set_proto_method(set_proto, "forEach", self.make_native("Set.prototype.forEach"))
+  set_proto_method(set_proto, "@@iterator", self.make_native("Set.prototype.values"))
   let _ = js_define_data_prop(
     set_ctor, "prototype", set_proto, true, false, true,
   )
@@ -101,26 +49,10 @@ fn JSInterpreter::install_collections(
   self.set_function_length(weakmap_ctor, 0.0)
   self.set_function_name(weakmap_ctor, "WeakMap")
   let weakmap_proto = self.new_object()
-  let _ = js_set_prop(
-    weakmap_proto,
-    "get",
-    self.make_native("WeakMap.prototype.get"),
-  )
-  let _ = js_set_prop(
-    weakmap_proto,
-    "set",
-    self.make_native("WeakMap.prototype.set"),
-  )
-  let _ = js_set_prop(
-    weakmap_proto,
-    "has",
-    self.make_native("WeakMap.prototype.has"),
-  )
-  let _ = js_set_prop(
-    weakmap_proto,
-    "delete",
-    self.make_native("WeakMap.prototype.delete"),
-  )
+  set_proto_method(weakmap_proto, "get", self.make_native("WeakMap.prototype.get"))
+  set_proto_method(weakmap_proto, "set", self.make_native("WeakMap.prototype.set"))
+  set_proto_method(weakmap_proto, "has", self.make_native("WeakMap.prototype.has"))
+  set_proto_method(weakmap_proto, "delete", self.make_native("WeakMap.prototype.delete"))
   let _ = js_define_data_prop(
     weakmap_ctor, "prototype", weakmap_proto, true, false, true,
   )
@@ -132,21 +64,9 @@ fn JSInterpreter::install_collections(
   self.set_function_length(weakset_ctor, 0.0)
   self.set_function_name(weakset_ctor, "WeakSet")
   let weakset_proto = self.new_object()
-  let _ = js_set_prop(
-    weakset_proto,
-    "add",
-    self.make_native("WeakSet.prototype.add"),
-  )
-  let _ = js_set_prop(
-    weakset_proto,
-    "has",
-    self.make_native("WeakSet.prototype.has"),
-  )
-  let _ = js_set_prop(
-    weakset_proto,
-    "delete",
-    self.make_native("WeakSet.prototype.delete"),
-  )
+  set_proto_method(weakset_proto, "add", self.make_native("WeakSet.prototype.add"))
+  set_proto_method(weakset_proto, "has", self.make_native("WeakSet.prototype.has"))
+  set_proto_method(weakset_proto, "delete", self.make_native("WeakSet.prototype.delete"))
   let _ = js_define_data_prop(
     weakset_ctor, "prototype", weakset_proto, true, false, true,
   )
@@ -158,21 +78,9 @@ fn JSInterpreter::install_collections(
   self.set_function_length(fr_ctor, 1.0)
   self.set_function_name(fr_ctor, "FinalizationRegistry")
   let fr_proto = self.new_object()
-  let _ = js_set_prop(
-    fr_proto,
-    "register",
-    self.make_native("FinalizationRegistry.prototype.register"),
-  )
-  let _ = js_set_prop(
-    fr_proto,
-    "unregister",
-    self.make_native("FinalizationRegistry.prototype.unregister"),
-  )
-  let _ = js_set_prop(
-    fr_proto,
-    "cleanupSome",
-    self.make_native("FinalizationRegistry.prototype.cleanupSome"),
-  )
+  set_proto_method(fr_proto, "register", self.make_native("FinalizationRegistry.prototype.register"))
+  set_proto_method(fr_proto, "unregister", self.make_native("FinalizationRegistry.prototype.unregister"))
+  set_proto_method(fr_proto, "cleanupSome", self.make_native("FinalizationRegistry.prototype.cleanupSome"))
   let _ = js_define_data_prop(fr_ctor, "prototype", fr_proto, true, false, true)
   self.global_env.define_var("FinalizationRegistry", fr_ctor)
   set_global_ctor(global_obj, "FinalizationRegistry", fr_ctor)
@@ -182,11 +90,7 @@ fn JSInterpreter::install_collections(
   self.set_function_length(weakref_ctor, 1.0)
   self.set_function_name(weakref_ctor, "WeakRef")
   let weakref_proto = self.new_object()
-  let _ = js_set_prop(
-    weakref_proto,
-    "deref",
-    self.make_native("WeakRef.prototype.deref"),
-  )
+  set_proto_method(weakref_proto, "deref", self.make_native("WeakRef.prototype.deref"))
   let _ = js_define_data_prop(
     weakref_ctor, "prototype", weakref_proto, true, false, true,
   )
@@ -321,86 +225,22 @@ fn JSInterpreter::install_collections(
     true,
   )
   // DataView.prototype methods
-  let _ = js_set_prop(
-    dv_proto,
-    "getInt8",
-    self.make_native("DataView.prototype.getInt8"),
-  )
-  let _ = js_set_prop(
-    dv_proto,
-    "getUint8",
-    self.make_native("DataView.prototype.getUint8"),
-  )
-  let _ = js_set_prop(
-    dv_proto,
-    "getInt16",
-    self.make_native("DataView.prototype.getInt16"),
-  )
-  let _ = js_set_prop(
-    dv_proto,
-    "getUint16",
-    self.make_native("DataView.prototype.getUint16"),
-  )
-  let _ = js_set_prop(
-    dv_proto,
-    "getInt32",
-    self.make_native("DataView.prototype.getInt32"),
-  )
-  let _ = js_set_prop(
-    dv_proto,
-    "getUint32",
-    self.make_native("DataView.prototype.getUint32"),
-  )
-  let _ = js_set_prop(
-    dv_proto,
-    "getFloat32",
-    self.make_native("DataView.prototype.getFloat32"),
-  )
-  let _ = js_set_prop(
-    dv_proto,
-    "getFloat64",
-    self.make_native("DataView.prototype.getFloat64"),
-  )
-  let _ = js_set_prop(
-    dv_proto,
-    "setInt8",
-    self.make_native("DataView.prototype.setInt8"),
-  )
-  let _ = js_set_prop(
-    dv_proto,
-    "setUint8",
-    self.make_native("DataView.prototype.setUint8"),
-  )
-  let _ = js_set_prop(
-    dv_proto,
-    "setInt16",
-    self.make_native("DataView.prototype.setInt16"),
-  )
-  let _ = js_set_prop(
-    dv_proto,
-    "setUint16",
-    self.make_native("DataView.prototype.setUint16"),
-  )
-  let _ = js_set_prop(
-    dv_proto,
-    "setInt32",
-    self.make_native("DataView.prototype.setInt32"),
-  )
-  let _ = js_set_prop(
-    dv_proto,
-    "setUint32",
-    self.make_native("DataView.prototype.setUint32"),
-  )
-  let _ = js_set_prop(
-    dv_proto,
-    "setFloat32",
-    self.make_native("DataView.prototype.setFloat32"),
-  )
-  let _ = js_set_prop(
-    dv_proto,
-    "setFloat64",
-    self.make_native("DataView.prototype.setFloat64"),
-  )
+  set_proto_method(dv_proto, "getInt8", self.make_native("DataView.prototype.getInt8"))
+  set_proto_method(dv_proto, "getUint8", self.make_native("DataView.prototype.getUint8"))
+  set_proto_method(dv_proto, "getInt16", self.make_native("DataView.prototype.getInt16"))
+  set_proto_method(dv_proto, "getUint16", self.make_native("DataView.prototype.getUint16"))
+  set_proto_method(dv_proto, "getInt32", self.make_native("DataView.prototype.getInt32"))
+  set_proto_method(dv_proto, "getUint32", self.make_native("DataView.prototype.getUint32"))
+  set_proto_method(dv_proto, "getFloat32", self.make_native("DataView.prototype.getFloat32"))
+  set_proto_method(dv_proto, "getFloat64", self.make_native("DataView.prototype.getFloat64"))
+  set_proto_method(dv_proto, "setInt8", self.make_native("DataView.prototype.setInt8"))
+  set_proto_method(dv_proto, "setUint8", self.make_native("DataView.prototype.setUint8"))
+  set_proto_method(dv_proto, "setInt16", self.make_native("DataView.prototype.setInt16"))
+  set_proto_method(dv_proto, "setUint16", self.make_native("DataView.prototype.setUint16"))
+  set_proto_method(dv_proto, "setInt32", self.make_native("DataView.prototype.setInt32"))
+  set_proto_method(dv_proto, "setUint32", self.make_native("DataView.prototype.setUint32"))
+  set_proto_method(dv_proto, "setFloat32", self.make_native("DataView.prototype.setFloat32"))
+  set_proto_method(dv_proto, "setFloat64", self.make_native("DataView.prototype.setFloat64"))
   // DataView.prototype[@@toStringTag]
   let _ = js_define_data_prop(
     dv_proto,
@@ -878,42 +718,42 @@ fn JSInterpreter::install_math(
   global_obj : JSValue,
 ) -> Unit {
   let math = self.new_object()
-  let _ = js_set_prop(math, "__class", String("Math"))
-  let _ = js_set_prop(math, "floor", self.make_native("Math.floor"))
-  let _ = js_set_prop(math, "ceil", self.make_native("Math.ceil"))
-  let _ = js_set_prop(math, "abs", self.make_native("Math.abs"))
-  let _ = js_set_prop(math, "sqrt", self.make_native("Math.sqrt"))
-  let _ = js_set_prop(math, "min", self.make_native("Math.min"))
-  let _ = js_set_prop(math, "max", self.make_native("Math.max"))
-  let _ = js_set_prop(math, "round", self.make_native("Math.round"))
-  let _ = js_set_prop(math, "random", self.make_native("Math.random"))
-  let _ = js_set_prop(math, "cos", self.make_native("Math.cos"))
-  let _ = js_set_prop(math, "sin", self.make_native("Math.sin"))
-  let _ = js_set_prop(math, "tan", self.make_native("Math.tan"))
-  let _ = js_set_prop(math, "exp", self.make_native("Math.exp"))
-  let _ = js_set_prop(math, "log", self.make_native("Math.log"))
-  let _ = js_set_prop(math, "trunc", self.make_native("Math.trunc"))
-  let _ = js_set_prop(math, "pow", self.make_native("Math.pow"))
-  let _ = js_set_prop(math, "sign", self.make_native("Math.sign"))
-  let _ = js_set_prop(math, "log10", self.make_native("Math.log10"))
-  let _ = js_set_prop(math, "log2", self.make_native("Math.log2"))
-  let _ = js_set_prop(math, "cbrt", self.make_native("Math.cbrt"))
-  let _ = js_set_prop(math, "hypot", self.make_native("Math.hypot"))
-  let _ = js_set_prop(math, "atan2", self.make_native("Math.atan2"))
-  let _ = js_set_prop(math, "asin", self.make_native("Math.asin"))
-  let _ = js_set_prop(math, "acos", self.make_native("Math.acos"))
-  let _ = js_set_prop(math, "atan", self.make_native("Math.atan"))
-  let _ = js_set_prop(math, "sinh", self.make_native("Math.sinh"))
-  let _ = js_set_prop(math, "cosh", self.make_native("Math.cosh"))
-  let _ = js_set_prop(math, "tanh", self.make_native("Math.tanh"))
-  let _ = js_set_prop(math, "asinh", self.make_native("Math.asinh"))
-  let _ = js_set_prop(math, "acosh", self.make_native("Math.acosh"))
-  let _ = js_set_prop(math, "atanh", self.make_native("Math.atanh"))
-  let _ = js_set_prop(math, "expm1", self.make_native("Math.expm1"))
-  let _ = js_set_prop(math, "log1p", self.make_native("Math.log1p"))
-  let _ = js_set_prop(math, "fround", self.make_native("Math.fround"))
-  let _ = js_set_prop(math, "clz32", self.make_native("Math.clz32"))
-  let _ = js_set_prop(math, "imul", self.make_native("Math.imul"))
+  set_proto_method(math, "__class", String("Math"))
+  set_proto_method(math, "floor", self.make_native("Math.floor"))
+  set_proto_method(math, "ceil", self.make_native("Math.ceil"))
+  set_proto_method(math, "abs", self.make_native("Math.abs"))
+  set_proto_method(math, "sqrt", self.make_native("Math.sqrt"))
+  set_proto_method(math, "min", self.make_native("Math.min"))
+  set_proto_method(math, "max", self.make_native("Math.max"))
+  set_proto_method(math, "round", self.make_native("Math.round"))
+  set_proto_method(math, "random", self.make_native("Math.random"))
+  set_proto_method(math, "cos", self.make_native("Math.cos"))
+  set_proto_method(math, "sin", self.make_native("Math.sin"))
+  set_proto_method(math, "tan", self.make_native("Math.tan"))
+  set_proto_method(math, "exp", self.make_native("Math.exp"))
+  set_proto_method(math, "log", self.make_native("Math.log"))
+  set_proto_method(math, "trunc", self.make_native("Math.trunc"))
+  set_proto_method(math, "pow", self.make_native("Math.pow"))
+  set_proto_method(math, "sign", self.make_native("Math.sign"))
+  set_proto_method(math, "log10", self.make_native("Math.log10"))
+  set_proto_method(math, "log2", self.make_native("Math.log2"))
+  set_proto_method(math, "cbrt", self.make_native("Math.cbrt"))
+  set_proto_method(math, "hypot", self.make_native("Math.hypot"))
+  set_proto_method(math, "atan2", self.make_native("Math.atan2"))
+  set_proto_method(math, "asin", self.make_native("Math.asin"))
+  set_proto_method(math, "acos", self.make_native("Math.acos"))
+  set_proto_method(math, "atan", self.make_native("Math.atan"))
+  set_proto_method(math, "sinh", self.make_native("Math.sinh"))
+  set_proto_method(math, "cosh", self.make_native("Math.cosh"))
+  set_proto_method(math, "tanh", self.make_native("Math.tanh"))
+  set_proto_method(math, "asinh", self.make_native("Math.asinh"))
+  set_proto_method(math, "acosh", self.make_native("Math.acosh"))
+  set_proto_method(math, "atanh", self.make_native("Math.atanh"))
+  set_proto_method(math, "expm1", self.make_native("Math.expm1"))
+  set_proto_method(math, "log1p", self.make_native("Math.log1p"))
+  set_proto_method(math, "fround", self.make_native("Math.fround"))
+  set_proto_method(math, "clz32", self.make_native("Math.clz32"))
+  set_proto_method(math, "imul", self.make_native("Math.imul"))
   let _ = js_define_data_prop(math, "PI", Number(@math.PI), false, false, false)
   let _ = js_define_data_prop(
     math,
@@ -1106,39 +946,39 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
 
   // console
   let console = self.new_object()
-  let _ = js_set_prop(console, "log", self.make_native("console.log"))
+  set_proto_method(console, "log", self.make_native("console.log"))
   self.global_env.define_var("console", console)
   set_global_ctor(global_obj, "console", console)
   self.install_math(global_obj)
 
   // JSON
   let json_obj = self.new_object()
-  let _ = js_set_prop(json_obj, "__class", String("JSON"))
+  set_proto_method(json_obj, "__class", String("JSON"))
   let json_parse = self.make_native("JSON.parse")
   self.set_function_length(json_parse, 2.0)
-  let _ = js_set_prop(json_obj, "parse", json_parse)
+  set_proto_method(json_obj, "parse", json_parse)
   let json_stringify = self.make_native("JSON.stringify")
   self.set_function_length(json_stringify, 3.0)
-  let _ = js_set_prop(json_obj, "stringify", json_stringify)
+  set_proto_method(json_obj, "stringify", json_stringify)
   self.global_env.define_var("JSON", json_obj)
   set_global_ctor(global_obj, "JSON", json_obj)
 
   // Function
   let call_fn = self.make_native("Function.call")
   self.set_function_length(call_fn, 1.0)
-  let _ = js_set_prop(self.function_proto, "call", call_fn)
+  set_proto_method(self.function_proto, "call", call_fn)
   let apply_fn = self.make_native("Function.apply")
   self.set_function_length(apply_fn, 2.0)
-  let _ = js_set_prop(self.function_proto, "apply", apply_fn)
+  set_proto_method(self.function_proto, "apply", apply_fn)
   let bind_fn = self.make_native("Function.bind")
   self.set_function_length(bind_fn, 1.0)
-  let _ = js_set_prop(self.function_proto, "bind", bind_fn)
+  set_proto_method(self.function_proto, "bind", bind_fn)
   let has_instance = self.make_native("Function.prototype[@@hasInstance]")
   self.set_function_length(has_instance, 1.0)
-  let _ = js_set_prop(self.function_proto, "@@hasInstance", has_instance)
+  set_proto_method(self.function_proto, "@@hasInstance", has_instance)
   let fn_to_string = self.make_native("Function.prototype.toString")
   self.set_function_length(fn_to_string, 0.0)
-  let _ = js_set_prop(self.function_proto, "toString", fn_to_string)
+  set_proto_method(self.function_proto, "toString", fn_to_string)
   self.set_function_length(self.function_proto, 0.0)
   self.set_function_name(self.function_proto, "")
   let function_ctor = self.make_native("Function")
@@ -1152,7 +992,7 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
     false,
     true,
   )
-  let _ = js_set_prop(self.function_proto, "constructor", function_ctor)
+  set_proto_method(self.function_proto, "constructor", function_ctor)
   self.global_env.define_var("Function", function_ctor)
   set_global_ctor(global_obj, "Function", function_ctor)
 
@@ -2066,35 +1906,31 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
 
   // Reflect
   let reflect = self.new_object()
-  let _ = js_set_prop(
-    reflect,
-    "construct",
-    self.make_native("Reflect.construct"),
-  )
+  set_proto_method(reflect, "construct", self.make_native("Reflect.construct"))
   let reflect_get = self.make_native("Reflect.get")
   self.set_function_length(reflect_get, 2.0)
   self.set_function_name(reflect_get, "get")
-  let _ = js_set_prop(reflect, "get", reflect_get)
+  set_proto_method(reflect, "get", reflect_get)
   let reflect_set = self.make_native("Reflect.set")
   self.set_function_length(reflect_set, 3.0)
   self.set_function_name(reflect_set, "set")
-  let _ = js_set_prop(reflect, "set", reflect_set)
+  set_proto_method(reflect, "set", reflect_set)
   let reflect_has = self.make_native("Reflect.has")
   self.set_function_length(reflect_has, 2.0)
   self.set_function_name(reflect_has, "has")
-  let _ = js_set_prop(reflect, "has", reflect_has)
+  set_proto_method(reflect, "has", reflect_has)
   let reflect_define = self.make_native("Reflect.defineProperty")
   self.set_function_length(reflect_define, 3.0)
   self.set_function_name(reflect_define, "defineProperty")
-  let _ = js_set_prop(reflect, "defineProperty", reflect_define)
+  set_proto_method(reflect, "defineProperty", reflect_define)
   let reflect_get_proto = self.make_native("Reflect.getPrototypeOf")
   self.set_function_length(reflect_get_proto, 1.0)
   self.set_function_name(reflect_get_proto, "getPrototypeOf")
-  let _ = js_set_prop(reflect, "getPrototypeOf", reflect_get_proto)
+  set_proto_method(reflect, "getPrototypeOf", reflect_get_proto)
   let reflect_get_desc = self.make_native("Reflect.getOwnPropertyDescriptor")
   self.set_function_length(reflect_get_desc, 2.0)
   self.set_function_name(reflect_get_desc, "getOwnPropertyDescriptor")
-  let _ = js_set_prop(reflect, "getOwnPropertyDescriptor", reflect_get_desc)
+  set_proto_method(reflect, "getOwnPropertyDescriptor", reflect_get_desc)
   self.global_env.define_var("Reflect", reflect)
   set_global_ctor(global_obj, "Reflect", reflect)
   self.install_collections(global_obj)
