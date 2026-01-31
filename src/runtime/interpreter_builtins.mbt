@@ -1641,6 +1641,9 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let date_to_utc_string = self.make_native("Date.prototype.toUTCString")
   self.set_function_length(date_to_utc_string, 0.0)
   let _ = js_set_prop(date_proto, "toUTCString", date_to_utc_string)
+  // toGMTString is an alias for toUTCString (Annex B)
+  // { [[Writable]]: true, [[Enumerable]]: false, [[Configurable]]: true }
+  let _ = js_define_data_prop(date_proto, "toGMTString", date_to_utc_string, true, false, true)
   let date_to_json = self.make_native("Date.prototype.toJSON")
   self.set_function_length(date_to_json, 1.0)
   let _ = js_set_prop(date_proto, "toJSON", date_to_json)
