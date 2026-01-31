@@ -100,6 +100,18 @@ fn JSInterpreter::set_function_name(
 }
 
 ///|
+/// Set prototype method property { [[Writable]]: true, [[Enumerable]]: false, [[Configurable]]: true }
+fn set_proto_method(proto : JSValue, name : String, func : JSValue) -> Unit {
+  let _ = js_define_data_prop(proto, name, func, true, false, true)
+}
+
+///|
+/// Set global constructor property { [[Writable]]: true, [[Enumerable]]: false, [[Configurable]]: true }
+fn set_global_ctor(global : JSValue, name : String, ctor : JSValue) -> Unit {
+  let _ = js_define_data_prop(global, name, ctor, true, false, true)
+}
+
+///|
 /// Extract short name from native function name (e.g., "Array.isArray" -> "isArray")
 fn extract_function_name(native_name : String) -> String {
   // Handle @@iterator -> [Symbol.iterator]
