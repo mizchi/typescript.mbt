@@ -693,8 +693,7 @@ fn JSInterpreter::install_error_ctor(
     true,
   )
   self.global_env.define_var(name, ctor)
-  let _ = js_set_prop(global_obj, name, ctor)
-
+  set_global_ctor(global_obj, name, ctor)
 }
 
 ///|
