@@ -94,9 +94,10 @@ pub fn analyze_aliases(func : @ast.TsFunc) -> AliasInfo {
     let id = info.get_or_create_set(param.name)
     // Object/array parameters are not unique
     match param.type_ {
-      @ast.TsType::Array(_) | @ast.TsType::Object(_) |
-      @ast.TsType::Any | @ast.TsType::Named(_) =>
-        info.sets[id].is_unique = false
+      @ast.TsType::Array(_)
+      | @ast.TsType::Object(_)
+      | @ast.TsType::Any
+      | @ast.TsType::Named(_) => info.sets[id].is_unique = false
       _ => ()
     }
   }
@@ -118,9 +119,9 @@ pub fn analyze_aliases(func : @ast.TsFunc) -> AliasInfo {
 ///|
 fn analyze_stmt_aliases(stmt : @ast.TsStmt, info : AliasInfo) -> Unit {
   match stmt {
-    @ast.TsStmt::Var(binding, _, init) |
-    @ast.TsStmt::Let(binding, _, init) |
-    @ast.TsStmt::Const(binding, _, init) => {
+    @ast.TsStmt::Var(binding, _, init)
+    | @ast.TsStmt::Let(binding, _, init)
+    | @ast.TsStmt::Const(binding, _, init) => {
       let names : Array[String] = []
       collect_binding_names(binding, names)
       for name in names {
@@ -134,10 +135,9 @@ fn analyze_stmt_aliases(stmt : @ast.TsStmt, info : AliasInfo) -> Unit {
       analyze_assignment_alias(name, value, info)
     }
     @ast.TsStmt::Expr(e) => analyze_expr_escapes(e, info)
-    @ast.TsStmt::Return(Some(e)) => {
+    @ast.TsStmt::Return(Some(e)) =>
       // Returned values escape
       mark_expr_escaped_alias(e, info)
-    }
     @ast.TsStmt::If(cond, then_block, else_block) => {
       analyze_expr_escapes(cond, info)
       for s in then_block.stmts {
@@ -174,9 +174,9 @@ fn analyze_stmt_aliases(stmt : @ast.TsStmt, info : AliasInfo) -> Unit {
         analyze_stmt_aliases(s, info)
       }
     }
-    @ast.TsStmt::ForOf(_, binding, _, iter, body) |
-    @ast.TsStmt::ForAwaitOf(_, binding, _, iter, body) |
-    @ast.TsStmt::ForIn(_, binding, _, iter, body) => {
+    @ast.TsStmt::ForOf(_, binding, _, iter, body)
+    | @ast.TsStmt::ForAwaitOf(_, binding, _, iter, body)
+    | @ast.TsStmt::ForIn(_, binding, _, iter, body) => {
       let names : Array[String] = []
       collect_binding_names(binding, names)
       for name in names {
@@ -242,16 +242,17 @@ fn analyze_assignment_alias(
       info.merge_sets(target_id, source_id)
     }
     // Literals are unique
-    @ast.TsExpr::IntLit(_) | @ast.TsExpr::NumberLit(_) |
-    @ast.TsExpr::StringLit(_) | @ast.TsExpr::BoolLit(_) |
-    @ast.TsExpr::NullLit => ()
+    @ast.TsExpr::IntLit(_)
+    | @ast.TsExpr::NumberLit(_)
+    | @ast.TsExpr::StringLit(_)
+    | @ast.TsExpr::BoolLit(_)
+    | @ast.TsExpr::NullLit => ()
     // New object/array is unique (initially)
-    @ast.TsExpr::ArrayLit(elements) => {
+    @ast.TsExpr::ArrayLit(elements) =>
       // But elements may escape into the array
       for elem in elements {
         mark_expr_escaped_alias(elem, info)
       }
-    }
     @ast.TsExpr::ObjectLit(props) =>
       for prop in props {
         mark_expr_escaped_alias(prop.1, info)

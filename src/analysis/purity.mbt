@@ -3,12 +3,12 @@
 ///|
 /// Side effect classification.
 pub(all) enum SideEffect {
-  Pure              // No side effects
-  ReadGlobal        // Reads global state
-  WriteGlobal       // Writes global state
-  IO                // Console, network, etc.
-  Throws            // May throw exception
-  Unknown           // Cannot determine
+  Pure // No side effects
+  ReadGlobal // Reads global state
+  WriteGlobal // Writes global state
+  IO // Console, network, etc.
+  Throws // May throw exception
+  Unknown // Cannot determine
 } derive(Show, Eq)
 
 ///|
@@ -35,20 +35,47 @@ pub fn PurityInfo::impure(effect : SideEffect) -> PurityInfo {
 fn is_known_pure_function(name : String) -> Bool {
   match name {
     // Math functions
-    "Math.abs" | "Math.floor" | "Math.ceil" | "Math.round" | "Math.sqrt" |
-    "Math.pow" | "Math.min" | "Math.max" | "Math.sin" | "Math.cos" |
-    "Math.tan" | "Math.log" | "Math.exp" => true
+    "Math.abs"
+    | "Math.floor"
+    | "Math.ceil"
+    | "Math.round"
+    | "Math.sqrt"
+    | "Math.pow"
+    | "Math.min"
+    | "Math.max"
+    | "Math.sin"
+    | "Math.cos"
+    | "Math.tan"
+    | "Math.log"
+    | "Math.exp" => true
     // Type conversions
     "Number" | "String" | "Boolean" | "parseInt" | "parseFloat" => true
     // String methods (most are pure)
-    "charAt" | "charCodeAt" | "substring" | "slice" | "indexOf" |
-    "lastIndexOf" | "toLowerCase" | "toUpperCase" | "trim" | "split" |
-    "startsWith" | "endsWith" | "includes" | "repeat" | "padStart" |
-    "padEnd" | "concat" => true
+    "charAt"
+    | "charCodeAt"
+    | "substring"
+    | "slice"
+    | "indexOf"
+    | "lastIndexOf"
+    | "toLowerCase"
+    | "toUpperCase"
+    | "trim"
+    | "split"
+    | "startsWith"
+    | "endsWith"
+    | "includes"
+    | "repeat"
+    | "padStart"
+    | "padEnd"
+    | "concat" => true
     // Array methods (non-mutating) - only ones not already listed
-    "find" | "findIndex" | "filter" | "map" | "reduce" | "every" | "some" => true
+    "find" | "findIndex" | "filter" | "map" | "reduce" | "every" | "some" =>
+      true
     // Object
-    "Object.keys" | "Object.values" | "Object.entries" | "Object.hasOwnProperty" => true
+    "Object.keys"
+    | "Object.values"
+    | "Object.entries"
+    | "Object.hasOwnProperty" => true
     // JSON (parse can throw but is otherwise pure)
     "JSON.stringify" => true
     _ => false
@@ -60,9 +87,14 @@ fn is_known_pure_function(name : String) -> Bool {
 fn is_known_impure_function(name : String) -> SideEffect? {
   match name {
     // Console
-    "console.log" | "console.error" | "console.warn" | "console.info" |
-    "console.debug" | "console.trace" | "console.dir" | "console.table" =>
-      Some(IO)
+    "console.log"
+    | "console.error"
+    | "console.warn"
+    | "console.info"
+    | "console.debug"
+    | "console.trace"
+    | "console.dir"
+    | "console.table" => Some(IO)
     // DOM
     "alert" | "confirm" | "prompt" => Some(IO)
     "document.write" | "document.writeln" => Some(IO)
@@ -71,12 +103,21 @@ fn is_known_impure_function(name : String) -> SideEffect? {
     // Network
     "fetch" | "XMLHttpRequest" => Some(IO)
     // Storage
-    "localStorage.setItem" | "localStorage.removeItem" | "localStorage.clear" |
-    "sessionStorage.setItem" | "sessionStorage.removeItem" | "sessionStorage.clear" =>
-      Some(IO)
+    "localStorage.setItem"
+    | "localStorage.removeItem"
+    | "localStorage.clear"
+    | "sessionStorage.setItem"
+    | "sessionStorage.removeItem"
+    | "sessionStorage.clear" => Some(IO)
     // Mutating array methods
-    "push" | "pop" | "shift" | "unshift" | "splice" | "sort" | "reverse" | "fill" =>
-      Some(WriteGlobal)
+    "push"
+    | "pop"
+    | "shift"
+    | "unshift"
+    | "splice"
+    | "sort"
+    | "reverse"
+    | "fill" => Some(WriteGlobal)
     // Date (current time)
     "Date.now" => Some(ReadGlobal)
     // Random
@@ -157,7 +198,8 @@ pub fn analyze_expr_purity(expr : @ast.TsExpr) -> PurityInfo {
     | @ast.TsExpr::AssignPattern(_, _)
     | @ast.TsExpr::PropAssignExpr(_, _, _)
     | @ast.TsExpr::IndexAssignExpr(_, _, _)
-    | @ast.TsExpr::CompoundAssignExpr(_, _, _) => PurityInfo::impure(WriteGlobal)
+    | @ast.TsExpr::CompoundAssignExpr(_, _, _) =>
+      PurityInfo::impure(WriteGlobal)
     // New expression - may have side effects in constructor
     @ast.TsExpr::New(_, _) | @ast.TsExpr::NewExpr(_, _) =>
       PurityInfo::impure(Unknown)
@@ -180,17 +222,13 @@ pub fn analyze_expr_purity(expr : @ast.TsExpr) -> PurityInfo {
       }
       result
     }
-    @ast.TsExpr::TaggedTemplate(_, _, _, _) =>
-      PurityInfo::impure(Unknown) // Tag function may have side effects
+    @ast.TsExpr::TaggedTemplate(_, _, _, _) => PurityInfo::impure(Unknown) // Tag function may have side effects
     _ => PurityInfo::impure(Unknown)
   }
 }
 
 ///|
-fn analyze_call_purity(
-  name : String,
-  args : Array[@ast.TsExpr],
-) -> PurityInfo {
+fn analyze_call_purity(name : String, args : Array[@ast.TsExpr]) -> PurityInfo {
   // Check args purity first
   let mut args_purity = PurityInfo::pure()
   for arg in args {
@@ -292,8 +330,9 @@ fn analyze_stmt_purity(stmt : @ast.TsStmt) -> PurityInfo {
     @ast.TsStmt::Return(Some(e)) => analyze_expr_purity(e)
     @ast.TsStmt::Return(None) => PurityInfo::pure()
     @ast.TsStmt::Throw(_) => PurityInfo::impure(Throws)
-    @ast.TsStmt::Var(_, _, init) | @ast.TsStmt::Let(_, _, init) |
-    @ast.TsStmt::Const(_, _, init) => analyze_expr_purity(init)
+    @ast.TsStmt::Var(_, _, init)
+    | @ast.TsStmt::Let(_, _, init)
+    | @ast.TsStmt::Const(_, _, init) => analyze_expr_purity(init)
     @ast.TsStmt::Assign(_, e) => {
       let expr_purity = analyze_expr_purity(e)
       combine_purity(expr_purity, PurityInfo::impure(WriteGlobal))

@@ -3,9 +3,9 @@
 ///|
 /// Inlining recommendation.
 pub(all) enum InlineRecommendation {
-  Inline           // Should be inlined
-  MaybeInline      // Could be inlined if called few times
-  NoInline         // Should not be inlined
+  Inline // Should be inlined
+  MaybeInline // Could be inlined if called few times
+  NoInline // Should not be inlined
 } derive(Show, Eq)
 
 ///|
@@ -17,14 +17,18 @@ pub(all) struct InlineInfo {
   expr_count : Int
   has_loops : Bool
   has_recursion : Bool
-  call_count : Int  // How many times the function is called
+  call_count : Int // How many times the function is called
   is_pure : Bool
 }
 
 ///|
 /// Thresholds for inlining decisions.
 let inline_stmt_threshold : Int = 3
+
+///|
 let inline_expr_threshold : Int = 10
+
+///|
 let maybe_inline_stmt_threshold : Int = 8
 
 ///|
@@ -84,8 +88,9 @@ fn count_stmt_complexity(
       (1, ec, false, rec)
     }
     @ast.TsStmt::Return(None) => (1, 0, false, false)
-    @ast.TsStmt::Var(_, _, init) | @ast.TsStmt::Let(_, _, init) |
-    @ast.TsStmt::Const(_, _, init) => {
+    @ast.TsStmt::Var(_, _, init)
+    | @ast.TsStmt::Let(_, _, init)
+    | @ast.TsStmt::Const(_, _, init) => {
       let (ec, rec) = count_expr_complexity(init, func_name)
       (1, ec, false, rec)
     }
@@ -180,9 +185,9 @@ fn count_stmt_complexity(
       }
       (sc, ec, true, rec)
     }
-    @ast.TsStmt::ForOf(_, _, _, iter, body) |
-    @ast.TsStmt::ForAwaitOf(_, _, _, iter, body) |
-    @ast.TsStmt::ForIn(_, _, _, iter, body) => {
+    @ast.TsStmt::ForOf(_, _, _, iter, body)
+    | @ast.TsStmt::ForAwaitOf(_, _, _, iter, body)
+    | @ast.TsStmt::ForIn(_, _, _, iter, body) => {
       let (iter_ec, iter_rec) = count_expr_complexity(iter, func_name)
       let mut sc = 1
       let mut ec = iter_ec
@@ -274,15 +279,15 @@ fn count_stmt_complexity(
 
 ///|
 /// Count expression complexity (expr_count, has_recursion).
-fn count_expr_complexity(
-  expr : @ast.TsExpr,
-  func_name : String,
-) -> (Int, Bool) {
+fn count_expr_complexity(expr : @ast.TsExpr, func_name : String) -> (Int, Bool) {
   match expr {
     // Literals
-    @ast.TsExpr::IntLit(_) | @ast.TsExpr::NumberLit(_) |
-    @ast.TsExpr::StringLit(_) | @ast.TsExpr::BoolLit(_) |
-    @ast.TsExpr::NullLit | @ast.TsExpr::ArrayHole => (1, false)
+    @ast.TsExpr::IntLit(_)
+    | @ast.TsExpr::NumberLit(_)
+    | @ast.TsExpr::StringLit(_)
+    | @ast.TsExpr::BoolLit(_)
+    | @ast.TsExpr::NullLit
+    | @ast.TsExpr::ArrayHole => (1, false)
     // Variable
     @ast.TsExpr::Var(_) => (1, false)
     // Binary operation
@@ -377,8 +382,7 @@ fn count_expr_complexity(
       (1 + ec, rec)
     }
     // Arrow function / function expression - count as large
-    @ast.TsExpr::ArrowFunc(_, _, _) | @ast.TsExpr::FuncExpr(_) =>
-      (10, false) // Penalty for nested functions
+    @ast.TsExpr::ArrowFunc(_, _, _) | @ast.TsExpr::FuncExpr(_) => (10, false) // Penalty for nested functions
     _ => (1, false)
   }
 }
@@ -405,10 +409,7 @@ pub fn analyze_module_inline(module_ : @ast.TsModule) -> Array[InlineInfo] {
 
 ///|
 /// Count function calls in a function.
-fn count_function_calls(
-  func : @ast.TsFunc,
-  counts : Map[String, Int],
-) -> Unit {
+fn count_function_calls(func : @ast.TsFunc, counts : Map[String, Int]) -> Unit {
   for stmt in func.body.stmts {
     count_calls_in_stmt(stmt, counts)
   }
@@ -419,8 +420,9 @@ fn count_calls_in_stmt(stmt : @ast.TsStmt, counts : Map[String, Int]) -> Unit {
   match stmt {
     @ast.TsStmt::Expr(e) => count_calls_in_expr(e, counts)
     @ast.TsStmt::Return(Some(e)) => count_calls_in_expr(e, counts)
-    @ast.TsStmt::Var(_, _, init) | @ast.TsStmt::Let(_, _, init) |
-    @ast.TsStmt::Const(_, _, init) => count_calls_in_expr(init, counts)
+    @ast.TsStmt::Var(_, _, init)
+    | @ast.TsStmt::Let(_, _, init)
+    | @ast.TsStmt::Const(_, _, init) => count_calls_in_expr(init, counts)
     @ast.TsStmt::Assign(_, e) => count_calls_in_expr(e, counts)
     @ast.TsStmt::If(cond, then_block, else_block) => {
       count_calls_in_expr(cond, counts)

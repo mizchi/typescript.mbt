@@ -59,14 +59,47 @@ fn register_builtins(ctx : FlowTypeCtx) -> Unit {
 
   // Register Math object
   let math_type = ObjectType::new()
-  math_type.set_prop("floor", @ast.TsType::Func([@ast.TsType::Number], @ast.TsType::Int))
-  math_type.set_prop("ceil", @ast.TsType::Func([@ast.TsType::Number], @ast.TsType::Int))
-  math_type.set_prop("round", @ast.TsType::Func([@ast.TsType::Number], @ast.TsType::Int))
-  math_type.set_prop("abs", @ast.TsType::Func([@ast.TsType::Number], @ast.TsType::Number))
-  math_type.set_prop("sqrt", @ast.TsType::Func([@ast.TsType::Number], @ast.TsType::Number))
-  math_type.set_prop("pow", @ast.TsType::Func([@ast.TsType::Number, @ast.TsType::Number], @ast.TsType::Number))
-  math_type.set_prop("min", @ast.TsType::Func([@ast.TsType::Number, @ast.TsType::Number], @ast.TsType::Number))
-  math_type.set_prop("max", @ast.TsType::Func([@ast.TsType::Number, @ast.TsType::Number], @ast.TsType::Number))
+  math_type.set_prop(
+    "floor",
+    @ast.TsType::Func([@ast.TsType::Number], @ast.TsType::Int),
+  )
+  math_type.set_prop(
+    "ceil",
+    @ast.TsType::Func([@ast.TsType::Number], @ast.TsType::Int),
+  )
+  math_type.set_prop(
+    "round",
+    @ast.TsType::Func([@ast.TsType::Number], @ast.TsType::Int),
+  )
+  math_type.set_prop(
+    "abs",
+    @ast.TsType::Func([@ast.TsType::Number], @ast.TsType::Number),
+  )
+  math_type.set_prop(
+    "sqrt",
+    @ast.TsType::Func([@ast.TsType::Number], @ast.TsType::Number),
+  )
+  math_type.set_prop(
+    "pow",
+    @ast.TsType::Func(
+      [@ast.TsType::Number, @ast.TsType::Number],
+      @ast.TsType::Number,
+    ),
+  )
+  math_type.set_prop(
+    "min",
+    @ast.TsType::Func(
+      [@ast.TsType::Number, @ast.TsType::Number],
+      @ast.TsType::Number,
+    ),
+  )
+  math_type.set_prop(
+    "max",
+    @ast.TsType::Func(
+      [@ast.TsType::Number, @ast.TsType::Number],
+      @ast.TsType::Number,
+    ),
+  )
   math_type.set_prop("random", @ast.TsType::Func([], @ast.TsType::Number))
   math_type.set_prop("PI", @ast.TsType::Number)
   math_type.set_prop("E", @ast.TsType::Number)
@@ -93,10 +126,7 @@ fn register_func_type(ctx : FlowTypeCtx, func : @ast.TsFunc) -> Unit {
 
 ///|
 /// Type check a function.
-fn type_check_function(
-  ctx : FlowTypeCtx,
-  func : @ast.TsFunc,
-) -> @ast.TypedFunc {
+fn type_check_function(ctx : FlowTypeCtx, func : @ast.TsFunc) -> @ast.TypedFunc {
   ctx.enter_scope()
   ctx.base_ctx.expected_return = func.return_type
   ctx.return_types = []
@@ -151,7 +181,11 @@ fn type_check_stmt(
       // Check against expected return type
       if ctx.base_ctx.expected_return != @ast.TsType::Any {
         ctx.add_constraint(
-          Assignable(ret_type, ctx.base_ctx.expected_return, SourceLoc::unknown()),
+          Assignable(
+            ret_type,
+            ctx.base_ctx.expected_return,
+            SourceLoc::unknown(),
+          ),
         )
       }
     }
@@ -189,10 +223,9 @@ fn type_check_stmt(
         None => ()
       }
       match update {
-        Some(u) => {
+        Some(u) =>
           // update is a TsStmt, not TsExpr
           type_check_stmt(ctx, u, locals)
-        }
         None => ()
       }
       for s in body.stmts {
@@ -350,9 +383,7 @@ fn type_check_var_decl(
   let resolved = if declared == @ast.TsType::Any { init_type } else { declared }
   // Check initializer type matches declared type
   if declared != @ast.TsType::Any && init_type != @ast.TsType::Any {
-    ctx.add_constraint(
-      Assignable(init_type, declared, SourceLoc::unknown()),
-    )
+    ctx.add_constraint(Assignable(init_type, declared, SourceLoc::unknown()))
   }
   let names : Array[String] = []
   collect_binding_names(binding, names)
@@ -428,7 +459,6 @@ fn type_check_if(
     None => ()
   }
 }
-
 
 ///|
 /// Infer expression type with flow context.
@@ -535,6 +565,7 @@ fn infer_expr_flow(ctx : FlowTypeCtx, expr : @ast.TsExpr) -> @ast.TsType {
           // Still infer argument types for side effects
           for arg in args {
             let _ = infer_expr_flow(ctx, arg)
+
           }
           @ast.TsType::Any
         }
@@ -564,6 +595,7 @@ fn infer_expr_flow(ctx : FlowTypeCtx, expr : @ast.TsExpr) -> @ast.TsType {
           // Fallback: infer args and use method return type inference
           for arg in args {
             let _ = infer_expr_flow(ctx, arg)
+
           }
           infer_method_name_type(recv_type, method_name)
         }
@@ -581,7 +613,11 @@ fn infer_expr_flow(ctx : FlowTypeCtx, expr : @ast.TsExpr) -> @ast.TsType {
         @ast.TsType::Tuple(elems) =>
           match index {
             @ast.TsExpr::IntLit(i) =>
-              if i >= 0 && i < elems.length() { elems[i] } else { @ast.TsType::Any }
+              if i >= 0 && i < elems.length() {
+                elems[i]
+              } else {
+                @ast.TsType::Any
+              }
             _ => @ast.TsType::Any
           }
         @ast.TsType::String_ => @ast.TsType::String_
@@ -635,8 +671,7 @@ fn infer_expr_flow(ctx : FlowTypeCtx, expr : @ast.TsExpr) -> @ast.TsType {
       // Unwrap Promise type
       inner
     }
-    @ast.TsExpr::DynamicImport(_) =>
-      @ast.TsType::Any // Promise<Module>
+    @ast.TsExpr::DynamicImport(_) => @ast.TsType::Any // Promise<Module>
     @ast.TsExpr::ImportMeta => @ast.TsType::Any
   }
 }
@@ -666,7 +701,8 @@ fn infer_binop_flow(
     // Logical and/or return one of the operand types
     @ast.TsBinOp::And => right_type // Returns right if left is truthy
     @ast.TsBinOp::Or => union_types(left_type, right_type)
-    @ast.TsBinOp::Coalesce => union_types(remove_null_undefined(left_type), right_type)
+    @ast.TsBinOp::Coalesce =>
+      union_types(remove_null_undefined(left_type), right_type)
     // Add: string if either is string
     @ast.TsBinOp::Add =>
       if left_type == @ast.TsType::String_ || right_type == @ast.TsType::String_ {
@@ -692,32 +728,54 @@ fn infer_binop_flow(
 
 ///|
 /// Get the full function type for a method (including parameters).
-fn get_method_type(recv_type : @ast.TsType, method_name : String) -> @ast.TsType? {
+fn get_method_type(
+  recv_type : @ast.TsType,
+  method_name : String,
+) -> @ast.TsType? {
   match recv_type {
     @ast.TsType::String_ =>
       match method_name {
-        "charAt" => Some(@ast.TsType::Func([@ast.TsType::Int], @ast.TsType::String_))
-        "charCodeAt" => Some(@ast.TsType::Func([@ast.TsType::Int], @ast.TsType::Int))
+        "charAt" =>
+          Some(@ast.TsType::Func([@ast.TsType::Int], @ast.TsType::String_))
+        "charCodeAt" =>
+          Some(@ast.TsType::Func([@ast.TsType::Int], @ast.TsType::Int))
         "substring" | "slice" =>
-          Some(@ast.TsType::Func([@ast.TsType::Int, @ast.TsType::Int], @ast.TsType::String_))
+          Some(
+            @ast.TsType::Func(
+              [@ast.TsType::Int, @ast.TsType::Int],
+              @ast.TsType::String_,
+            ),
+          )
         "indexOf" | "lastIndexOf" =>
           Some(@ast.TsType::Func([@ast.TsType::String_], @ast.TsType::Int))
         "startsWith" | "endsWith" | "includes" =>
           Some(@ast.TsType::Func([@ast.TsType::String_], @ast.TsType::Boolean))
         "split" =>
-          Some(@ast.TsType::Func([@ast.TsType::String_], @ast.TsType::Array(@ast.TsType::String_)))
+          Some(
+            @ast.TsType::Func(
+              [@ast.TsType::String_],
+              @ast.TsType::Array(@ast.TsType::String_),
+            ),
+          )
         "repeat" =>
           Some(@ast.TsType::Func([@ast.TsType::Int], @ast.TsType::String_))
         "padStart" | "padEnd" =>
-          Some(@ast.TsType::Func([@ast.TsType::Int, @ast.TsType::String_], @ast.TsType::String_))
+          Some(
+            @ast.TsType::Func(
+              [@ast.TsType::Int, @ast.TsType::String_],
+              @ast.TsType::String_,
+            ),
+          )
         _ => None
       }
     @ast.TsType::Array(elem) =>
       match method_name {
         "push" => Some(@ast.TsType::Func([elem], @ast.TsType::Int))
-        "indexOf" | "lastIndexOf" => Some(@ast.TsType::Func([elem], @ast.TsType::Int))
+        "indexOf" | "lastIndexOf" =>
+          Some(@ast.TsType::Func([elem], @ast.TsType::Int))
         "includes" => Some(@ast.TsType::Func([elem], @ast.TsType::Boolean))
-        "join" => Some(@ast.TsType::Func([@ast.TsType::String_], @ast.TsType::String_))
+        "join" =>
+          Some(@ast.TsType::Func([@ast.TsType::String_], @ast.TsType::String_))
         "at" => Some(@ast.TsType::Func([@ast.TsType::Int], elem))
         "fill" => Some(@ast.TsType::Func([elem], @ast.TsType::Array(elem)))
         _ => None
@@ -742,16 +800,35 @@ fn get_method_type(recv_type : @ast.TsType, method_name : String) -> @ast.TsType
 
 ///|
 /// Infer method_name return type.
-fn infer_method_name_type(recv_type : @ast.TsType, method_name : String) -> @ast.TsType {
+fn infer_method_name_type(
+  recv_type : @ast.TsType,
+  method_name : String,
+) -> @ast.TsType {
   match recv_type {
     @ast.TsType::String_ =>
       match method_name {
-        "charAt" | "substring" | "slice" | "substr" | "concat" | "repeat" |
-        "trim" | "trimStart" | "trimEnd" | "toLowerCase" | "toUpperCase" |
-        "padStart" | "padEnd" | "replace" | "replaceAll" | "normalize" =>
-          @ast.TsType::String_
-        "charCodeAt" | "codePointAt" | "indexOf" | "lastIndexOf" |
-        "localeCompare" | "search" => @ast.TsType::Int
+        "charAt"
+        | "substring"
+        | "slice"
+        | "substr"
+        | "concat"
+        | "repeat"
+        | "trim"
+        | "trimStart"
+        | "trimEnd"
+        | "toLowerCase"
+        | "toUpperCase"
+        | "padStart"
+        | "padEnd"
+        | "replace"
+        | "replaceAll"
+        | "normalize" => @ast.TsType::String_
+        "charCodeAt"
+        | "codePointAt"
+        | "indexOf"
+        | "lastIndexOf"
+        | "localeCompare"
+        | "search" => @ast.TsType::Int
         "split" => @ast.TsType::Array(@ast.TsType::String_)
         "match" | "matchAll" => @ast.TsType::Array(@ast.TsType::String_)
         "startsWith" | "endsWith" | "includes" => @ast.TsType::Boolean
@@ -762,8 +839,16 @@ fn infer_method_name_type(recv_type : @ast.TsType, method_name : String) -> @ast
       match method_name {
         "push" | "unshift" => @ast.TsType::Int
         "pop" | "shift" | "at" | "find" => elem
-        "slice" | "concat" | "filter" | "map" | "flatMap" | "reverse" |
-        "sort" | "fill" | "copyWithin" | "flat" => @ast.TsType::Array(elem)
+        "slice"
+        | "concat"
+        | "filter"
+        | "map"
+        | "flatMap"
+        | "reverse"
+        | "sort"
+        | "fill"
+        | "copyWithin"
+        | "flat" => @ast.TsType::Array(elem)
         "join" | "toString" | "toLocaleString" => @ast.TsType::String_
         "indexOf" | "lastIndexOf" | "findIndex" | "findLastIndex" =>
           @ast.TsType::Int
@@ -777,8 +862,11 @@ fn infer_method_name_type(recv_type : @ast.TsType, method_name : String) -> @ast
       }
     @ast.TsType::Number | @ast.TsType::Int =>
       match method_name {
-        "toString" | "toFixed" | "toExponential" | "toPrecision" |
-        "toLocaleString" => @ast.TsType::String_
+        "toString"
+        | "toFixed"
+        | "toExponential"
+        | "toPrecision"
+        | "toLocaleString" => @ast.TsType::String_
         _ => @ast.TsType::Any
       }
     @ast.TsType::Object(props) =>
@@ -808,9 +896,17 @@ fn infer_prop_type(
 ) -> @ast.TsType {
   match obj_type {
     @ast.TsType::String_ =>
-      if prop == "length" { @ast.TsType::Int } else { @ast.TsType::Any }
+      if prop == "length" {
+        @ast.TsType::Int
+      } else {
+        @ast.TsType::Any
+      }
     @ast.TsType::Array(_) =>
-      if prop == "length" { @ast.TsType::Int } else { @ast.TsType::Any }
+      if prop == "length" {
+        @ast.TsType::Int
+      } else {
+        @ast.TsType::Any
+      }
     @ast.TsType::Object(props) =>
       for p in props {
         match p.0 {

@@ -162,10 +162,7 @@ pub fn is_assignable(a : @ast.TsType, b : @ast.TsType) -> Bool {
     (_, @ast.TsType::Intersection(types)) =>
       types.iter().all(fn(t) { is_assignable(a, t) })
     // Function type compatibility
-    (
-      @ast.TsType::Func(params_a, ret_a),
-      @ast.TsType::Func(params_b, ret_b),
-    ) => {
+    (@ast.TsType::Func(params_a, ret_a), @ast.TsType::Func(params_b, ret_b)) => {
       // Contravariant parameters, covariant return
       if params_a.length() != params_b.length() {
         return false
@@ -190,13 +187,14 @@ pub fn is_assignable(a : @ast.TsType, b : @ast.TsType) -> Bool {
       true
     }
     // Object types - structural compatibility
-    (
-      @ast.TsType::Object(props_a),
-      @ast.TsType::Object(props_b),
-    ) =>
+    (@ast.TsType::Object(props_a), @ast.TsType::Object(props_b)) =>
       // All properties in b must exist in a with compatible types
-      props_b.iter().all(fn(prop_b) {
-        props_a.iter().any(fn(prop_a) {
+      props_b
+      .iter()
+      .all(fn(prop_b) {
+        props_a
+        .iter()
+        .any(fn(prop_a) {
           match (prop_a.0, prop_b.0) {
             (@ast.TsType::Literal(name_a), @ast.TsType::Literal(name_b)) =>
               name_a == name_b && is_assignable(prop_a.1, prop_b.1)
@@ -240,10 +238,7 @@ pub fn ConstraintSolver::solve(self : ConstraintSolver) -> Unit {
 
 ///|
 /// Get narrowed type after a type guard.
-pub fn narrow_type(
-  base_type : @ast.TsType,
-  guard_type : String,
-) -> @ast.TsType {
+pub fn narrow_type(base_type : @ast.TsType, guard_type : String) -> @ast.TsType {
   match guard_type {
     "string" => @ast.TsType::String_
     "number" => @ast.TsType::Number
@@ -303,9 +298,8 @@ fn type_to_typeof_string(t : @ast.TsType) -> String {
     @ast.TsType::Undefined | @ast.TsType::Void => "undefined"
     @ast.TsType::Func(_, _) => "function"
     @ast.TsType::Null => "object"
-    @ast.TsType::Object(_)
-    | @ast.TsType::Array(_)
-    | @ast.TsType::Tuple(_) => "object"
+    @ast.TsType::Object(_) | @ast.TsType::Array(_) | @ast.TsType::Tuple(_) =>
+      "object"
     @ast.TsType::Symbol => "symbol"
     @ast.TsType::BigInt => "bigint"
     _ => "object"

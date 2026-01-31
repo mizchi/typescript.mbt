@@ -31,8 +31,8 @@ pub fn BasicBlock::new(id : Int) -> BasicBlock {
 /// Control Flow Graph for a function.
 pub(all) struct CFG {
   blocks : Array[BasicBlock]
-  entry : Int  // Entry block ID
-  exits : Array[Int]  // Exit block IDs
+  entry : Int // Entry block ID
+  exits : Array[Int] // Exit block IDs
   // Dead code (unreachable blocks)
   dead_blocks : Array[Int]
 }

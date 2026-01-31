@@ -107,14 +107,20 @@ fn eval_int_binop(op : @ast.TsBinOp, a : Int, b : Int) -> ConstValue {
     @ast.TsBinOp::Add => Int(a + b)
     @ast.TsBinOp::Sub => Int(a - b)
     @ast.TsBinOp::Mul => Int(a * b)
-    @ast.TsBinOp::Div => if b != 0 { Number(a.to_double() / b.to_double()) } else { NotConst }
+    @ast.TsBinOp::Div =>
+      if b != 0 {
+        Number(a.to_double() / b.to_double())
+      } else {
+        NotConst
+      }
     @ast.TsBinOp::Mod => if b != 0 { Int(a % b) } else { NotConst }
     @ast.TsBinOp::BitAnd => Int(a & b)
     @ast.TsBinOp::BitOr => Int(a | b)
     @ast.TsBinOp::BitXor => Int(a ^ b)
     @ast.TsBinOp::Shl => Int(a << b)
     @ast.TsBinOp::Shr => Int(a >> b)
-    @ast.TsBinOp::UShr => Int((a.reinterpret_as_uint() >> b).reinterpret_as_int())
+    @ast.TsBinOp::UShr =>
+      Int((a.reinterpret_as_uint() >> b).reinterpret_as_int())
     @ast.TsBinOp::BinLt => Boolean(a < b)
     @ast.TsBinOp::BinLe => Boolean(a <= b)
     @ast.TsBinOp::BinGt => Boolean(a > b)

@@ -108,13 +108,16 @@ fn collect_modified_vars(stmt : @ast.TsStmt, vars : Array[String]) -> Unit {
 }
 
 ///|
-fn collect_modified_vars_in_expr(expr : @ast.TsExpr, vars : Array[String]) -> Unit {
+fn collect_modified_vars_in_expr(
+  expr : @ast.TsExpr,
+  vars : Array[String],
+) -> Unit {
   match expr {
     @ast.TsExpr::AssignExpr(name, _) =>
       if not(vars.contains(name)) {
         vars.push(name)
       }
-    @ast.TsExpr::CompoundAssignExpr(target, _, _) => {
+    @ast.TsExpr::CompoundAssignExpr(target, _, _) =>
       match target {
         @ast.TsExpr::Var(name) =>
           if not(vars.contains(name)) {
@@ -122,11 +125,12 @@ fn collect_modified_vars_in_expr(expr : @ast.TsExpr, vars : Array[String]) -> Un
           }
         _ => ()
       }
-    }
     @ast.TsExpr::UnaryOp(op, operand) =>
       match op {
-        @ast.TsUnaryOp::PreInc | @ast.TsUnaryOp::PreDec |
-        @ast.TsUnaryOp::PostInc | @ast.TsUnaryOp::PostDec =>
+        @ast.TsUnaryOp::PreInc
+        | @ast.TsUnaryOp::PreDec
+        | @ast.TsUnaryOp::PostInc
+        | @ast.TsUnaryOp::PostDec =>
           match operand {
             @ast.TsExpr::Var(name) =>
               if not(vars.contains(name)) {
@@ -171,12 +175,16 @@ fn collect_modified_vars_in_expr(expr : @ast.TsExpr, vars : Array[String]) -> Un
 
 ///|
 /// Find invariant expressions in a statement.
-fn find_invariants_in_stmt(stmt : @ast.TsStmt, info : LoopInvariantInfo) -> Unit {
+fn find_invariants_in_stmt(
+  stmt : @ast.TsStmt,
+  info : LoopInvariantInfo,
+) -> Unit {
   match stmt {
     @ast.TsStmt::Expr(e) => find_invariants_in_expr(e, info)
     @ast.TsStmt::Return(Some(e)) => find_invariants_in_expr(e, info)
-    @ast.TsStmt::Var(_, _, init) | @ast.TsStmt::Let(_, _, init) |
-    @ast.TsStmt::Const(_, _, init) => find_invariants_in_expr(init, info)
+    @ast.TsStmt::Var(_, _, init)
+    | @ast.TsStmt::Let(_, _, init)
+    | @ast.TsStmt::Const(_, _, init) => find_invariants_in_expr(init, info)
     @ast.TsStmt::Assign(_, e) => find_invariants_in_expr(e, info)
     @ast.TsStmt::If(cond, then_block, else_block) => {
       find_invariants_in_expr(cond, info)
@@ -201,7 +209,10 @@ fn find_invariants_in_stmt(stmt : @ast.TsStmt, info : LoopInvariantInfo) -> Unit
 
 ///|
 /// Find invariant expressions.
-fn find_invariants_in_expr(expr : @ast.TsExpr, info : LoopInvariantInfo) -> Unit {
+fn find_invariants_in_expr(
+  expr : @ast.TsExpr,
+  info : LoopInvariantInfo,
+) -> Unit {
   // Check if this expression is loop invariant
   if is_loop_invariant(expr, info.modified_vars) {
     let deps : Array[String] = []
@@ -255,9 +266,12 @@ fn find_invariants_in_expr(expr : @ast.TsExpr, info : LoopInvariantInfo) -> Unit
 fn is_loop_invariant(expr : @ast.TsExpr, modified : Array[String]) -> Bool {
   match expr {
     // Literals are always invariant
-    @ast.TsExpr::IntLit(_) | @ast.TsExpr::NumberLit(_) |
-    @ast.TsExpr::StringLit(_) | @ast.TsExpr::BoolLit(_) |
-    @ast.TsExpr::NullLit | @ast.TsExpr::ArrayHole => true
+    @ast.TsExpr::IntLit(_)
+    | @ast.TsExpr::NumberLit(_)
+    | @ast.TsExpr::StringLit(_)
+    | @ast.TsExpr::BoolLit(_)
+    | @ast.TsExpr::NullLit
+    | @ast.TsExpr::ArrayHole => true
     // Variable is invariant if not modified
     @ast.TsExpr::Var(name) => not(modified.contains(name))
     // Binary op is invariant if both operands are
@@ -267,8 +281,10 @@ fn is_loop_invariant(expr : @ast.TsExpr, modified : Array[String]) -> Bool {
     @ast.TsExpr::UnaryOp(op, operand) =>
       match op {
         // Inc/dec modify the variable
-        @ast.TsUnaryOp::PreInc | @ast.TsUnaryOp::PreDec |
-        @ast.TsUnaryOp::PostInc | @ast.TsUnaryOp::PostDec => false
+        @ast.TsUnaryOp::PreInc
+        | @ast.TsUnaryOp::PreDec
+        | @ast.TsUnaryOp::PostInc
+        | @ast.TsUnaryOp::PostDec => false
         _ => is_loop_invariant(operand, modified)
       }
     // Property access is invariant if object is and method is pure
@@ -282,11 +298,13 @@ fn is_loop_invariant(expr : @ast.TsExpr, modified : Array[String]) -> Bool {
     // Index access is usually not invariant (array may change)
     @ast.TsExpr::IndexAccess(_, _) => false
     // Calls are usually not invariant (may have side effects)
-    @ast.TsExpr::Call(_, _) | @ast.TsExpr::CallExpr(_, _) |
-    @ast.TsExpr::MethodCall(_, _, _) => false
+    @ast.TsExpr::Call(_, _)
+    | @ast.TsExpr::CallExpr(_, _)
+    | @ast.TsExpr::MethodCall(_, _, _) => false
     // Assignments are never invariant
-    @ast.TsExpr::AssignExpr(_, _) | @ast.TsExpr::AssignPattern(_, _) |
-    @ast.TsExpr::CompoundAssignExpr(_, _, _) => false
+    @ast.TsExpr::AssignExpr(_, _)
+    | @ast.TsExpr::AssignPattern(_, _)
+    | @ast.TsExpr::CompoundAssignExpr(_, _, _) => false
     // Conditional is invariant if all parts are
     @ast.TsExpr::Cond(cond, then_e, else_e) =>
       is_loop_invariant(cond, modified) &&
@@ -300,10 +318,7 @@ fn is_loop_invariant(expr : @ast.TsExpr, modified : Array[String]) -> Bool {
 /// Collect variable dependencies of an expression.
 fn collect_var_deps(expr : @ast.TsExpr, deps : Array[String]) -> Unit {
   match expr {
-    @ast.TsExpr::Var(name) =>
-      if not(deps.contains(name)) {
-        deps.push(name)
-      }
+    @ast.TsExpr::Var(name) => if not(deps.contains(name)) { deps.push(name) }
     @ast.TsExpr::BinOp(_, left, right) => {
       collect_var_deps(left, deps)
       collect_var_deps(right, deps)
@@ -351,9 +366,9 @@ fn find_loops_and_analyze(
       results.push(analyze_loop_invariants(Some(cond), body))
     @ast.TsStmt::For(_, cond, _, body) =>
       results.push(analyze_loop_invariants(cond, body))
-    @ast.TsStmt::ForOf(_, _, _, _, body) |
-    @ast.TsStmt::ForAwaitOf(_, _, _, _, body) |
-    @ast.TsStmt::ForIn(_, _, _, _, body) =>
+    @ast.TsStmt::ForOf(_, _, _, _, body)
+    | @ast.TsStmt::ForAwaitOf(_, _, _, _, body)
+    | @ast.TsStmt::ForIn(_, _, _, _, body) =>
       results.push(analyze_loop_invariants(None, body))
     @ast.TsStmt::If(_, then_block, else_block) => {
       for s in then_block.stmts {

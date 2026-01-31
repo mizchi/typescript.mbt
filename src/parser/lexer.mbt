@@ -287,6 +287,7 @@ fn Lexer::skip_whitespace(self : Lexer) -> Unit {
       }
       Some(' ') | Some('\t') => {
         let _ = self.advance()
+
       }
       Some('\n') | Some('\r') => {
         self.newline_before_next = true

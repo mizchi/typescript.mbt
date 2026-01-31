@@ -3,9 +3,9 @@
 ///|
 /// Reference count operation.
 pub(all) enum RefOp {
-  Incref(String)     // Increment reference count
-  Decref(String)     // Decrement reference count
-  Move(String)       // Transfer ownership (no ref change)
+  Incref(String) // Increment reference count
+  Decref(String) // Decrement reference count
+  Move(String) // Transfer ownership (no ref change)
 } derive(Show)
 
 ///|
@@ -37,7 +37,7 @@ pub fn RefCountInfo::new() -> RefCountInfo {
 /// Analyze a function for reference counting operations.
 pub fn analyze_refcount(
   func : @ast.TsFunc,
-  type_info : Map[String, @ast.TsType]
+  type_info : Map[String, @ast.TsType],
 ) -> RefCountInfo {
   let info = RefCountInfo::new()
   let liveness = analyze_liveness(func)
@@ -58,7 +58,6 @@ pub fn analyze_refcount(
     stmt_idx = stmt_idx + 1
     analyze_stmt_refcount(stmt, stmt_idx, info, aliases, liveness, type_info)
   }
-
   info
 }
 
@@ -69,30 +68,33 @@ fn analyze_stmt_refcount(
   info : RefCountInfo,
   aliases : AliasInfo,
   liveness : LivenessInfo,
-  type_info : Map[String, @ast.TsType]
+  type_info : Map[String, @ast.TsType],
 ) -> Unit {
   match stmt {
     // Variable declaration with initializer
-    @ast.TsStmt::Var(binding, _, init) |
-    @ast.TsStmt::Let(binding, _, init) |
-    @ast.TsStmt::Const(binding, _, init) => {
+    @ast.TsStmt::Var(binding, _, init)
+    | @ast.TsStmt::Let(binding, _, init)
+    | @ast.TsStmt::Const(binding, _, init) => {
       let names : Array[String] = []
       collect_binding_names(binding, names)
-
       for name in names {
         // Check if this is a copy of another variable (needs incref)
         match init {
-          @ast.TsExpr::Var(source) => {
+          @ast.TsExpr::Var(source) =>
             // Copying from another variable
             if is_rc_var(source, info, type_info) {
-              info.ops.push({ stmt_index: idx, op: Incref(name), is_before: false })
+              info.ops.push({
+                stmt_index: idx,
+                op: Incref(name),
+                is_before: false,
+              })
             }
-          }
           // Object/array literal - already has refcount 1
           @ast.TsExpr::ObjectLit(_) | @ast.TsExpr::ArrayLit(_) => ()
           // Function call result - returned with refcount 1
-          @ast.TsExpr::Call(_, _) | @ast.TsExpr::CallExpr(_, _) |
-          @ast.TsExpr::MethodCall(_, _, _) => ()
+          @ast.TsExpr::Call(_, _)
+          | @ast.TsExpr::CallExpr(_, _)
+          | @ast.TsExpr::MethodCall(_, _, _) => ()
           _ => ()
         }
       }
@@ -106,18 +108,21 @@ fn analyze_stmt_refcount(
 
       // New value may need incref
       match value {
-        @ast.TsExpr::Var(source) => {
+        @ast.TsExpr::Var(source) =>
           if is_rc_var(source, info, type_info) {
-            info.ops.push({ stmt_index: idx, op: Incref(name), is_before: false })
+            info.ops.push({
+              stmt_index: idx,
+              op: Incref(name),
+              is_before: false,
+            })
           }
-        }
         _ => ()
       }
     }
     // Return - may transfer ownership
-    @ast.TsStmt::Return(Some(e)) => {
+    @ast.TsStmt::Return(Some(e)) =>
       match e {
-        @ast.TsExpr::Var(name) => {
+        @ast.TsExpr::Var(name) =>
           // Returning transfers ownership - mark as moved
           if is_rc_var(name, info, type_info) {
             if not(info.moved_vars.contains(name)) {
@@ -125,10 +130,8 @@ fn analyze_stmt_refcount(
             }
             info.ops.push({ stmt_index: idx, op: Move(name), is_before: false })
           }
-        }
         _ => ()
       }
-    }
     // Function call - arguments may be borrowed or consumed
     @ast.TsStmt::Expr(e) => analyze_expr_refcount(e, idx, info, type_info)
     _ => ()
@@ -141,7 +144,11 @@ fn analyze_stmt_refcount(
       if not(info.moved_vars.contains(var_name)) {
         // Check if this is the last alias
         if is_unique(aliases, var_name) {
-          info.ops.push({ stmt_index: idx, op: Decref(var_name), is_before: false })
+          info.ops.push({
+            stmt_index: idx,
+            op: Decref(var_name),
+            is_before: false,
+          })
         }
       }
     }
@@ -153,43 +160,59 @@ fn analyze_expr_refcount(
   expr : @ast.TsExpr,
   idx : Int,
   info : RefCountInfo,
-  type_info : Map[String, @ast.TsType]
+  type_info : Map[String, @ast.TsType],
 ) -> Unit {
   match expr {
     // Function call with arguments
-    @ast.TsExpr::Call(_, args) | @ast.TsExpr::CallExpr(_, args) => {
+    @ast.TsExpr::Call(_, args) | @ast.TsExpr::CallExpr(_, args) =>
       for arg in args {
         match arg {
-          @ast.TsExpr::Var(name) => {
+          @ast.TsExpr::Var(name) =>
             // Arguments are borrowed by default (incref before, decref after)
             if is_rc_var(name, info, type_info) {
-              info.ops.push({ stmt_index: idx, op: Incref(name), is_before: true })
-              info.ops.push({ stmt_index: idx, op: Decref(name), is_before: false })
+              info.ops.push({
+                stmt_index: idx,
+                op: Incref(name),
+                is_before: true,
+              })
+              info.ops.push({
+                stmt_index: idx,
+                op: Decref(name),
+                is_before: false,
+              })
             }
-          }
           _ => ()
         }
       }
-    }
     @ast.TsExpr::MethodCall(recv, _, args) => {
       // Receiver is borrowed
       match recv {
-        @ast.TsExpr::Var(name) => {
+        @ast.TsExpr::Var(name) =>
           if is_rc_var(name, info, type_info) {
             info.ops.push({ stmt_index: idx, op: Incref(name), is_before: true })
-            info.ops.push({ stmt_index: idx, op: Decref(name), is_before: false })
+            info.ops.push({
+              stmt_index: idx,
+              op: Decref(name),
+              is_before: false,
+            })
           }
-        }
         _ => ()
       }
       for arg in args {
         match arg {
-          @ast.TsExpr::Var(name) => {
+          @ast.TsExpr::Var(name) =>
             if is_rc_var(name, info, type_info) {
-              info.ops.push({ stmt_index: idx, op: Incref(name), is_before: true })
-              info.ops.push({ stmt_index: idx, op: Decref(name), is_before: false })
+              info.ops.push({
+                stmt_index: idx,
+                op: Incref(name),
+                is_before: true,
+              })
+              info.ops.push({
+                stmt_index: idx,
+                op: Decref(name),
+                is_before: false,
+              })
             }
-          }
           _ => ()
         }
       }
@@ -202,7 +225,7 @@ fn analyze_expr_refcount(
 fn is_rc_var(
   name : String,
   info : RefCountInfo,
-  type_info : Map[String, @ast.TsType]
+  type_info : Map[String, @ast.TsType],
 ) -> Bool {
   // Check if already in rc_vars list
   if info.rc_vars.contains(name) {
@@ -217,11 +240,16 @@ fn is_rc_var(
 
 ///|
 /// Get all refcount operations at a specific statement.
-pub fn get_ops_at(info : RefCountInfo, stmt_index : Int, before : Bool) -> Array[RefOp] {
-  info.ops.iter()
-    .filter(fn(p) { p.stmt_index == stmt_index && p.is_before == before })
-    .map(fn(p) { p.op })
-    .collect()
+pub fn get_ops_at(
+  info : RefCountInfo,
+  stmt_index : Int,
+  before : Bool,
+) -> Array[RefOp] {
+  info.ops
+  .iter()
+  .filter(fn(p) { p.stmt_index == stmt_index && p.is_before == before })
+  .map(fn(p) { p.op })
+  .collect()
 }
 
 ///|

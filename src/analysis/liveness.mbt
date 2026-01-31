@@ -122,16 +122,19 @@ pub fn analyze_liveness(func : @ast.TsFunc) -> LivenessInfo {
       }
     }
   }
-
   info
 }
 
 ///|
-fn collect_uses_in_stmt(stmt : @ast.TsStmt, idx : Int, info : LivenessInfo) -> Unit {
+fn collect_uses_in_stmt(
+  stmt : @ast.TsStmt,
+  idx : Int,
+  info : LivenessInfo,
+) -> Unit {
   match stmt {
-    @ast.TsStmt::Var(binding, _, init) |
-    @ast.TsStmt::Let(binding, _, init) |
-    @ast.TsStmt::Const(binding, _, init) => {
+    @ast.TsStmt::Var(binding, _, init)
+    | @ast.TsStmt::Let(binding, _, init)
+    | @ast.TsStmt::Const(binding, _, init) => {
       // Definition is a write
       let names : Array[String] = []
       collect_binding_names(binding, names)
@@ -166,9 +169,10 @@ fn collect_uses_in_stmt(stmt : @ast.TsStmt, idx : Int, info : LivenessInfo) -> U
         collect_uses_in_stmt(s, idx, info)
       }
       match else_block {
-        Some(eb) => for s in eb.stmts {
-          collect_uses_in_stmt(s, idx, info)
-        }
+        Some(eb) =>
+          for s in eb.stmts {
+            collect_uses_in_stmt(s, idx, info)
+          }
         None => ()
       }
     }
@@ -195,9 +199,9 @@ fn collect_uses_in_stmt(stmt : @ast.TsStmt, idx : Int, info : LivenessInfo) -> U
         collect_uses_in_stmt(s, idx, info)
       }
     }
-    @ast.TsStmt::ForOf(_, binding, _, iter, body) |
-    @ast.TsStmt::ForAwaitOf(_, binding, _, iter, body) |
-    @ast.TsStmt::ForIn(_, binding, _, iter, body) => {
+    @ast.TsStmt::ForOf(_, binding, _, iter, body)
+    | @ast.TsStmt::ForAwaitOf(_, binding, _, iter, body)
+    | @ast.TsStmt::ForIn(_, binding, _, iter, body) => {
       let names : Array[String] = []
       collect_binding_names(binding, names)
       for name in names {
@@ -208,11 +212,10 @@ fn collect_uses_in_stmt(stmt : @ast.TsStmt, idx : Int, info : LivenessInfo) -> U
         collect_uses_in_stmt(s, idx, info)
       }
     }
-    @ast.TsStmt::Block(block) => {
+    @ast.TsStmt::Block(block) =>
       for s in block.stmts {
         collect_uses_in_stmt(s, idx, info)
       }
-    }
     @ast.TsStmt::Throw(e) => {
       mark_expr_escapes(e, info)
       collect_uses_in_expr(e, idx, false, info)
@@ -232,15 +235,17 @@ fn collect_uses_in_stmt(stmt : @ast.TsStmt, idx : Int, info : LivenessInfo) -> U
         None => ()
       }
       match catch_block {
-        Some(cb) => for s in cb.stmts {
-          collect_uses_in_stmt(s, idx, info)
-        }
+        Some(cb) =>
+          for s in cb.stmts {
+            collect_uses_in_stmt(s, idx, info)
+          }
         None => ()
       }
       match finally_block {
-        Some(fb) => for s in fb.stmts {
-          collect_uses_in_stmt(s, idx, info)
-        }
+        Some(fb) =>
+          for s in fb.stmts {
+            collect_uses_in_stmt(s, idx, info)
+          }
         None => ()
       }
     }
@@ -249,7 +254,12 @@ fn collect_uses_in_stmt(stmt : @ast.TsStmt, idx : Int, info : LivenessInfo) -> U
 }
 
 ///|
-fn collect_uses_in_expr(expr : @ast.TsExpr, idx : Int, is_write : Bool, info : LivenessInfo) -> Unit {
+fn collect_uses_in_expr(
+  expr : @ast.TsExpr,
+  idx : Int,
+  is_write : Bool,
+  info : LivenessInfo,
+) -> Unit {
   match expr {
     @ast.TsExpr::Var(name) => record_use(name, idx, is_write, info)
     @ast.TsExpr::BinOp(_, left, right) => {
@@ -258,19 +268,20 @@ fn collect_uses_in_expr(expr : @ast.TsExpr, idx : Int, is_write : Bool, info : L
     }
     @ast.TsExpr::UnaryOp(op, operand) => {
       let writes = match op {
-        @ast.TsUnaryOp::PreInc | @ast.TsUnaryOp::PreDec |
-        @ast.TsUnaryOp::PostInc | @ast.TsUnaryOp::PostDec => true
+        @ast.TsUnaryOp::PreInc
+        | @ast.TsUnaryOp::PreDec
+        | @ast.TsUnaryOp::PostInc
+        | @ast.TsUnaryOp::PostDec => true
         _ => false
       }
       collect_uses_in_expr(operand, idx, writes, info)
     }
-    @ast.TsExpr::Call(_, args) => {
+    @ast.TsExpr::Call(_, args) =>
       // Arguments passed to functions may escape
       for arg in args {
         mark_expr_escapes(arg, info)
         collect_uses_in_expr(arg, idx, false, info)
       }
-    }
     @ast.TsExpr::CallExpr(callee, args) => {
       collect_uses_in_expr(callee, idx, false, info)
       for arg in args {
@@ -285,21 +296,20 @@ fn collect_uses_in_expr(expr : @ast.TsExpr, idx : Int, is_write : Bool, info : L
         collect_uses_in_expr(arg, idx, false, info)
       }
     }
-    @ast.TsExpr::PropAccess(obj, _) => collect_uses_in_expr(obj, idx, false, info)
+    @ast.TsExpr::PropAccess(obj, _) =>
+      collect_uses_in_expr(obj, idx, false, info)
     @ast.TsExpr::IndexAccess(arr, index) => {
       collect_uses_in_expr(arr, idx, false, info)
       collect_uses_in_expr(index, idx, false, info)
     }
-    @ast.TsExpr::ArrayLit(elements) => {
+    @ast.TsExpr::ArrayLit(elements) =>
       for elem in elements {
         collect_uses_in_expr(elem, idx, false, info)
       }
-    }
-    @ast.TsExpr::ObjectLit(props) => {
+    @ast.TsExpr::ObjectLit(props) =>
       for prop in props {
         collect_uses_in_expr(prop.1, idx, false, info)
       }
-    }
     @ast.TsExpr::Cond(cond, then_e, else_e) => {
       collect_uses_in_expr(cond, idx, false, info)
       collect_uses_in_expr(then_e, idx, false, info)
@@ -320,25 +330,29 @@ fn collect_uses_in_expr(expr : @ast.TsExpr, idx : Int, is_write : Bool, info : L
         param_names.push(p.name)
       }
       match body {
-        @ast.TsArrowBody::ArrowExpr(e) => find_captured_in_expr(e, param_names, info)
-        @ast.TsArrowBody::ArrowBlock(block) => {
+        @ast.TsArrowBody::ArrowExpr(e) =>
+          find_captured_in_expr(e, param_names, info)
+        @ast.TsArrowBody::ArrowBlock(block) =>
           for s in block.stmts {
             find_captured_in_stmt(s, param_names, info)
           }
-        }
       }
     }
-    @ast.TsExpr::TemplateLiteral(_, exprs) => {
+    @ast.TsExpr::TemplateLiteral(_, exprs) =>
       for e in exprs {
         collect_uses_in_expr(e, idx, false, info)
       }
-    }
     _ => ()
   }
 }
 
 ///|
-fn record_use(name : String, idx : Int, _is_write : Bool, info : LivenessInfo) -> Unit {
+fn record_use(
+  name : String,
+  idx : Int,
+  _is_write : Bool,
+  info : LivenessInfo,
+) -> Unit {
   match info.lifetimes.get(name) {
     Some(lifetime) => {
       lifetime.uses.push({ stmt_index: idx })
@@ -364,22 +378,19 @@ fn record_use(name : String, idx : Int, _is_write : Bool, info : LivenessInfo) -
 ///|
 fn mark_expr_escapes(expr : @ast.TsExpr, info : LivenessInfo) -> Unit {
   match expr {
-    @ast.TsExpr::Var(name) => {
+    @ast.TsExpr::Var(name) =>
       match info.lifetimes.get(name) {
         Some(lifetime) => lifetime.escapes = true
         None => ()
       }
-    }
-    @ast.TsExpr::ArrayLit(elements) => {
+    @ast.TsExpr::ArrayLit(elements) =>
       for elem in elements {
         mark_expr_escapes(elem, info)
       }
-    }
-    @ast.TsExpr::ObjectLit(props) => {
+    @ast.TsExpr::ObjectLit(props) =>
       for prop in props {
         mark_expr_escapes(prop.1, info)
       }
-    }
     _ => ()
   }
 }
@@ -388,9 +399,9 @@ fn mark_expr_escapes(expr : @ast.TsExpr, info : LivenessInfo) -> Unit {
 fn find_captured_vars(stmt : @ast.TsStmt, info : LivenessInfo) -> Unit {
   match stmt {
     @ast.TsStmt::Expr(e) => find_captured_in_top_expr(e, info)
-    @ast.TsStmt::Var(_, _, init) |
-    @ast.TsStmt::Let(_, _, init) |
-    @ast.TsStmt::Const(_, _, init) => find_captured_in_top_expr(init, info)
+    @ast.TsStmt::Var(_, _, init)
+    | @ast.TsStmt::Let(_, _, init)
+    | @ast.TsStmt::Const(_, _, init) => find_captured_in_top_expr(init, info)
     @ast.TsStmt::Return(Some(e)) => find_captured_in_top_expr(e, info)
     @ast.TsStmt::If(cond, then_block, else_block) => {
       find_captured_in_top_expr(cond, info)
@@ -398,17 +409,17 @@ fn find_captured_vars(stmt : @ast.TsStmt, info : LivenessInfo) -> Unit {
         find_captured_vars(s, info)
       }
       match else_block {
-        Some(eb) => for s in eb.stmts {
-          find_captured_vars(s, info)
-        }
+        Some(eb) =>
+          for s in eb.stmts {
+            find_captured_vars(s, info)
+          }
         None => ()
       }
     }
-    @ast.TsStmt::Block(block) => {
+    @ast.TsStmt::Block(block) =>
       for s in block.stmts {
         find_captured_vars(s, info)
       }
-    }
     _ => ()
   }
 }
@@ -422,12 +433,12 @@ fn find_captured_in_top_expr(expr : @ast.TsExpr, info : LivenessInfo) -> Unit {
         param_names.push(p.name)
       }
       match body {
-        @ast.TsArrowBody::ArrowExpr(e) => find_captured_in_expr(e, param_names, info)
-        @ast.TsArrowBody::ArrowBlock(block) => {
+        @ast.TsArrowBody::ArrowExpr(e) =>
+          find_captured_in_expr(e, param_names, info)
+        @ast.TsArrowBody::ArrowBlock(block) =>
           for s in block.stmts {
             find_captured_in_stmt(s, param_names, info)
           }
-        }
       }
     }
     @ast.TsExpr::FuncExpr(func) => {
@@ -439,11 +450,10 @@ fn find_captured_in_top_expr(expr : @ast.TsExpr, info : LivenessInfo) -> Unit {
         find_captured_in_stmt(s, param_names, info)
       }
     }
-    @ast.TsExpr::Call(_, args) => {
+    @ast.TsExpr::Call(_, args) =>
       for arg in args {
         find_captured_in_top_expr(arg, info)
       }
-    }
     @ast.TsExpr::BinOp(_, left, right) => {
       find_captured_in_top_expr(left, info)
       find_captured_in_top_expr(right, info)
@@ -453,9 +463,13 @@ fn find_captured_in_top_expr(expr : @ast.TsExpr, info : LivenessInfo) -> Unit {
 }
 
 ///|
-fn find_captured_in_expr(expr : @ast.TsExpr, local_params : Array[String], info : LivenessInfo) -> Unit {
+fn find_captured_in_expr(
+  expr : @ast.TsExpr,
+  local_params : Array[String],
+  info : LivenessInfo,
+) -> Unit {
   match expr {
-    @ast.TsExpr::Var(name) => {
+    @ast.TsExpr::Var(name) =>
       // If variable is not a local parameter, it's captured from outer scope
       if not(local_params.contains(name)) {
         match info.lifetimes.get(name) {
@@ -468,17 +482,16 @@ fn find_captured_in_expr(expr : @ast.TsExpr, local_params : Array[String], info 
           None => ()
         }
       }
-    }
     @ast.TsExpr::BinOp(_, left, right) => {
       find_captured_in_expr(left, local_params, info)
       find_captured_in_expr(right, local_params, info)
     }
-    @ast.TsExpr::UnaryOp(_, operand) => find_captured_in_expr(operand, local_params, info)
-    @ast.TsExpr::Call(_, args) => {
+    @ast.TsExpr::UnaryOp(_, operand) =>
+      find_captured_in_expr(operand, local_params, info)
+    @ast.TsExpr::Call(_, args) =>
       for arg in args {
         find_captured_in_expr(arg, local_params, info)
       }
-    }
     @ast.TsExpr::CallExpr(callee, args) => {
       find_captured_in_expr(callee, local_params, info)
       for arg in args {
@@ -491,7 +504,8 @@ fn find_captured_in_expr(expr : @ast.TsExpr, local_params : Array[String], info 
         find_captured_in_expr(arg, local_params, info)
       }
     }
-    @ast.TsExpr::PropAccess(obj, _) => find_captured_in_expr(obj, local_params, info)
+    @ast.TsExpr::PropAccess(obj, _) =>
+      find_captured_in_expr(obj, local_params, info)
     @ast.TsExpr::IndexAccess(arr, idx) => {
       find_captured_in_expr(arr, local_params, info)
       find_captured_in_expr(idx, local_params, info)
@@ -501,45 +515,48 @@ fn find_captured_in_expr(expr : @ast.TsExpr, local_params : Array[String], info 
       find_captured_in_expr(then_e, local_params, info)
       find_captured_in_expr(else_e, local_params, info)
     }
-    @ast.TsExpr::ArrayLit(elements) => {
+    @ast.TsExpr::ArrayLit(elements) =>
       for elem in elements {
         find_captured_in_expr(elem, local_params, info)
       }
-    }
-    @ast.TsExpr::ObjectLit(props) => {
+    @ast.TsExpr::ObjectLit(props) =>
       for prop in props {
         find_captured_in_expr(prop.1, local_params, info)
       }
-    }
     _ => ()
   }
 }
 
 ///|
-fn find_captured_in_stmt(stmt : @ast.TsStmt, local_params : Array[String], info : LivenessInfo) -> Unit {
+fn find_captured_in_stmt(
+  stmt : @ast.TsStmt,
+  local_params : Array[String],
+  info : LivenessInfo,
+) -> Unit {
   match stmt {
     @ast.TsStmt::Expr(e) => find_captured_in_expr(e, local_params, info)
     @ast.TsStmt::Return(Some(e)) => find_captured_in_expr(e, local_params, info)
-    @ast.TsStmt::Var(_, _, init) |
-    @ast.TsStmt::Let(_, _, init) |
-    @ast.TsStmt::Const(_, _, init) => find_captured_in_expr(init, local_params, info)
+    @ast.TsStmt::Var(_, _, init)
+    | @ast.TsStmt::Let(_, _, init)
+    | @ast.TsStmt::Const(_, _, init) =>
+      find_captured_in_expr(init, local_params, info)
     @ast.TsStmt::If(cond, then_block, else_block) => {
       find_captured_in_expr(cond, local_params, info)
       for s in then_block.stmts {
         find_captured_in_stmt(s, local_params, info)
       }
       match else_block {
-        Some(eb) => for s in eb.stmts {
-          find_captured_in_stmt(s, local_params, info)
-        }
+        Some(eb) =>
+          for s in eb.stmts {
+            find_captured_in_stmt(s, local_params, info)
+          }
         None => ()
       }
     }
-    @ast.TsStmt::Block(block) => {
+    @ast.TsStmt::Block(block) =>
       for s in block.stmts {
         find_captured_in_stmt(s, local_params, info)
       }
-    }
     _ => ()
   }
 }
@@ -582,17 +599,27 @@ pub fn get_last_use(info : LivenessInfo, name : String) -> Int? {
 pub fn needs_gc(type_ : @ast.TsType) -> Bool {
   match type_ {
     // Primitives - no GC needed
-    @ast.TsType::Number | @ast.TsType::Int | @ast.TsType::Boolean |
-    @ast.TsType::String_ | @ast.TsType::Void | @ast.TsType::Null |
-    @ast.TsType::Undefined | @ast.TsType::Never | @ast.TsType::BigInt |
-    @ast.TsType::Symbol | @ast.TsType::Literal(_) => false
+    @ast.TsType::Number
+    | @ast.TsType::Int
+    | @ast.TsType::Boolean
+    | @ast.TsType::String_
+    | @ast.TsType::Void
+    | @ast.TsType::Null
+    | @ast.TsType::Undefined
+    | @ast.TsType::Never
+    | @ast.TsType::BigInt
+    | @ast.TsType::Symbol
+    | @ast.TsType::Literal(_) => false
     // Heap-allocated types - need GC
-    @ast.TsType::Array(_) | @ast.TsType::Object(_) | @ast.TsType::Func(_, _) |
-    @ast.TsType::Struct(_, _) | @ast.TsType::Named(_) | @ast.TsType::Any => true
+    @ast.TsType::Array(_)
+    | @ast.TsType::Object(_)
+    | @ast.TsType::Func(_, _)
+    | @ast.TsType::Struct(_, _)
+    | @ast.TsType::Named(_)
+    | @ast.TsType::Any => true
     // Union/Intersection - check components
     @ast.TsType::Union(types) | @ast.TsType::Intersection(types) =>
       types.iter().any(fn(t) { needs_gc(t) })
-    @ast.TsType::Tuple(types) =>
-      types.iter().any(fn(t) { needs_gc(t) })
+    @ast.TsType::Tuple(types) => types.iter().any(fn(t) { needs_gc(t) })
   }
 }

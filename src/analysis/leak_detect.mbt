@@ -3,11 +3,11 @@
 ///|
 /// Type of potential memory leak.
 pub(all) enum LeakKind {
-  MissingDrop(String, Int)           // Variable not dropped at correct point
-  CyclicReference(Array[String])     // Circular reference between variables
-  EscapedWithoutTracking(String)     // Value escapes but not tracked
+  MissingDrop(String, Int) // Variable not dropped at correct point
+  CyclicReference(Array[String]) // Circular reference between variables
+  EscapedWithoutTracking(String) // Value escapes but not tracked
   CapturedInLongLivedClosure(String) // Captured in closure that outlives expected scope
-  UnboundedGrowth(String, Int)       // Variable in loop that accumulates references
+  UnboundedGrowth(String, Int) // Variable in loop that accumulates references
 }
 
 ///|
@@ -22,9 +22,9 @@ pub(all) struct PotentialLeak {
 ///|
 /// Severity of the leak.
 pub(all) enum LeakSeverity {
-  Warning  // Might leak under certain conditions
-  Error    // Will definitely leak
-  Info     // Informational, may not be a real leak
+  Warning // Might leak under certain conditions
+  Error // Will definitely leak
+  Info // Informational, may not be a real leak
 }
 
 ///|
@@ -70,10 +70,14 @@ pub fn analyze_leaks(func : @ast.TsFunc) -> LeakAnalysis {
     result.leaks.push({
       kind: CyclicReference(cycle.variables),
       message: "Potential circular reference detected between: " +
-        cycle.variables.iter().fold(init="", fn(acc, v) {
-          if acc == "" { v } else { acc + " -> " + v }
-        }),
-      stmt_index: if cycle.edges.length() > 0 { cycle.edges[0].stmt_index } else { 0 },
+      cycle.variables
+      .iter()
+      .fold(init="", fn(acc, v) { if acc == "" { v } else { acc + " -> " + v } }),
+      stmt_index: if cycle.edges.length() > 0 {
+        cycle.edges[0].stmt_index
+      } else {
+        0
+      },
       severity: Warning,
     })
   }
@@ -83,16 +87,17 @@ pub fn analyze_leaks(func : @ast.TsFunc) -> LeakAnalysis {
     if not(liveness.captured_vars.contains(name)) {
       // Escaped but not in captured list - may indicate tracking issue
       match liveness.lifetimes.get(name) {
-        Some(lifetime) => {
+        Some(lifetime) =>
           if not(lifetime.escapes) {
             result.leaks.push({
               kind: EscapedWithoutTracking(name),
-              message: "Variable '" + name + "' escapes but may not be properly tracked",
+              message: "Variable '" +
+              name +
+              "' escapes but may not be properly tracked",
               stmt_index: lifetime.last_use,
               severity: Info,
             })
           }
-        }
         None => ()
       }
     }
@@ -101,17 +106,18 @@ pub fn analyze_leaks(func : @ast.TsFunc) -> LeakAnalysis {
   // Check 3: Variables captured in closures
   for name in liveness.captured_vars {
     match liveness.lifetimes.get(name) {
-      Some(lifetime) => {
+      Some(lifetime) =>
         // If the captured variable is also aliased, it's higher risk
         if aliases.escaped.contains(name) {
           result.leaks.push({
             kind: CapturedInLongLivedClosure(name),
-            message: "Variable '" + name + "' is captured in closure and also escapes",
+            message: "Variable '" +
+            name +
+            "' is captured in closure and also escapes",
             stmt_index: lifetime.last_use,
             severity: Warning,
           })
         }
-      }
       None => ()
     }
   }
@@ -128,7 +134,6 @@ pub fn analyze_leaks(func : @ast.TsFunc) -> LeakAnalysis {
       severity: Warning,
     })
   }
-
   result
 }
 
@@ -136,12 +141,10 @@ pub fn analyze_leaks(func : @ast.TsFunc) -> LeakAnalysis {
 fn find_loop_accumulating_vars(func : @ast.TsFunc) -> Array[(String, Int)] {
   let results : Array[(String, Int)] = []
   let mut stmt_idx = 0
-
   for stmt in func.body.stmts {
     stmt_idx = stmt_idx + 1
     find_accumulating_in_stmt(stmt, stmt_idx, results)
   }
-
   results
 }
 
@@ -149,43 +152,40 @@ fn find_loop_accumulating_vars(func : @ast.TsFunc) -> Array[(String, Int)] {
 fn find_accumulating_in_stmt(
   stmt : @ast.TsStmt,
   idx : Int,
-  results : Array[(String, Int)]
+  results : Array[(String, Int)],
 ) -> Unit {
   match stmt {
-    @ast.TsStmt::While(_, body) | @ast.TsStmt::DoWhile(_, body) => {
+    @ast.TsStmt::While(_, body) | @ast.TsStmt::DoWhile(_, body) =>
       // Look for push/concat/append patterns in loop
       for s in body.stmts {
         find_accumulating_patterns(s, idx, results)
       }
-    }
-    @ast.TsStmt::For(_, _, _, body) => {
+    @ast.TsStmt::For(_, _, _, body) =>
       for s in body.stmts {
         find_accumulating_patterns(s, idx, results)
       }
-    }
-    @ast.TsStmt::ForOf(_, _, _, _, body) |
-    @ast.TsStmt::ForAwaitOf(_, _, _, _, body) |
-    @ast.TsStmt::ForIn(_, _, _, _, body) => {
+    @ast.TsStmt::ForOf(_, _, _, _, body)
+    | @ast.TsStmt::ForAwaitOf(_, _, _, _, body)
+    | @ast.TsStmt::ForIn(_, _, _, _, body) =>
       for s in body.stmts {
         find_accumulating_patterns(s, idx, results)
       }
-    }
     @ast.TsStmt::If(_, then_block, else_block) => {
       for s in then_block.stmts {
         find_accumulating_in_stmt(s, idx, results)
       }
       match else_block {
-        Some(eb) => for s in eb.stmts {
-          find_accumulating_in_stmt(s, idx, results)
-        }
+        Some(eb) =>
+          for s in eb.stmts {
+            find_accumulating_in_stmt(s, idx, results)
+          }
         None => ()
       }
     }
-    @ast.TsStmt::Block(block) => {
+    @ast.TsStmt::Block(block) =>
       for s in block.stmts {
         find_accumulating_in_stmt(s, idx, results)
       }
-    }
     _ => ()
   }
 }
@@ -194,7 +194,7 @@ fn find_accumulating_in_stmt(
 fn find_accumulating_patterns(
   stmt : @ast.TsStmt,
   idx : Int,
-  results : Array[(String, Int)]
+  results : Array[(String, Int)],
 ) -> Unit {
   match stmt {
     @ast.TsStmt::Expr(e) => find_accumulating_in_expr(e, idx, results)
@@ -206,65 +206,59 @@ fn find_accumulating_patterns(
 fn find_accumulating_in_expr(
   expr : @ast.TsExpr,
   idx : Int,
-  results : Array[(String, Int)]
+  results : Array[(String, Int)],
 ) -> Unit {
   match expr {
     // arr.push(...) - accumulating pattern
-    @ast.TsExpr::MethodCall(recv, method_name, _) => {
-      if method_name == "push" || method_name == "unshift" ||
-         method_name == "concat" || method_name == "append" {
+    @ast.TsExpr::MethodCall(recv, method_name, _) =>
+      if method_name == "push" ||
+        method_name == "unshift" ||
+        method_name == "concat" ||
+        method_name == "append" {
         match recv {
-          @ast.TsExpr::Var(name) => {
+          @ast.TsExpr::Var(name) =>
             // Check if this variable is defined outside the loop
             // For now, just report it
             if not(results.iter().any(fn(p) { p.0 == name })) {
               results.push((name, idx))
             }
-          }
           _ => ()
         }
       }
-    }
     // a = a.concat(...) - also accumulating
-    @ast.TsExpr::AssignExpr(name, value) => {
+    @ast.TsExpr::AssignExpr(name, value) =>
       match value {
-        @ast.TsExpr::MethodCall(recv, method_name, _) => {
+        @ast.TsExpr::MethodCall(recv, method_name, _) =>
           if method_name == "concat" {
             match recv {
-              @ast.TsExpr::Var(recv_name) => {
+              @ast.TsExpr::Var(recv_name) =>
                 if recv_name == name {
                   if not(results.iter().any(fn(p) { p.0 == name })) {
                     results.push((name, idx))
                   }
                 }
-              }
               _ => ()
             }
           }
-        }
         // a = [...a, x] - spread accumulating
-        @ast.TsExpr::ArrayLit(elements) => {
+        @ast.TsExpr::ArrayLit(elements) =>
           for elem in elements {
             match elem {
-              @ast.TsExpr::Spread(inner) => {
+              @ast.TsExpr::Spread(inner) =>
                 match inner {
-                  @ast.TsExpr::Var(spread_name) => {
+                  @ast.TsExpr::Var(spread_name) =>
                     if spread_name == name {
                       if not(results.iter().any(fn(p) { p.0 == name })) {
                         results.push((name, idx))
                       }
                     }
-                  }
                   _ => ()
                 }
-              }
               _ => ()
             }
           }
-        }
         _ => ()
       }
-    }
     _ => ()
   }
 }
@@ -278,23 +272,29 @@ pub fn has_leaks(analysis : LeakAnalysis) -> Bool {
 ///|
 /// Get only error-severity leaks.
 pub fn get_errors(analysis : LeakAnalysis) -> Array[PotentialLeak] {
-  analysis.leaks.iter().filter(fn(l) {
+  analysis.leaks
+  .iter()
+  .filter(fn(l) {
     match l.severity {
       Error => true
       _ => false
     }
-  }).collect()
+  })
+  .collect()
 }
 
 ///|
 /// Get warnings and errors.
 pub fn get_warnings(analysis : LeakAnalysis) -> Array[PotentialLeak] {
-  analysis.leaks.iter().filter(fn(l) {
+  analysis.leaks
+  .iter()
+  .filter(fn(l) {
     match l.severity {
       Error | Warning => true
       _ => false
     }
-  }).collect()
+  })
+  .collect()
 }
 
 ///|
@@ -302,10 +302,15 @@ pub fn get_warnings(analysis : LeakAnalysis) -> Array[PotentialLeak] {
 pub fn format_leak_report(analysis : LeakAnalysis) -> String {
   let mut report = "=== Memory Leak Analysis ===\n"
   report = report + "Total variables: " + analysis.total_vars.to_string() + "\n"
-  report = report + "Properly dropped: " + analysis.dropped_vars.to_string() + "\n"
-  report = report + "Escaped/captured: " + analysis.escaped_vars.to_string() + "\n"
+  report = report +
+    "Properly dropped: " +
+    analysis.dropped_vars.to_string() +
+    "\n"
+  report = report +
+    "Escaped/captured: " +
+    analysis.escaped_vars.to_string() +
+    "\n"
   report = report + "In cycles: " + analysis.cyclic_vars.to_string() + "\n\n"
-
   if analysis.leaks.length() == 0 {
     report = report + "No potential leaks detected.\n"
   } else {
@@ -319,6 +324,5 @@ pub fn format_leak_report(analysis : LeakAnalysis) -> String {
       report = report + severity_str + " " + leak.message + "\n"
     }
   }
-
   report
 }

@@ -307,7 +307,6 @@ test "is_assignable union types" {
 test "is_assignable array types" {
   let str_arr = @ast.TsType::Array(@ast.TsType::String_)
   let num_arr = @ast.TsType::Array(@ast.TsType::Number)
-
   assert_true(is_assignable(str_arr, str_arr))
   assert_false(is_assignable(str_arr, num_arr))
 }
@@ -319,10 +318,8 @@ test "narrow_type typeof guard" {
     @ast.TsType::Number,
     @ast.TsType::Boolean,
   ])
-
   let narrowed = narrow_type(union, "string")
   assert_eq(narrowed, @ast.TsType::String_)
-
   let narrowed_num = narrow_type(union, "number")
   assert_eq(narrowed_num, @ast.TsType::Number)
 }
@@ -334,7 +331,6 @@ test "remove_null_undefined" {
     @ast.TsType::Null,
     @ast.TsType::Undefined,
   ])
-
   let narrowed = remove_null_undefined(union)
   assert_eq(narrowed, @ast.TsType::String_)
 }
@@ -343,7 +339,6 @@ test "remove_null_undefined" {
 test "TypeEnv narrowing" {
   let env = TypeEnv::new(None)
   env.set_narrowed("x", @ast.TsType::String_)
-
   assert_eq(env.get_narrowed("x"), Some(@ast.TsType::String_))
   assert_eq(env.get_narrowed("y"), None)
 
@@ -363,7 +358,6 @@ test "analyze_typeof_guard" {
     @ast.TsExpr::UnaryOp(@ast.TsUnaryOp::Typeof, @ast.TsExpr::Var("x")),
     @ast.TsExpr::StringLit("string"),
   )
-
   match analyze_typeof_guard(expr) {
     Some((name, type_str)) => {
       assert_eq(name, "x")
@@ -380,7 +374,6 @@ test "analyze_null_guard" {
     @ast.TsExpr::Var("x"),
     @ast.TsExpr::NullLit,
   )
-
   match analyze_null_guard(expr) {
     Some((name, is_not_null)) => {
       assert_eq(name, "x")
@@ -394,9 +387,11 @@ test "analyze_null_guard" {
 test "union_types" {
   let a = @ast.TsType::String_
   let b = @ast.TsType::Number
-
   let union = union_types(a, b)
-  assert_eq(union, @ast.TsType::Union([@ast.TsType::String_, @ast.TsType::Number]))
+  assert_eq(
+    union,
+    @ast.TsType::Union([@ast.TsType::String_, @ast.TsType::Number]),
+  )
 
   // Same type returns same type
   assert_eq(union_types(a, a), @ast.TsType::String_)
@@ -417,10 +412,7 @@ test "intersect_types" {
   assert_eq(intersect_types(b, b), @ast.TsType::String_)
 
   // Never
-  assert_eq(
-    intersect_types(@ast.TsType::Never, b),
-    @ast.TsType::Never,
-  )
+  assert_eq(intersect_types(@ast.TsType::Never, b), @ast.TsType::Never)
 }
 
 ///|
@@ -428,11 +420,9 @@ test "FlowTypeCtx scope management" {
   let ctx = FlowTypeCtx::new("")
   ctx.set_type("x", @ast.TsType::Number)
   assert_eq(ctx.get_type("x"), @ast.TsType::Number)
-
   ctx.enter_scope()
   ctx.narrow("x", @ast.TsType::Int)
   assert_eq(ctx.get_type("x"), @ast.TsType::Int)
-
   ctx.leave_scope()
   // Back to original type (narrowing removed)
   assert_eq(ctx.get_type("x"), @ast.TsType::Number)
@@ -443,7 +433,6 @@ test "ObjectType property tracking" {
   let obj = ObjectType::new()
   obj.set_prop("name", @ast.TsType::String_)
   obj.set_prop("age", @ast.TsType::Number)
-
   assert_eq(obj.get_prop("name"), Some(@ast.TsType::String_))
   assert_eq(obj.get_prop("age"), Some(@ast.TsType::Number))
   assert_eq(obj.get_prop("unknown"), None)
@@ -459,7 +448,6 @@ test "ConstraintSolver type errors" {
     Assignable(@ast.TsType::String_, @ast.TsType::Number, SourceLoc::unknown()),
   )
   solver.solve()
-
   assert_eq(solver.errors.length(), 1)
   assert_eq(solver.errors[0].expected, @ast.TsType::Number)
   assert_eq(solver.errors[0].actual, @ast.TsType::String_)
@@ -471,7 +459,6 @@ test "type_check_module simple function" {
   let parser = @parser.Parser::from_source(source)
   let module_ = parser.parse_module()
   let result = type_check_module(module_, source)
-
   assert_eq(result.errors.length(), 0)
 }
 
@@ -540,7 +527,6 @@ test "infer_prop_type object literal" {
     (@ast.TsType::Literal("x"), @ast.TsType::Number),
     (@ast.TsType::Literal("y"), @ast.TsType::String_),
   ])
-
   assert_eq(infer_prop_type(ctx, obj_type, "x"), @ast.TsType::Number)
   assert_eq(infer_prop_type(ctx, obj_type, "y"), @ast.TsType::String_)
   assert_eq(infer_prop_type(ctx, obj_type, "z"), @ast.TsType::Any)
@@ -555,9 +541,7 @@ test "infer_expr_flow object literal" {
   ])
   let type_ = infer_expr_flow(ctx, expr)
   match type_ {
-    @ast.TsType::Object(props) => {
-      assert_eq(props.length(), 2)
-    }
+    @ast.TsType::Object(props) => assert_eq(props.length(), 2)
     _ => assert_true(false)
   }
 }
@@ -571,10 +555,9 @@ test "infer_binop_flow coalesce" {
 
   // null ?? "default" should be string | null with null removed = string
   match type_ {
-    @ast.TsType::Union(types) => {
+    @ast.TsType::Union(types) =>
       // Union of Never (null with null removed) and String
       assert_true(types.length() >= 1)
-    }
     @ast.TsType::String_ => () // Also acceptable
     _ => ()
   }

@@ -165,29 +165,25 @@ pub fn FlowTypeCtx::get_return_type(self : FlowTypeCtx) -> @ast.TsType {
 
 ///|
 /// Analyze typeof guard condition.
-pub fn analyze_typeof_guard(
-  expr : @ast.TsExpr,
-) -> (String, String)? {
+pub fn analyze_typeof_guard(expr : @ast.TsExpr) -> (String, String)? {
   // Pattern: typeof x === "type" or typeof x !== "type"
   match expr {
     @ast.TsExpr::BinOp(
       op,
       @ast.TsExpr::UnaryOp(@ast.TsUnaryOp::Typeof, @ast.TsExpr::Var(name)),
-      @ast.TsExpr::StringLit(type_str),
+      @ast.TsExpr::StringLit(type_str)
     ) =>
       match op {
-        @ast.TsBinOp::BinEq | @ast.TsBinOp::AbstractEq =>
-          Some((name, type_str))
+        @ast.TsBinOp::BinEq | @ast.TsBinOp::AbstractEq => Some((name, type_str))
         _ => None
       }
     @ast.TsExpr::BinOp(
       op,
       @ast.TsExpr::StringLit(type_str),
-      @ast.TsExpr::UnaryOp(@ast.TsUnaryOp::Typeof, @ast.TsExpr::Var(name)),
+      @ast.TsExpr::UnaryOp(@ast.TsUnaryOp::Typeof, @ast.TsExpr::Var(name))
     ) =>
       match op {
-        @ast.TsBinOp::BinEq | @ast.TsBinOp::AbstractEq =>
-          Some((name, type_str))
+        @ast.TsBinOp::BinEq | @ast.TsBinOp::AbstractEq => Some((name, type_str))
         _ => None
       }
     _ => None
@@ -207,28 +203,16 @@ pub fn analyze_truthiness_guard(expr : @ast.TsExpr) -> String? {
 /// Analyze null check guard (x !== null, x != null).
 pub fn analyze_null_guard(expr : @ast.TsExpr) -> (String, Bool)? {
   match expr {
-    @ast.TsExpr::BinOp(
-      op,
-      @ast.TsExpr::Var(name),
-      @ast.TsExpr::NullLit,
-    ) =>
+    @ast.TsExpr::BinOp(op, @ast.TsExpr::Var(name), @ast.TsExpr::NullLit) =>
       match op {
-        @ast.TsBinOp::BinNe | @ast.TsBinOp::AbstractNe =>
-          Some((name, true)) // is not null
-        @ast.TsBinOp::BinEq | @ast.TsBinOp::AbstractEq =>
-          Some((name, false)) // is null
+        @ast.TsBinOp::BinNe | @ast.TsBinOp::AbstractNe => Some((name, true)) // is not null
+        @ast.TsBinOp::BinEq | @ast.TsBinOp::AbstractEq => Some((name, false)) // is null
         _ => None
       }
-    @ast.TsExpr::BinOp(
-      op,
-      @ast.TsExpr::NullLit,
-      @ast.TsExpr::Var(name),
-    ) =>
+    @ast.TsExpr::BinOp(op, @ast.TsExpr::NullLit, @ast.TsExpr::Var(name)) =>
       match op {
-        @ast.TsBinOp::BinNe | @ast.TsBinOp::AbstractNe =>
-          Some((name, true)) // is not null
-        @ast.TsBinOp::BinEq | @ast.TsBinOp::AbstractEq =>
-          Some((name, false)) // is null
+        @ast.TsBinOp::BinNe | @ast.TsBinOp::AbstractNe => Some((name, true)) // is not null
+        @ast.TsBinOp::BinEq | @ast.TsBinOp::AbstractEq => Some((name, false)) // is null
         _ => None
       }
     _ => None
