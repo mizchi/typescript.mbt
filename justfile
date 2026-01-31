@@ -226,3 +226,102 @@ aot-list:
     @echo "  fixtures/aot/closure_mutable.ts  - Closures with mutable captures"
     @echo "  fixtures/aot/generator.ts        - Generator state machines"
     @echo "  fixtures/aot/not_aot_compatible.ts - NOT AOT compatible (negative tests)"
+
+# Scan test262 and generate allowlist/skiplist
+test262-scan:
+    #!/usr/bin/env bash
+    # Note: not using set -e because ((count++)) returns 1 when count is 0
+
+    TEST_ROOT="test262/test"
+    ALLOWLIST="test262.allowlist.txt"
+    SKIPLIST="test262.skiplist.txt"
+
+    # Supported includes
+    SUPPORTED_INCLUDES="assert.js|sta.js|compareArray.js|nans.js|propertyHelper.js|fnGlobalObject.js|isConstructor.js|deepEqual.js|decimalToHexString.js|proxyTrapsHelper.js|testTypedArray.js|detachArrayBuffer.js|testBigIntTypedArray.js|asyncHelpers.js"
+
+    if [ ! -d "$TEST_ROOT" ]; then
+        echo "test262 not found at $TEST_ROOT" >&2
+        exit 1
+    fi
+
+    > "$ALLOWLIST"
+    > "$SKIPLIST"
+
+    allow_count=0
+    skip_count=0
+
+    while IFS= read -r file; do
+        # Skip harness files
+        if [[ "$file" == *"/harness/"* ]]; then
+            continue
+        fi
+
+        rel="${file#./}"
+        content=$(cat "$file" 2>/dev/null || echo "")
+
+        # Extract metadata block
+        meta=$(echo "$content" | sed -n '/\/\*---/,/---\*\//p')
+
+        # Check for negative test
+        if echo "$meta" | grep -q "^negative:"; then
+            echo -e "$rel\tnegative" >> "$SKIPLIST"
+            skip_count=$((skip_count + 1))
+            continue
+        fi
+
+        # Check for async flag
+        if echo "$meta" | grep -qE "flags:.*async"; then
+            echo -e "$rel\tflag:async" >> "$SKIPLIST"
+            skip_count=$((skip_count + 1))
+            continue
+        fi
+
+        # Check for unsupported includes
+        includes=$(echo "$meta" | grep "includes:" | sed 's/.*\[\(.*\)\].*/\1/' | tr ',' '\n' | tr -d ' "')
+        skip_include=""
+        for inc in $includes; do
+            if [ -n "$inc" ] && ! echo "$inc" | grep -qE "^($SUPPORTED_INCLUDES)$"; then
+                skip_include="$inc"
+                break
+            fi
+        done
+        if [ -n "$skip_include" ]; then
+            echo -e "$rel\tincludes:$skip_include" >> "$SKIPLIST"
+            skip_count=$((skip_count + 1))
+            continue
+        fi
+
+        # Check for banned patterns
+        if echo "$content" | grep -qE '\bwith\s*\('; then
+            echo -e "$rel\tbanned:with" >> "$SKIPLIST"
+            skip_count=$((skip_count + 1))
+            continue
+        fi
+        if echo "$content" | grep -qE '\beval\s*\('; then
+            echo -e "$rel\tbanned:eval" >> "$SKIPLIST"
+            skip_count=$((skip_count + 1))
+            continue
+        fi
+        if echo "$content" | grep -qE '\bFunction\s*\('; then
+            echo -e "$rel\tbanned:Function" >> "$SKIPLIST"
+            skip_count=$((skip_count + 1))
+            continue
+        fi
+        if echo "$content" | grep -qE '\bimport\s+defer\b'; then
+            echo -e "$rel\tbanned:import-defer" >> "$SKIPLIST"
+            skip_count=$((skip_count + 1))
+            continue
+        fi
+
+        # Passed all checks - add to allowlist
+        echo "$rel" >> "$ALLOWLIST"
+        allow_count=$((allow_count + 1))
+
+    done < <(find "$TEST_ROOT" -name "*.js" -type f | sort)
+
+    echo "allow: $allow_count"
+    echo "skip: $skip_count"
+
+# Run test262 tests
+test262 path="test262.allowlist.txt":
+    moon run src -- test262 {{path}}
