@@ -1114,7 +1114,12 @@ pub fn JSInterpreter::eval_expr(
             )
             return Undefined
           }
-          let current = env.get(name)
+          // Get from env or globalThis (for implicit globals)
+          let current = if env.has(name) {
+            env.get(name)
+          } else {
+            js_get_prop(global_obj, name)
+          }
           // Handle logical assignment operators with short-circuit evaluation
           match op {
             @ast.TsCompoundOp::AndAssign =>
@@ -3827,7 +3832,12 @@ pub fn JSInterpreter::exec_stmt(
         let _ = self.set_error_kind("ReferenceError", name + " is not defined")
         return Some(Undefined)
       }
-      let current = env.get(name)
+      // Get from env or globalThis (for implicit globals)
+      let current = if env.has(name) {
+        env.get(name)
+      } else {
+        js_get_prop(global_obj, name)
+      }
       // Handle logical assignment operators with short-circuit evaluation
       match op {
         @ast.TsCompoundOp::AndAssign =>
