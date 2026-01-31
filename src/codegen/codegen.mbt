@@ -312,6 +312,8 @@ priv struct CodeGenCtx {
   string_pool : StringPool
   // function
   builtins_used : Map[String, Bool]
+  // Constant propagation: track const variable values
+  const_values : Map[String, @analysis.ConstValue]
 }
 
 ///|
@@ -334,6 +336,7 @@ fn CodeGenCtx::new(
     loop_depth: 0,
     string_pool,
     builtins_used,
+    const_values: {},
   }
 }
 
@@ -656,12 +659,62 @@ fn field_type(
 // ============================================
 
 ///|
+/// Try to emit a constant value directly.
+/// Returns true if the value was emitted, false otherwise.
+fn try_emit_const(
+  ctx : CodeGenCtx,
+  expr : @ast.TsExpr,
+  expected_type : @ast.TsType,
+) -> Bool {
+  match @analysis.eval_const(expr) {
+    @analysis.ConstValue::Int(n) => {
+      if is_f64_type(expected_type) {
+        ctx.emit(F64Const(n.to_double()))
+      } else {
+        ctx.emit(I32Const(n.reinterpret_as_uint()))
+      }
+      true
+    }
+    @analysis.ConstValue::Number(n) => {
+      if is_f64_type(expected_type) {
+        ctx.emit(F64Const(n))
+      } else {
+        ctx.emit(I32Const(n.to_int().reinterpret_as_uint()))
+      }
+      true
+    }
+    @analysis.ConstValue::Boolean(b) => {
+      ctx.emit(I32Const(if b { 1U } else { 0U }))
+      true
+    }
+    @analysis.ConstValue::String_(s) => {
+      let offset = ctx.string_pool.add(s)
+      ctx.emit(I32Const(offset.reinterpret_as_uint()))
+      true
+    }
+    @analysis.ConstValue::Null | @analysis.ConstValue::Undefined => {
+      ctx.emit(I32Const(0U))
+      true
+    }
+    @analysis.ConstValue::NotConst => false
+  }
+}
+
+///|
 // / expression
 fn compile_expr(
   ctx : CodeGenCtx,
   expr : @ast.TsExpr,
   expected_type : @ast.TsType,
 ) -> Unit raise CodeGenError {
+  // Try constant folding first for binary/unary operations
+  match expr {
+    @ast.TsExpr::BinOp(_, _, _) | @ast.TsExpr::UnaryOp(_, _) =>
+      if try_emit_const(ctx, expr, expected_type) {
+        return
+      }
+    _ => ()
+  }
   match expr {
     @ast.TsExpr::NumberLit(n) =>
       if is_f64_type(expected_type) {
@@ -688,9 +741,29 @@ fn compile_expr(
       ctx.emit(I32Const(offset.reinterpret_as_uint()))
     }
     @ast.TsExpr::Var(name) =>
-      match ctx.get_local(name) {
-        Some(local_var) => ctx.emit(LocalGet(local_var.index))
-        None => raise CodeGenError("Undefined variable: \{name}")
+      // Constant propagation: emit constant directly if known
+      match ctx.const_values.get(name) {
+        Some(@analysis.ConstValue::Int(n)) => {
+          if is_f64_type(expected_type) {
+            ctx.emit(F64Const(n.to_double()))
+          } else {
+            ctx.emit(I32Const(n.reinterpret_as_uint()))
+          }
+        }
+        Some(@analysis.ConstValue::Number(f)) => ctx.emit(F64Const(f))
+        Some(@analysis.ConstValue::Boolean(b)) =>
+          ctx.emit(I32Const(if b { 1U } else { 0U }))
+        Some(@analysis.ConstValue::String_(s)) => {
+          let offset = ctx.string_pool.add(s)
+          ctx.emit(I32Const(offset.reinterpret_as_uint()))
+        }
+        Some(@analysis.ConstValue::Null) | Some(@analysis.ConstValue::Undefined) =>
+          ctx.emit(I32Const(0U)) // null/undefined as 0
+        Some(@analysis.ConstValue::NotConst) | None =>
+          match ctx.get_local(name) {
+            Some(local_var) => ctx.emit(LocalGet(local_var.index))
+            None => raise CodeGenError("Undefined variable: \{name}")
+          }
       }
     @ast.TsExpr::Yield(_) =>
       raise CodeGenError(
@@ -739,9 +812,24 @@ fn compile_expr(
     @ast.TsExpr::CallExpr(_, _) =>
       raise CodeGenError("call expression is not supported in Wasm compiler")
     @ast.TsExpr::Cond(cond, then_expr, else_expr) => {
-      // condition
+      // Try constant folding on condition
+      match @analysis.eval_const(cond) {
+        @analysis.ConstValue::Boolean(true) | @analysis.ConstValue::Int(_)
+        | @analysis.ConstValue::Number(_) | @analysis.ConstValue::String_(_) => {
+          // Truthy - only compile then branch
+          compile_expr(ctx, then_expr, expected_type)
+          return
+        }
+        @analysis.ConstValue::Boolean(false) | @analysis.ConstValue::Null
+        | @analysis.ConstValue::Undefined => {
+          // Falsy - only compile else branch
+          compile_expr(ctx, else_expr, expected_type)
+          return
+        }
+        @analysis.ConstValue::NotConst => ()
+      }
+      // Dynamic condition
       compile_expr(ctx, cond, @ast.TsType::Boolean)
-      // then
       let then_ctx : CodeGenCtx = {
         locals: ctx.locals,
         local_types: ctx.local_types,
@@ -753,9 +841,9 @@ fn compile_expr(
         loop_depth: ctx.loop_depth,
         string_pool: ctx.string_pool,
         builtins_used: ctx.builtins_used,
+        const_values: ctx.const_values,
       }
       compile_expr(then_ctx, then_expr, expected_type)
-      // else
       let else_ctx : CodeGenCtx = {
         locals: ctx.locals,
         local_types: ctx.local_types,
@@ -767,9 +855,9 @@ fn compile_expr(
         loop_depth: ctx.loop_depth,
         string_pool: ctx.string_pool,
         builtins_used: ctx.builtins_used,
+        const_values: ctx.const_values,
       }
       compile_expr(else_ctx, else_expr, expected_type)
-      // If expressiongenerate
       let result_type = ts_type_to_valtype(expected_type)
       ctx.emit(If(Value(result_type), then_ctx.instrs, else_ctx.instrs))
     }
@@ -2070,6 +2158,12 @@ fn compile_stmt(
     @ast.TsStmt::Const(binding, type_, init) =>
       match binding {
         @ast.TsBinding::Ident(name) => {
+          // Track const value for constant propagation
+          let const_val = @analysis.eval_const(init)
+          match const_val {
+            @analysis.ConstValue::NotConst => ()
+            _ => ctx.const_values[name] = const_val
+          }
           // Use pre-registered type if available, otherwise infer from init
           let (idx, resolved_type) = match ctx.get_local(name) {
             Some(existing) => (existing.index, existing.type_)
@@ -2216,6 +2310,31 @@ fn compile_if(
   else_block : @ast.TsBlock?,
   return_type : @ast.TsType,
 ) -> Unit raise CodeGenError {
+  // Try constant folding on condition - eliminate dead branches
+  match @analysis.eval_const(cond) {
+    @analysis.ConstValue::Boolean(true) | @analysis.ConstValue::Int(_)
+    | @analysis.ConstValue::Number(_) | @analysis.ConstValue::String_(_) => {
+      // Condition is truthy - only compile then branch
+      for stmt in then_block.stmts {
+        compile_stmt(ctx, stmt, return_type)
+      }
+      return
+    }
+    @analysis.ConstValue::Boolean(false) | @analysis.ConstValue::Null
+    | @analysis.ConstValue::Undefined => {
+      // Condition is falsy - only compile else branch
+      match else_block {
+        Some(block) =>
+          for stmt in block.stmts {
+            compile_stmt(ctx, stmt, return_type)
+          }
+        None => ()
+      }
+      return
+    }
+    @analysis.ConstValue::NotConst => ()
+  }
+  // Dynamic condition - compile both branches
   compile_expr(ctx, cond, @ast.TsType::Boolean)
   let then_instrs = compile_block_to_instrs(ctx, then_block, return_type)
   let else_instrs = match else_block {
@@ -2233,6 +2352,18 @@ fn compile_while(
   body : @ast.TsBlock,
   return_type : @ast.TsType,
 ) -> Unit raise CodeGenError {
+  // Try constant folding on condition
+  match @analysis.eval_const(cond) {
+    @analysis.ConstValue::Boolean(false) | @analysis.ConstValue::Null
+    | @analysis.ConstValue::Undefined => {
+      // Condition is always false - skip the entire loop
+      return
+    }
+    // Note: We don't optimize `while(true)` to avoid generating infinite loops
+    // that would hang the Wasm runtime
+    _ => ()
+  }
+
   ctx.loop_depth += 1
 
   // Block(Loop([cond, BrIf(1), ...body, Br(0)]))
@@ -2250,6 +2381,7 @@ fn compile_while(
     loop_depth: ctx.loop_depth,
     string_pool: ctx.string_pool,
     builtins_used: ctx.builtins_used,
+    const_values: ctx.const_values,
   }
   compile_expr(cond_ctx, cond, @ast.TsType::Boolean)
   for instr in cond_ctx.instrs {
@@ -2300,6 +2432,7 @@ fn compile_for(
         loop_depth: ctx.loop_depth,
         string_pool: ctx.string_pool,
         builtins_used: ctx.builtins_used,
+        const_values: ctx.const_values,
       }
       compile_expr(cond_ctx, c, @ast.TsType::Boolean)
       for instr in cond_ctx.instrs {
@@ -2331,6 +2464,7 @@ fn compile_for(
         loop_depth: ctx.loop_depth,
         string_pool: ctx.string_pool,
         builtins_used: ctx.builtins_used,
+        const_values: ctx.const_values,
       }
       compile_stmt(update_ctx, stmt, return_type)
       for instr in update_ctx.instrs {
@@ -2454,6 +2588,7 @@ fn compile_block_to_instrs(
     loop_depth: ctx.loop_depth,
     string_pool: ctx.string_pool,
     builtins_used: ctx.builtins_used,
+    const_values: ctx.const_values,
   }
   for stmt in block.stmts {
     compile_stmt(sub_ctx, stmt, return_type)

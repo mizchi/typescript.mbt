@@ -691,6 +691,50 @@ test "codegen: typed module with nested scopes" {
 }
 
 ///|
+test "codegen: constant folding in binary operations" {
+  let src =
+    #|function test(): int {
+    #|  return 10 + 20 * 3;
+    #|}
+  let wasm_module = compile(src)
+  let runtime = @runtime.Runtime::load(wasm_module)
+  runtime.run_start()
+  // 10 + 20 * 3 = 10 + 60 = 70
+  let results = runtime.call_compiled(b"test", [])
+  assert_eq(results[0], @runtime.Value::I32(70))
+}
+
+///|
+test "codegen: constant folding eliminates dead branches" {
+  let src =
+    #|function test(): int {
+    #|  if (true) {
+    #|    return 42;
+    #|  } else {
+    #|    return 0;
+    #|  }
+    #|}
+  let wasm_module = compile(src)
+  let runtime = @runtime.Runtime::load(wasm_module)
+  runtime.run_start()
+  let results = runtime.call_compiled(b"test", [])
+  assert_eq(results[0], @runtime.Value::I32(42))
+}
+
+///|
+test "codegen: constant folding in ternary" {
+  let src =
+    #|function test(): int {
+    #|  return false ? 100 : 200;
+    #|}
+  let wasm_module = compile(src)
+  let runtime = @runtime.Runtime::load(wasm_module)
+  runtime.run_start()
+  let results = runtime.call_compiled(b"test", [])
+  assert_eq(results[0], @runtime.Value::I32(200))
+}
+
+///|
 test "codegen: typed module preserves function types" {
   let src =
     #|function addNumbers(a: number, b: number): number {
@@ -716,4 +760,36 @@ test "codegen: typed module preserves function types" {
     @runtime.Value::F64(2.5),
   ])
   assert_eq(r2[0], @runtime.Value::F64(6.0))
+}
+
+///|
+test "codegen: constant propagation" {
+  // const variables should be propagated as immediate values
+  let src =
+    #|function test(): int {
+    #|  const x = 10;
+    #|  const y = 20;
+    #|  return x + y;
+    #|}
+  let wasm_module = compile(src)
+  let runtime = @runtime.Runtime::load(wasm_module)
+  runtime.run_start()
+  let results = runtime.call_compiled(b"test", [])
+  assert_eq(results[0], @runtime.Value::I32(30))
+}
+
+///|
+test "codegen: constant propagation replaces variable reads" {
+  // When const is used later, the value should be inlined
+  let src =
+    #|function compute(n: int): int {
+    #|  const factor = 3;
+    #|  return n * factor;
+    #|}
+  let wasm_module = compile(src)
+  let runtime = @runtime.Runtime::load(wasm_module)
+  runtime.run_start()
+  // n=7, factor=3, result=21
+  let results = runtime.call_compiled(b"compute", [@runtime.Value::I32(7)])
+  assert_eq(results[0], @runtime.Value::I32(21))
 }
