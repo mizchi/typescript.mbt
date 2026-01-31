@@ -392,11 +392,40 @@ fn ts_type_to_valtype(t : @ast.TsType) -> @core.ValType {
 }
 
 ///|
-// / @ast.TsType f64
+// / @ast.TsType f64 (Any も F64 として扱う)
 fn is_f64_type(t : @ast.TsType) -> Bool {
   match t {
-    @ast.TsType::Number => true
+    @ast.TsType::Number | @ast.TsType::Any => true
     _ => false
+  }
+}
+
+///|
+/// Unify two types for codegen, preferring the more specific one.
+fn codegen_unify_types(t1 : @ast.TsType, t2 : @ast.TsType) -> @ast.TsType {
+  if t1 == t2 {
+    return t1
+  }
+  match (t1, t2) {
+    (@ast.TsType::Any, t) => t
+    (t, @ast.TsType::Any) => t
+    (@ast.TsType::Number, @ast.TsType::Int) => @ast.TsType::Number
+    (@ast.TsType::Int, @ast.TsType::Number) => @ast.TsType::Number
+    _ => t1
+  }
+}
+
+///|
+/// Unify numeric types for codegen, preferring Number over Int.
+fn codegen_unify_numeric(t1 : @ast.TsType, t2 : @ast.TsType) -> @ast.TsType {
+  match (t1, t2) {
+    (@ast.TsType::Number, _) => @ast.TsType::Number
+    (_, @ast.TsType::Number) => @ast.TsType::Number
+    (@ast.TsType::Int, _) => @ast.TsType::Int
+    (_, @ast.TsType::Int) => @ast.TsType::Int
+    (@ast.TsType::Any, t) => t
+    (t, @ast.TsType::Any) => t
+    _ => t1
   }
 }
 
@@ -432,7 +461,7 @@ fn infer_type(ctx : CodeGenCtx, expr : @ast.TsExpr) -> @ast.TsType {
       }
     @ast.TsExpr::BinOp(op, left, right) =>
       match op {
-        // comparisonoperator @ast.TsType::Boolean
+        // Comparison operators return Boolean
         @ast.TsBinOp::BinLt
         | @ast.TsBinOp::BinLe
         | @ast.TsBinOp::BinGt
@@ -443,21 +472,48 @@ fn infer_type(ctx : CodeGenCtx, expr : @ast.TsExpr) -> @ast.TsType {
         | @ast.TsBinOp::AbstractNe
         | @ast.TsBinOp::Instanceof
         | @ast.TsBinOp::In => @ast.TsType::Boolean
-        // operator @ast.TsType::Boolean
-        @ast.TsBinOp::And | @ast.TsBinOp::Or | @ast.TsBinOp::Coalesce =>
-          @ast.TsType::Boolean
-        // @ast.TsBinOp::Add: stringcheck
+        // Logical operators return operand type (not Boolean)
+        @ast.TsBinOp::And | @ast.TsBinOp::Or => {
+          let left_t = infer_type(ctx, left)
+          let right_t = infer_type(ctx, right)
+          codegen_unify_types(left_t, right_t)
+        }
+        @ast.TsBinOp::Coalesce => {
+          let left_t = infer_type(ctx, left)
+          let right_t = infer_type(ctx, right)
+          match left_t {
+            @ast.TsType::Any | @ast.TsType::Null | @ast.TsType::Undefined =>
+              right_t
+            _ => codegen_unify_types(left_t, right_t)
+          }
+        }
+        // Bitwise operators return Int
+        @ast.TsBinOp::BitAnd
+        | @ast.TsBinOp::BitOr
+        | @ast.TsBinOp::BitXor
+        | @ast.TsBinOp::Shl
+        | @ast.TsBinOp::Shr
+        | @ast.TsBinOp::UShr => @ast.TsType::Int
+        // Add: string if either operand is string
         @ast.TsBinOp::Add => {
           let left_t = infer_type(ctx, left)
           let right_t = infer_type(ctx, right)
           if left_t == @ast.TsType::String_ || right_t == @ast.TsType::String_ {
             @ast.TsType::String_
           } else {
-            left_t
+            codegen_unify_numeric(left_t, right_t)
           }
         }
-        // operatortype
-        _ => infer_type(ctx, left)
+        // Arithmetic operators: promote to wider numeric type
+        @ast.TsBinOp::Sub
+        | @ast.TsBinOp::Mul
+        | @ast.TsBinOp::Div
+        | @ast.TsBinOp::Mod
+        | @ast.TsBinOp::Pow => {
+          let left_t = infer_type(ctx, left)
+          let right_t = infer_type(ctx, right)
+          codegen_unify_numeric(left_t, right_t)
+        }
       }
     @ast.TsExpr::UnaryOp(op, operand) =>
       match op {
@@ -499,19 +555,35 @@ fn infer_type(ctx : CodeGenCtx, expr : @ast.TsExpr) -> @ast.TsType {
       match recv_type {
         @ast.TsType::String_ =>
           match method_name {
-            "charAt" => @ast.TsType::String_ // charAt returns string (single char)
-            "charCodeAt" => @ast.TsType::Int // charCodeAt returns int
-            "substring" => @ast.TsType::String_ // substring returns string
-            "concat" => @ast.TsType::String_ // concat returns string
-            _ => @ast.TsType::Number
+            "charAt" | "substring" | "slice" | "substr" => @ast.TsType::String_
+            "concat" | "repeat" | "trim" | "toLowerCase" | "toUpperCase" =>
+              @ast.TsType::String_
+            "charCodeAt" | "indexOf" | "lastIndexOf" | "localeCompare" =>
+              @ast.TsType::Int
+            "split" => @ast.TsType::Array(@ast.TsType::String_)
+            "startsWith" | "endsWith" | "includes" => @ast.TsType::Boolean
+            _ => @ast.TsType::Any
           }
-        @ast.TsType::Array(_) =>
+        @ast.TsType::Array(elem_type) =>
           match method_name {
-            "push" => @ast.TsType::Int // push returns new length
-            "pop" => @ast.TsType::Number // pop returns element
-            _ => @ast.TsType::Number
+            "push" | "unshift" | "indexOf" | "lastIndexOf" | "findIndex" =>
+              @ast.TsType::Int
+            "pop" | "shift" | "find" | "at" => elem_type
+            "slice" | "concat" | "filter" | "reverse" | "sort" | "fill" =>
+              @ast.TsType::Array(elem_type)
+            "map" => @ast.TsType::Array(@ast.TsType::Any) // Return type depends on callback
+            "join" => @ast.TsType::String_
+            "includes" | "every" | "some" => @ast.TsType::Boolean
+            "reduce" | "reduceRight" => @ast.TsType::Any
+            _ => @ast.TsType::Any
           }
-        _ => @ast.TsType::Number
+        @ast.TsType::Number | @ast.TsType::Int =>
+          match method_name {
+            "toString" | "toFixed" | "toExponential" | "toPrecision" =>
+              @ast.TsType::String_
+            _ => @ast.TsType::Any
+          }
+        _ => @ast.TsType::Any
       }
     }
     @ast.TsExpr::AssignExpr(_, e) => infer_type(ctx, e) // assignmentexpressiontypetype
@@ -1982,9 +2054,14 @@ fn compile_stmt(
     | @ast.TsStmt::Let(binding, type_, init) =>
       match binding {
         @ast.TsBinding::Ident(name) => {
-          // @ast.TsType::Any typeliteral
-          let resolved_type = resolve_any(type_, init)
-          let idx = ctx.add_local(name, resolved_type)
+          // Use pre-registered type if available, otherwise infer from init
+          let (idx, resolved_type) = match ctx.get_local(name) {
+            Some(existing) => (existing.index, existing.type_)
+            None => {
+              let inferred = resolve_any(type_, init)
+              (ctx.add_local(name, inferred), inferred)
+            }
+          }
           compile_expr(ctx, init, resolved_type)
           ctx.emit(LocalSet(idx))
         }
@@ -1993,9 +2070,14 @@ fn compile_stmt(
     @ast.TsStmt::Const(binding, type_, init) =>
       match binding {
         @ast.TsBinding::Ident(name) => {
-          // const let , @ast.TsType::Any typeliteral
-          let resolved_type = resolve_any(type_, init)
-          let idx = ctx.add_local(name, resolved_type)
+          // Use pre-registered type if available, otherwise infer from init
+          let (idx, resolved_type) = match ctx.get_local(name) {
+            Some(existing) => (existing.index, existing.type_)
+            None => {
+              let inferred = resolve_any(type_, init)
+              (ctx.add_local(name, inferred), inferred)
+            }
+          }
           compile_expr(ctx, init, resolved_type)
           ctx.emit(LocalSet(idx))
         }
@@ -2583,17 +2665,208 @@ pub fn compile_module(
 }
 
 ///|
+/// Compile a typed function with pre-resolved local variable types.
+fn compile_typed_function(
+  typed_func : @ast.TypedFunc,
+  func_map : Map[String, UInt],
+  interfaces : Map[String, Array[(String, @ast.TsType)]],
+  import_types : Map[String, (Array[@ast.TsType], @ast.TsType)],
+  string_pool : StringPool,
+  builtins_used : Map[String, Bool],
+) -> (@core.TypeDef, @core.Code) raise CodeGenError {
+  let func = typed_func.func
+  let ctx = CodeGenCtx::new(
+    func_map, interfaces, import_types, string_pool, builtins_used,
+  )
+
+  // Register parameters
+  for param in func.params {
+    let _ = ctx.add_local(param.name, param.type_)
+  }
+
+  // Pre-register local variables with their inferred types
+  // Skip Any types - let codegen infer them from context
+  for var_info in typed_func.locals {
+    let (name, type_) = var_info
+    match type_ {
+      @ast.TsType::Any => () // Skip - will be inferred during codegen
+      _ =>
+        // Skip if already registered (e.g., shadowing or params)
+        if ctx.get_local(name) is None {
+          let _ = ctx.add_local(name, type_)
+        }
+    }
+  }
+
+  let param_count = func.params.length().reinterpret_as_uint()
+
+  // Compile function body
+  for stmt in func.body.stmts {
+    compile_stmt(ctx, stmt, func.return_type)
+  }
+
+  // Build type definition
+  let params : Array[@core.ValType] = []
+  for param in func.params {
+    params.push(ts_type_to_valtype(param.type_))
+  }
+  let results : Array[@core.ValType] = match func.return_type {
+    @ast.TsType::Void => []
+    t => [ts_type_to_valtype(t)]
+  }
+  let func_type : @core.TypeDef = @core.TypeDef::Func({ params, results })
+
+  // Build locals array (excluding parameters)
+  let locals : Array[@core.ValType] = []
+  let mut i = param_count.reinterpret_as_int()
+  while i < ctx.next_local.reinterpret_as_int() {
+    locals.push(ts_type_to_valtype(ctx.local_types[i]))
+    i += 1
+  }
+  let code : @core.Code = {
+    locals,
+    body: @core.Expr::{ instrs: ctx.instrs },
+    compiled: None,
+    max_stack_height: 0,
+  }
+  (func_type, code)
+}
+
+///|
 /// Compile a TypedModule to WebAssembly.
-/// This is the preferred entry point as it uses pre-analyzed type information.
+/// Uses pre-analyzed type information for better optimization.
 pub fn compile_typed_module(
-  _typed_module : @ast.TypedModule,
+  typed_module : @ast.TypedModule,
   original_module : @ast.TsModule,
 ) -> @core.Module raise CodeGenError {
-  // Use original module structure but with typed function information
-  // For now, delegate to compile_module as the type information is primarily
-  // used for validation and local variable tracking
-  // TODO: Use typed_module.funcs[i].locals for better local variable allocation
-  compile_module(original_module)
+  let num_imports = original_module.imports.length().reinterpret_as_uint()
+
+  // Build function index map
+  let func_map : Map[String, UInt] = {}
+  for i, imp in original_module.imports {
+    func_map[imp.name] = i.reinterpret_as_uint()
+  }
+  for i, func in original_module.funcs {
+    func_map[func.name] = i.reinterpret_as_uint() + num_imports
+  }
+
+  // Build interface map
+  let interface_map : Map[String, Array[(String, @ast.TsType)]] = {}
+  for iface in original_module.interfaces {
+    interface_map[iface.name] = iface.fields
+  }
+
+  // Build import types map
+  let import_types : Map[String, (Array[@ast.TsType], @ast.TsType)] = {}
+  for imp in original_module.imports {
+    let param_types : Array[@ast.TsType] = []
+    for param in imp.params {
+      param_types.push(param.1)
+    }
+    import_types[imp.name] = (param_types, imp.return_type)
+  }
+
+  let string_pool = StringPool::new()
+
+  // Build type definitions for imports
+  let types : Array[@core.TypeDef] = []
+  for imp in original_module.imports {
+    let params : Array[@core.ValType] = []
+    for param in imp.params {
+      params.push(ts_type_to_valtype(param.1))
+    }
+    let results : Array[@core.ValType] = match imp.return_type {
+      @ast.TsType::Void => []
+      t => [ts_type_to_valtype(t)]
+    }
+    types.push(@core.TypeDef::Func({ params, results }))
+  }
+
+  // Compile functions using typed function information
+  let codes : Array[@core.Code] = []
+  let funcs : Array[UInt] = []
+  let exports : Array[@core.Export] = []
+  let builtins_used : Map[String, Bool] = {}
+
+  for i, typed_func in typed_module.funcs {
+    let (func_type, code) = compile_typed_function(
+      typed_func,
+      func_map,
+      interface_map,
+      import_types,
+      string_pool,
+      builtins_used,
+    )
+    types.push(func_type)
+    codes.push(code)
+    let func_idx = i.reinterpret_as_uint() + num_imports
+    funcs.push(func_idx)
+
+    let name_bytes = string_to_bytes(typed_func.func.name)
+    exports.push({ name: name_bytes, desc: @core.ExportDesc::Func(func_idx) })
+  }
+
+  // Build imports
+  let imports : Array[@core.Import] = []
+  for i, imp in original_module.imports {
+    imports.push({
+      module_: string_to_bytes(imp.module_),
+      name: string_to_bytes(imp.name),
+      desc: @core.ImportDesc::Func(i.reinterpret_as_uint()),
+    })
+  }
+
+  // Memory
+  let mems : Array[@core.MemType] = [
+    { limits: { min: 1UL, max: Some(16UL) }, shared: false, memory64: false },
+  ]
+
+  // Data section for strings
+  let datas : Array[@core.Data] = if string_pool.data.length() > 0 {
+    [
+      {
+        mem_idx: 0U,
+        offset: { instrs: [I32Const(0U)] },
+        init: Bytes::from_array(string_pool.data).sub(),
+        is_active: true,
+      },
+    ]
+  } else {
+    []
+  }
+
+  // Heap pointer global
+  let heap_start = (string_pool.offset() + 3) / 4 * 4
+  let heap_start_aligned = if heap_start < 1024 { 1024 } else { heap_start }
+  let globals : Array[@core.Global] = [
+    {
+      type_: { val_type: I32, mutable: true },
+      init: { instrs: [I32Const(heap_start_aligned.reinterpret_as_uint())] },
+    },
+  ]
+
+  // Type metadata
+  let type_metadata = serialize_type_metadata(original_module)
+  let customs : Array[@core.CustomSection] = [
+    { name: string_to_bytes("tstype"), data: type_metadata, placement: End },
+  ]
+
+  @core.Module::{
+    types,
+    type_groups: [],
+    customs,
+    funcs,
+    tables: [],
+    mems,
+    globals,
+    tags: [],
+    elems: [],
+    datas,
+    start: None,
+    imports,
+    exports,
+    codes,
+  }
 }
 
 ///|

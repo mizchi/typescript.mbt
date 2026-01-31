@@ -680,3 +680,125 @@ test "DropAnalysis basic" {
     .any(fn(pair) { pair.0 == "used" })
   assert_true(has_used)
 }
+
+///|
+test "type inference: variable reference preserves type" {
+  // Test that types are correctly inferred through variable references
+  let src =
+    #|function test(a: number, b: number): number {
+    #|  let sum = a + b;
+    #|  return sum;
+    #|}
+  let result = parse_and_analyze(src)
+  match result {
+    Ok(typed_module, _) => {
+      let func = typed_module.funcs[0]
+      // Check that 'sum' is inferred as Number (not Any)
+      let mut found_sum = false
+      for var_info in func.locals {
+        let (name, type_) = var_info
+        if name == "sum" {
+          found_sum = true
+          assert_eq(type_, @ast.TsType::Number)
+        }
+      }
+      assert_true(found_sum)
+    }
+    Err(_) => panic()
+  }
+}
+
+///|
+test "type inference: binary operation preserves type" {
+  let src =
+    #|function test(): int {
+    #|  let x = 10;
+    #|  let y = 20;
+    #|  let z = x + y;
+    #|  return z;
+    #|}
+  let result = parse_and_analyze(src)
+  match result {
+    Ok(typed_module, _) => {
+      let func = typed_module.funcs[0]
+      // All locals should be Int
+      for var_info in func.locals {
+        let (_, type_) = var_info
+        assert_eq(type_, @ast.TsType::Int)
+      }
+    }
+    Err(_) => panic()
+  }
+}
+
+///|
+test "type inference: mixed types in chain" {
+  let src =
+    #|function test(a: number): number {
+    #|  let b = a * 2.0;
+    #|  let c = b + 1.0;
+    #|  return c;
+    #|}
+  let result = parse_and_analyze(src)
+  match result {
+    Ok(typed_module, _) => {
+      let func = typed_module.funcs[0]
+      // b and c should be Number
+      for var_info in func.locals {
+        let (_, type_) = var_info
+        assert_eq(type_, @ast.TsType::Number)
+      }
+    }
+    Err(_) => panic()
+  }
+}
+
+///|
+test "type inference: int + number promotes to number" {
+  let src =
+    #|function test(): number {
+    #|  let x = 10;
+    #|  let y = 1.5;
+    #|  let z = x + y;
+    #|  return z;
+    #|}
+  let result = parse_and_analyze(src)
+  match result {
+    Ok(typed_module, _) => {
+      let func = typed_module.funcs[0]
+      // z should be Number (promoted from Int + Number)
+      let mut found_z = false
+      for var_info in func.locals {
+        let (name, type_) = var_info
+        if name == "z" {
+          found_z = true
+          assert_eq(type_, @ast.TsType::Number)
+        }
+      }
+      assert_true(found_z)
+    }
+    Err(_) => panic()
+  }
+}
+
+///|
+test "type inference: bitwise operators return int" {
+  let src =
+    #|function test(a: number): int {
+    #|  let x = a | 0;
+    #|  return x;
+    #|}
+  let result = parse_and_analyze(src)
+  match result {
+    Ok(typed_module, _) => {
+      let func = typed_module.funcs[0]
+      for var_info in func.locals {
+        let (name, type_) = var_info
+        if name == "x" {
+          assert_eq(type_, @ast.TsType::Int)
+        }
+      }
+    }
+    Err(_) => panic()
+  }
+}

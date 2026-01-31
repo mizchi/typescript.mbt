@@ -652,3 +652,68 @@ test "codegen: type metadata in custom section" {
   assert_eq(data[9], b'\x01')
   assert_eq(data[10], b'\x00')
 }
+
+///|
+test "codegen: analyze_and_compile with type inference" {
+  // Test that TypedModule integration works correctly
+  let src =
+    #|function compute(): int {
+    #|  let x = 10;
+    #|  let y = 20;
+    #|  let z = x + y;
+    #|  return z;
+    #|}
+  let wasm_module = analyze_and_compile(src)
+  let runtime = @runtime.Runtime::load(wasm_module)
+  runtime.run_start()
+  let results = runtime.call_compiled(b"compute", [])
+  assert_eq(results[0], @runtime.Value::I32(30))
+}
+
+///|
+test "codegen: typed module with nested scopes" {
+  let src =
+    #|function nested(): int {
+    #|  let outer = 1;
+    #|  let result = 0;
+    #|  for (let i = 0; i < 5; i++) {
+    #|    let inner = outer + i;
+    #|    result = result + inner;
+    #|  }
+    #|  return result;
+    #|}
+  let wasm_module = analyze_and_compile(src)
+  let runtime = @runtime.Runtime::load(wasm_module)
+  runtime.run_start()
+  // result = (1+0) + (1+1) + (1+2) + (1+3) + (1+4) = 1+2+3+4+5 = 15
+  let results = runtime.call_compiled(b"nested", [])
+  assert_eq(results[0], @runtime.Value::I32(15))
+}
+
+///|
+test "codegen: typed module preserves function types" {
+  let src =
+    #|function addNumbers(a: number, b: number): number {
+    #|  let sum = a + b;
+    #|  return sum;
+    #|}
+  // Test with compile (no type analysis)
+  let wasm1 = compile(src)
+  let rt1 = @runtime.Runtime::load(wasm1)
+  rt1.run_start()
+  let r1 = rt1.call_compiled(b"addNumbers", [
+    @runtime.Value::F64(3.5),
+    @runtime.Value::F64(2.5),
+  ])
+  assert_eq(r1[0], @runtime.Value::F64(6.0))
+
+  // Test with analyze_and_compile (with type analysis)
+  let wasm2 = analyze_and_compile(src)
+  let rt2 = @runtime.Runtime::load(wasm2)
+  rt2.run_start()
+  let r2 = rt2.call_compiled(b"addNumbers", [
+    @runtime.Value::F64(3.5),
+    @runtime.Value::F64(2.5),
+  ])
+  assert_eq(r2[0], @runtime.Value::F64(6.0))
+}

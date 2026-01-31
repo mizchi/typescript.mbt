@@ -134,10 +134,24 @@ pub fn infer_literal_type(expr : @ast.TsExpr) -> @ast.TsType {
 }
 
 ///|
-/// Resolve Any type from declared type and initializer.
+/// Resolve Any type from declared type and initializer (without context).
 pub fn resolve_any(declared : @ast.TsType, init : @ast.TsExpr) -> @ast.TsType {
   match declared {
     @ast.TsType::Any => infer_literal_type(init)
+    _ => declared
+  }
+}
+
+///|
+/// Resolve Any type using context for better inference.
+/// Uses infer_expr_type to track variable types through expressions.
+pub fn resolve_any_with_ctx(
+  ctx : TypeInferCtx,
+  declared : @ast.TsType,
+  init : @ast.TsExpr,
+) -> @ast.TsType {
+  match declared {
+    @ast.TsType::Any => infer_expr_type(ctx, init)
     _ => declared
   }
 }
@@ -239,9 +253,28 @@ pub fn infer_binop_type(
     | @ast.TsBinOp::AbstractNe
     | @ast.TsBinOp::Instanceof
     | @ast.TsBinOp::In => @ast.TsType::Boolean
-    // Logical operators return Boolean
-    @ast.TsBinOp::And | @ast.TsBinOp::Or | @ast.TsBinOp::Coalesce =>
-      @ast.TsType::Boolean
+    // Logical operators: And returns left if falsy, else right. Or returns left if truthy, else right.
+    @ast.TsBinOp::And | @ast.TsBinOp::Or => {
+      let left_t = infer_expr_type(ctx, left)
+      let right_t = infer_expr_type(ctx, right)
+      unify_types(left_t, right_t)
+    }
+    // Nullish coalescing returns right type if left is nullable
+    @ast.TsBinOp::Coalesce => {
+      let left_t = infer_expr_type(ctx, left)
+      let right_t = infer_expr_type(ctx, right)
+      match left_t {
+        @ast.TsType::Any | @ast.TsType::Null | @ast.TsType::Undefined => right_t
+        _ => unify_types(left_t, right_t)
+      }
+    }
+    // Bitwise operators always return Int
+    @ast.TsBinOp::BitAnd
+    | @ast.TsBinOp::BitOr
+    | @ast.TsBinOp::BitXor
+    | @ast.TsBinOp::Shl
+    | @ast.TsBinOp::Shr
+    | @ast.TsBinOp::UShr => @ast.TsType::Int
     // Add: string if either operand is string
     @ast.TsBinOp::Add => {
       let left_t = infer_expr_type(ctx, left)
@@ -249,11 +282,48 @@ pub fn infer_binop_type(
       if left_t == @ast.TsType::String_ || right_t == @ast.TsType::String_ {
         @ast.TsType::String_
       } else {
-        left_t
+        unify_numeric_types(left_t, right_t)
       }
     }
-    // Other arithmetic operators preserve left operand type
-    _ => infer_expr_type(ctx, left)
+    // Other arithmetic operators: promote to wider numeric type
+    @ast.TsBinOp::Sub
+    | @ast.TsBinOp::Mul
+    | @ast.TsBinOp::Div
+    | @ast.TsBinOp::Mod
+    | @ast.TsBinOp::Pow => {
+      let left_t = infer_expr_type(ctx, left)
+      let right_t = infer_expr_type(ctx, right)
+      unify_numeric_types(left_t, right_t)
+    }
+  }
+}
+
+///|
+/// Unify two types, preferring the more specific one.
+fn unify_types(t1 : @ast.TsType, t2 : @ast.TsType) -> @ast.TsType {
+  if t1 == t2 {
+    return t1
+  }
+  match (t1, t2) {
+    (@ast.TsType::Any, t) => t
+    (t, @ast.TsType::Any) => t
+    (@ast.TsType::Number, @ast.TsType::Int) => @ast.TsType::Number
+    (@ast.TsType::Int, @ast.TsType::Number) => @ast.TsType::Number
+    _ => t1
+  }
+}
+
+///|
+/// Unify numeric types, preferring Number over Int.
+fn unify_numeric_types(t1 : @ast.TsType, t2 : @ast.TsType) -> @ast.TsType {
+  match (t1, t2) {
+    (@ast.TsType::Number, _) => @ast.TsType::Number
+    (_, @ast.TsType::Number) => @ast.TsType::Number
+    (@ast.TsType::Int, _) => @ast.TsType::Int
+    (_, @ast.TsType::Int) => @ast.TsType::Int
+    (@ast.TsType::Any, t) => t
+    (t, @ast.TsType::Any) => t
+    _ => t1
   }
 }
 
@@ -323,7 +393,8 @@ fn collect_stmt_locals(
 ) -> Unit {
   match stmt {
     @ast.TsStmt::Var(binding, type_, init) => {
-      let resolved = resolve_any(type_, init)
+      // Use context-aware type inference for better variable type tracking
+      let resolved = resolve_any_with_ctx(ctx, type_, init)
       let names : Array[String] = []
       collect_binding_names(binding, names)
       for name in names {
@@ -332,7 +403,7 @@ fn collect_stmt_locals(
       }
     }
     @ast.TsStmt::Let(binding, type_, init) => {
-      let resolved = resolve_any(type_, init)
+      let resolved = resolve_any_with_ctx(ctx, type_, init)
       let names : Array[String] = []
       collect_binding_names(binding, names)
       for name in names {
@@ -341,7 +412,7 @@ fn collect_stmt_locals(
       }
     }
     @ast.TsStmt::Const(binding, type_, init) => {
-      let resolved = resolve_any(type_, init)
+      let resolved = resolve_any_with_ctx(ctx, type_, init)
       let names : Array[String] = []
       collect_binding_names(binding, names)
       for name in names {
