@@ -7443,7 +7443,11 @@ fn JSInterpreter::new_instance(
       let ctor = env.get(class_name)
       match ctor {
         Function(_) => self.construct_with(ctor, ctor, args)
-        _ => self.new_object()
+        _ => {
+          // new on non-function throws TypeError
+          let _ = self.set_error_kind("TypeError", class_name + " is not a constructor")
+          Undefined
+        }
       }
     }
   }

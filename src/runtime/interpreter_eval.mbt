@@ -1385,6 +1385,11 @@ pub fn JSInterpreter::eval_expr(
     }
     @ast.TsExpr::NewExpr(callee_expr, args) => {
       let ctor = self.eval_expr(callee_expr, env)
+      // Check for ReferenceError from undefined variable
+      match self.peek_error() {
+        Some(_) => return self.error_or_undefined()
+        None => ()
+      }
       let arg_values = self.eval_args(args, env)
       match self.peek_error() {
         Some(_) => return self.error_or_undefined()
@@ -1392,7 +1397,11 @@ pub fn JSInterpreter::eval_expr(
       }
       match ctor {
         Function(_) => self.construct_with(ctor, ctor, arg_values)
-        _ => self.new_object()
+        _ => {
+          // new on non-function throws TypeError
+          let _ = self.set_error_kind("TypeError", "is not a constructor")
+          Undefined
+        }
       }
     }
     @ast.TsExpr::ArrowFunc(params, body, is_async) => {
