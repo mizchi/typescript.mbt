@@ -726,11 +726,12 @@ fn JSInterpreter::string_method(
       if count <= 0 {
         String("")
       } else {
-        let mut out = ""
+        // Use StringBuilder for O(n) instead of O(n²)
+        let sb = StringBuilder::new()
         for _ in 0..<count {
-          out = out + s
+          sb.write_string(s)
         }
-        String(out)
+        String(sb.to_string())
       }
     }
     "padStart" => {
@@ -1070,16 +1071,13 @@ fn JSInterpreter::array_method(
         let out = js_new_array()
         match out {
           Array(out_arr) => {
+            // Pre-allocate args array and reuse
+            let args_array : Array[JSValue] = [Undefined, Undefined, arr_val]
             let mut i = 0
             while i < map_len {
-              let key = i.to_string()
-              if js_has_prop(arr_val, key) {
-                let value = self.get_prop_value(arr_val, key)
-                let args_array = [
-                  value,
-                  JSValue::Number(i.to_double()),
-                  arr_val,
-                ]
+              if i < arr.items.length() && arr.present[i] {
+                args_array[0] = arr.items[i]
+                args_array[1] = Number(i.to_double())
                 let mapped = self.call_function(callback, this_arg, args_array)
                 out_arr.items.push(mapped)
                 out_arr.present.push(true)
@@ -1109,12 +1107,14 @@ fn JSInterpreter::array_method(
         }
         let this_arg = if args.length() > 1 { args[1] } else { Undefined }
         let result : Array[JSValue] = []
+        // Pre-allocate args array and reuse
+        let args_array : Array[JSValue] = [Undefined, Undefined, arr_val]
         let mut i = 0
         while i < len {
-          let key = i.to_string()
-          if js_has_prop(arr_val, key) {
-            let item = self.get_prop_value(arr_val, key)
-            let args_array = [item, JSValue::Number(i.to_double()), arr_val]
+          if i < arr.items.length() && arr.present[i] {
+            let item = arr.items[i]
+            args_array[0] = item
+            args_array[1] = Number(i.to_double())
             let filtered = self.call_function(callback, this_arg, args_array)
             if filtered.to_boolean() {
               result.push(item)
@@ -1144,9 +1144,8 @@ fn JSInterpreter::array_method(
         } else {
           let mut found = false
           while i < len {
-            let key = i.to_string()
-            if js_has_prop(arr_val, key) {
-              accumulator = self.get_prop_value(arr_val, key)
+            if i < arr.items.length() && arr.present[i] {
+              accumulator = arr.items[i]
               found = true
               i += 1
               break
@@ -1159,16 +1158,13 @@ fn JSInterpreter::array_method(
             )
           }
         }
+        // Pre-allocate args array and reuse
+        let args_array : Array[JSValue] = [Undefined, Undefined, Undefined, arr_val]
         while i < len {
-          let key = i.to_string()
-          if js_has_prop(arr_val, key) {
-            let value = self.get_prop_value(arr_val, key)
-            let args_array = [
-              accumulator,
-              value,
-              JSValue::Number(i.to_double()),
-              arr_val,
-            ]
+          if i < arr.items.length() && arr.present[i] {
+            args_array[0] = accumulator
+            args_array[1] = arr.items[i]
+            args_array[2] = Number(i.to_double())
             accumulator = self.call_function(callback, Undefined, args_array)
           }
           i += 1
@@ -1195,9 +1191,8 @@ fn JSInterpreter::array_method(
         } else {
           let mut found = false
           while i >= 0 {
-            let key = i.to_string()
-            if js_has_prop(arr_val, key) {
-              accumulator = self.get_prop_value(arr_val, key)
+            if i < arr.items.length() && arr.present[i] {
+              accumulator = arr.items[i]
               found = true
               i = i - 1
               break
@@ -1213,16 +1208,13 @@ fn JSInterpreter::array_method(
             )
           }
         }
+        // Pre-allocate args array and reuse
+        let args_array : Array[JSValue] = [Undefined, Undefined, Undefined, arr_val]
         while i >= 0 {
-          let key = i.to_string()
-          if js_has_prop(arr_val, key) {
-            let value = self.get_prop_value(arr_val, key)
-            let args_array = [
-              accumulator,
-              value,
-              JSValue::Number(i.to_double()),
-              arr_val,
-            ]
+          if i < arr.items.length() && arr.present[i] {
+            args_array[0] = accumulator
+            args_array[1] = arr.items[i]
+            args_array[2] = Number(i.to_double())
             accumulator = self.call_function(callback, Undefined, args_array)
           }
           if i == 0 {
@@ -1245,14 +1237,14 @@ fn JSInterpreter::array_method(
           )
         }
         let this_arg = if args.length() > 1 { args[1] } else { Undefined }
+        // Pre-allocate args array and reuse
+        let args_array : Array[JSValue] = [Undefined, Undefined, arr_val]
         let mut i = 0
         while i < len {
-          let key = i.to_string()
-          if js_has_prop(arr_val, key) {
-            let value = self.get_prop_value(arr_val, key)
-            let args_array = [value, JSValue::Number(i.to_double()), arr_val]
+          if i < arr.items.length() && arr.present[i] {
+            args_array[0] = arr.items[i]
+            args_array[1] = Number(i.to_double())
             let _ = self.call_function(callback, this_arg, args_array)
-
           }
           i += 1
         }
@@ -1271,12 +1263,13 @@ fn JSInterpreter::array_method(
           )
         }
         let this_arg = if args.length() > 1 { args[1] } else { Undefined }
+        // Pre-allocate args array and reuse
+        let args_array : Array[JSValue] = [Undefined, Undefined, arr_val]
         let mut i = 0
         while i < len {
-          let key = i.to_string()
-          if js_has_prop(arr_val, key) {
-            let value = self.get_prop_value(arr_val, key)
-            let args_array = [value, JSValue::Number(i.to_double()), arr_val]
+          if i < arr.items.length() && arr.present[i] {
+            args_array[0] = arr.items[i]
+            args_array[1] = Number(i.to_double())
             let ok = self.call_function(callback, this_arg, args_array)
             if not(ok.to_boolean()) {
               return Bool(false)
@@ -1299,12 +1292,13 @@ fn JSInterpreter::array_method(
           )
         }
         let this_arg = if args.length() > 1 { args[1] } else { Undefined }
+        // Pre-allocate args array and reuse
+        let args_array : Array[JSValue] = [Undefined, Undefined, arr_val]
         let mut i = 0
         while i < len {
-          let key = i.to_string()
-          if js_has_prop(arr_val, key) {
-            let value = self.get_prop_value(arr_val, key)
-            let args_array = [value, JSValue::Number(i.to_double()), arr_val]
+          if i < arr.items.length() && arr.present[i] {
+            args_array[0] = arr.items[i]
+            args_array[1] = Number(i.to_double())
             let ok = self.call_function(callback, this_arg, args_array)
             if ok.to_boolean() {
               return Bool(true)

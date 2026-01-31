@@ -388,61 +388,44 @@ fn JSInterpreter::install_math(
 }
 
 ///|
+/// Helper to install a method on a prototype with length property
+fn JSInterpreter::install_method(
+  self : JSInterpreter,
+  proto : JSValue,
+  name : String,
+  native_name : String,
+  length : Double,
+) -> Unit {
+  let fn_val = self.make_native(native_name)
+  self.set_function_length(fn_val, length)
+  let _ = js_define_data_prop(proto, name, fn_val, true, false, true)
+}
+
+///|
+/// Helper to install a static method on a constructor
+fn JSInterpreter::install_static_method(
+  self : JSInterpreter,
+  ctor : JSValue,
+  name : String,
+  native_name : String,
+  length : Double,
+) -> Unit {
+  let fn_val = self.make_native(native_name)
+  self.set_function_length(fn_val, length)
+  let _ = js_set_prop(ctor, name, fn_val)
+}
+
+///|
 // /
 fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let global_obj = self.new_object()
 
   // Object.prototype - all properties should be non-enumerable
-  let has_own = self.make_native("Object.hasOwnProperty")
-  self.set_function_length(has_own, 1.0)
-  let _ = js_define_data_prop(
-    self.object_proto,
-    "hasOwnProperty",
-    has_own,
-    true,
-    false,
-    true,
-  )
-  let to_string_fn = self.make_native("Object.prototype.toString")
-  self.set_function_length(to_string_fn, 0.0)
-  let _ = js_define_data_prop(
-    self.object_proto,
-    "toString",
-    to_string_fn,
-    true,
-    false,
-    true,
-  )
-  let is_proto_fn = self.make_native("Object.prototype.isPrototypeOf")
-  self.set_function_length(is_proto_fn, 1.0)
-  let _ = js_define_data_prop(
-    self.object_proto,
-    "isPrototypeOf",
-    is_proto_fn,
-    true,
-    false,
-    true,
-  )
-  let value_of_fn = self.make_native("Object.prototype.valueOf")
-  self.set_function_length(value_of_fn, 0.0)
-  let _ = js_define_data_prop(
-    self.object_proto,
-    "valueOf",
-    value_of_fn,
-    true,
-    false,
-    true,
-  )
-  let prop_enum_fn = self.make_native("Object.prototype.propertyIsEnumerable")
-  self.set_function_length(prop_enum_fn, 1.0)
-  let _ = js_define_data_prop(
-    self.object_proto,
-    "propertyIsEnumerable",
-    prop_enum_fn,
-    true,
-    false,
-    true,
-  )
+  self.install_method(self.object_proto, "hasOwnProperty", "Object.hasOwnProperty", 1.0)
+  self.install_method(self.object_proto, "toString", "Object.prototype.toString", 0.0)
+  self.install_method(self.object_proto, "isPrototypeOf", "Object.prototype.isPrototypeOf", 1.0)
+  self.install_method(self.object_proto, "valueOf", "Object.prototype.valueOf", 0.0)
+  self.install_method(self.object_proto, "propertyIsEnumerable", "Object.prototype.propertyIsEnumerable", 1.0)
 
   // Object
   let object_ctor = self.make_native("Object")
@@ -463,65 +446,25 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
     false,
     true,
   )
-  let get_own = self.make_native("Object.getOwnPropertyNames")
-  self.set_function_length(get_own, 1.0)
-  let _ = js_set_prop(object_ctor, "getOwnPropertyNames", get_own)
-  let obj_create = self.make_native("Object.create")
-  self.set_function_length(obj_create, 2.0)
-  let _ = js_set_prop(object_ctor, "create", obj_create)
-  let obj_get_proto = self.make_native("Object.getPrototypeOf")
-  self.set_function_length(obj_get_proto, 1.0)
-  let _ = js_set_prop(object_ctor, "getPrototypeOf", obj_get_proto)
-  let obj_get_desc = self.make_native("Object.getOwnPropertyDescriptor")
-  self.set_function_length(obj_get_desc, 2.0)
-  let _ = js_set_prop(object_ctor, "getOwnPropertyDescriptor", obj_get_desc)
-  let obj_define_prop = self.make_native("Object.defineProperty")
-  self.set_function_length(obj_define_prop, 3.0)
-  let _ = js_set_prop(object_ctor, "defineProperty", obj_define_prop)
-  let obj_set_proto = self.make_native("Object.setPrototypeOf")
-  self.set_function_length(obj_set_proto, 2.0)
-  let _ = js_define_data_prop(
-    object_ctor, "setPrototypeOf", obj_set_proto, true, false, true,
-  )
-  let obj_is_ext = self.make_native("Object.isExtensible")
-  self.set_function_length(obj_is_ext, 1.0)
-  let _ = js_set_prop(object_ctor, "isExtensible", obj_is_ext)
-  let obj_is = self.make_native("Object.is")
-  self.set_function_length(obj_is, 2.0)
-  let _ = js_set_prop(object_ctor, "is", obj_is)
-  let obj_keys = self.make_native("Object.keys")
-  self.set_function_length(obj_keys, 1.0)
-  let _ = js_set_prop(object_ctor, "keys", obj_keys)
-  let obj_get_syms = self.make_native("Object.getOwnPropertySymbols")
-  self.set_function_length(obj_get_syms, 1.0)
-  let _ = js_set_prop(object_ctor, "getOwnPropertySymbols", obj_get_syms)
-  let obj_values = self.make_native("Object.values")
-  self.set_function_length(obj_values, 1.0)
-  let _ = js_set_prop(object_ctor, "values", obj_values)
-  let obj_entries = self.make_native("Object.entries")
-  self.set_function_length(obj_entries, 1.0)
-  let _ = js_set_prop(object_ctor, "entries", obj_entries)
-  let obj_assign = self.make_native("Object.assign")
-  self.set_function_length(obj_assign, 2.0)
-  let _ = js_set_prop(object_ctor, "assign", obj_assign)
-  let obj_from_entries = self.make_native("Object.fromEntries")
-  self.set_function_length(obj_from_entries, 1.0)
-  let _ = js_set_prop(object_ctor, "fromEntries", obj_from_entries)
-  let obj_prevent_ext = self.make_native("Object.preventExtensions")
-  self.set_function_length(obj_prevent_ext, 1.0)
-  let _ = js_set_prop(object_ctor, "preventExtensions", obj_prevent_ext)
-  let obj_freeze = self.make_native("Object.freeze")
-  self.set_function_length(obj_freeze, 1.0)
-  let _ = js_set_prop(object_ctor, "freeze", obj_freeze)
-  let obj_seal = self.make_native("Object.seal")
-  self.set_function_length(obj_seal, 1.0)
-  let _ = js_set_prop(object_ctor, "seal", obj_seal)
-  let obj_is_frozen = self.make_native("Object.isFrozen")
-  self.set_function_length(obj_is_frozen, 1.0)
-  let _ = js_set_prop(object_ctor, "isFrozen", obj_is_frozen)
-  let obj_is_sealed = self.make_native("Object.isSealed")
-  self.set_function_length(obj_is_sealed, 1.0)
-  let _ = js_set_prop(object_ctor, "isSealed", obj_is_sealed)
+  self.install_static_method(object_ctor, "getOwnPropertyNames", "Object.getOwnPropertyNames", 1.0)
+  self.install_static_method(object_ctor, "create", "Object.create", 2.0)
+  self.install_static_method(object_ctor, "getPrototypeOf", "Object.getPrototypeOf", 1.0)
+  self.install_static_method(object_ctor, "getOwnPropertyDescriptor", "Object.getOwnPropertyDescriptor", 2.0)
+  self.install_static_method(object_ctor, "defineProperty", "Object.defineProperty", 3.0)
+  self.install_method(object_ctor, "setPrototypeOf", "Object.setPrototypeOf", 2.0)
+  self.install_static_method(object_ctor, "isExtensible", "Object.isExtensible", 1.0)
+  self.install_static_method(object_ctor, "is", "Object.is", 2.0)
+  self.install_static_method(object_ctor, "keys", "Object.keys", 1.0)
+  self.install_static_method(object_ctor, "getOwnPropertySymbols", "Object.getOwnPropertySymbols", 1.0)
+  self.install_static_method(object_ctor, "values", "Object.values", 1.0)
+  self.install_static_method(object_ctor, "entries", "Object.entries", 1.0)
+  self.install_static_method(object_ctor, "assign", "Object.assign", 2.0)
+  self.install_static_method(object_ctor, "fromEntries", "Object.fromEntries", 1.0)
+  self.install_static_method(object_ctor, "preventExtensions", "Object.preventExtensions", 1.0)
+  self.install_static_method(object_ctor, "freeze", "Object.freeze", 1.0)
+  self.install_static_method(object_ctor, "seal", "Object.seal", 1.0)
+  self.install_static_method(object_ctor, "isFrozen", "Object.isFrozen", 1.0)
+  self.install_static_method(object_ctor, "isSealed", "Object.isSealed", 1.0)
   self.global_env.define_var("Object", object_ctor)
   let _ = js_set_prop(global_obj, "Object", object_ctor)
 
@@ -1006,10 +949,16 @@ fn JSInterpreter::install_builtins(self : JSInterpreter) -> Unit {
   let date_get_utc_seconds = self.make_native("Date.prototype.getUTCSeconds")
   self.set_function_length(date_get_utc_seconds, 0.0)
   let _ = js_set_prop(date_proto, "getUTCSeconds", date_get_utc_seconds)
-  let date_get_utc_milliseconds = self.make_native("Date.prototype.getUTCMilliseconds")
+  let date_get_utc_milliseconds = self.make_native(
+    "Date.prototype.getUTCMilliseconds",
+  )
   self.set_function_length(date_get_utc_milliseconds, 0.0)
-  let _ = js_set_prop(date_proto, "getUTCMilliseconds", date_get_utc_milliseconds)
-  let date_get_timezone_offset = self.make_native("Date.prototype.getTimezoneOffset")
+  let _ = js_set_prop(
+    date_proto, "getUTCMilliseconds", date_get_utc_milliseconds,
+  )
+  let date_get_timezone_offset = self.make_native(
+    "Date.prototype.getTimezoneOffset",
+  )
   self.set_function_length(date_get_timezone_offset, 0.0)
   let _ = js_set_prop(date_proto, "getTimezoneOffset", date_get_timezone_offset)
   let date_to_string = self.make_native("Date.prototype.toString")
@@ -3881,7 +3830,7 @@ fn JSInterpreter::call_native(
             // Day of week: 0 = Sunday, 1 = Monday, ..., 6 = Saturday
             // Jan 1, 1970 was Thursday (day 4)
             let days = (t / 86400000.0).floor().to_int()
-            let day_of_week = ((days % 7) + 4) % 7
+            let day_of_week = (days % 7 + 4) % 7
             Number(day_of_week.to_double())
           }
         None => self.error_or_undefined()
@@ -3970,7 +3919,7 @@ fn JSInterpreter::call_native(
             Number(js_nan)
           } else {
             let days = (t / 86400000.0).floor().to_int()
-            let day_of_week = ((days % 7) + 4) % 7
+            let day_of_week = (days % 7 + 4) % 7
             Number(day_of_week.to_double())
           }
         None => self.error_or_undefined()
@@ -4022,12 +3971,7 @@ fn JSInterpreter::call_native(
     "Date.prototype.getTimezoneOffset" =>
       // Return 0 for UTC (no timezone offset support currently)
       match self.date_time_value(this_arg) {
-        Some(t) =>
-          if t.is_nan() {
-            Number(js_nan)
-          } else {
-            Number(0.0)
-          }
+        Some(t) => if t.is_nan() { Number(js_nan) } else { Number(0.0) }
         None => self.error_or_undefined()
       }
     "Date.prototype.toString" =>
@@ -4043,7 +3987,7 @@ fn JSInterpreter::call_native(
               "Nov", "Dec",
             ]
             let days = (t / 86400000.0).floor().to_int()
-            let day_of_week = ((days % 7) + 4) % 7
+            let day_of_week = (days % 7 + 4) % 7
             let day_name = day_names[day_of_week]
             let month_name = month_names[month]
             let day_str = if day < 10 {
@@ -4098,7 +4042,7 @@ fn JSInterpreter::call_native(
               "Nov", "Dec",
             ]
             let days = (t / 86400000.0).floor().to_int()
-            let day_of_week = ((days % 7) + 4) % 7
+            let day_of_week = (days % 7 + 4) % 7
             let day_name = day_names[day_of_week]
             let month_name = month_names[month]
             let day_str = if day < 10 {
@@ -4107,7 +4051,13 @@ fn JSInterpreter::call_native(
               day.to_string()
             }
             String(
-              day_name + " " + month_name + " " + day_str + " " + year.to_string(),
+              day_name +
+              " " +
+              month_name +
+              " " +
+              day_str +
+              " " +
+              year.to_string(),
             )
           }
         None => self.error_or_undefined()
@@ -4144,7 +4094,9 @@ fn JSInterpreter::call_native(
           if t.is_nan() {
             self.set_error_kind("RangeError", "Invalid time value")
           } else {
-            let (year, month, day, hour, minute, second, milli) = @lib.break_time(t)
+            let (year, month, day, hour, minute, second, milli) = @lib.break_time(
+              t,
+            )
             fn pad2(n : Int) -> String {
               if n < 10 {
                 "0" + n.to_string()
@@ -4209,7 +4161,7 @@ fn JSInterpreter::call_native(
               "Nov", "Dec",
             ]
             let days = (t / 86400000.0).floor().to_int()
-            let day_of_week = ((days % 7) + 4) % 7
+            let day_of_week = (days % 7 + 4) % 7
             let day_name = day_names[day_of_week]
             let month_name = month_names[month]
             let day_str = if day < 10 {
@@ -4258,7 +4210,9 @@ fn JSInterpreter::call_native(
             Null
           } else {
             // toJSON returns the ISO string
-            let (year, month, day, hour, minute, second, milli) = @lib.break_time(t)
+            let (year, month, day, hour, minute, second, milli) = @lib.break_time(
+              t,
+            )
             fn pad2_json(n : Int) -> String {
               if n < 10 {
                 "0" + n.to_string()

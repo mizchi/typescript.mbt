@@ -159,51 +159,112 @@ pub fn JSInterpreter::eval_expr(
                 _ => js_add(lprim, rprim)
               }
             }
-            @ast.TsBinOp::Sub => js_sub(lval, rval)
-            @ast.TsBinOp::Mul => js_mul(lval, rval)
-            @ast.TsBinOp::Div => js_div(lval, rval)
-            @ast.TsBinOp::Mod => js_mod(lval, rval)
+            @ast.TsBinOp::Sub =>
+              Number(self.to_number_value(lval) - self.to_number_value(rval))
+            @ast.TsBinOp::Mul =>
+              Number(self.to_number_value(lval) * self.to_number_value(rval))
+            @ast.TsBinOp::Div =>
+              Number(self.to_number_value(lval) / self.to_number_value(rval))
+            @ast.TsBinOp::Mod => {
+              let n = self.to_number_value(lval)
+              let d = self.to_number_value(rval)
+              if n.is_nan() || d.is_nan() || n.is_inf() || d == 0.0 {
+                Number(0.0 / 0.0) // NaN
+              } else if d.is_inf() {
+                Number(n)
+              } else {
+                let q = (n / d).trunc()
+                let r = n - d * q
+                if r == 0.0 && n < 0.0 {
+                  Number(-0.0)
+                } else {
+                  Number(r)
+                }
+              }
+            }
             @ast.TsBinOp::Pow =>
-              Number(@math.pow(lval.to_number(), rval.to_number()))
+              Number(
+                @math.pow(
+                  self.to_number_value(lval),
+                  self.to_number_value(rval),
+                ),
+              )
             @ast.TsBinOp::BitAnd => {
-              let li = lval.to_number().to_int()
-              let ri = rval.to_number().to_int()
+              let li = self.to_number_value(lval).to_int()
+              let ri = self.to_number_value(rval).to_int()
               Number((li & ri).to_double())
             }
             @ast.TsBinOp::BitOr => {
-              let li = lval.to_number().to_int()
-              let ri = rval.to_number().to_int()
+              let li = self.to_number_value(lval).to_int()
+              let ri = self.to_number_value(rval).to_int()
               Number((li | ri).to_double())
             }
             @ast.TsBinOp::BitXor => {
-              let li = lval.to_number().to_int()
-              let ri = rval.to_number().to_int()
+              let li = self.to_number_value(lval).to_int()
+              let ri = self.to_number_value(rval).to_int()
               Number((li ^ ri).to_double())
             }
             @ast.TsBinOp::Shl => {
-              let li = lval.to_number().to_int()
-              let ri = rval.to_number().to_int()
+              let li = self.to_number_value(lval).to_int()
+              let ri = self.to_number_value(rval).to_int()
               let shift = ri & 31
               Number((li << shift).to_double())
             }
             @ast.TsBinOp::Shr => {
-              let li = lval.to_number().to_int()
-              let ri = rval.to_number().to_int()
+              let li = self.to_number_value(lval).to_int()
+              let ri = self.to_number_value(rval).to_int()
               let shift = ri & 31
               Number((li >> shift).to_double())
             }
             @ast.TsBinOp::UShr => {
-              let li = lval.to_number()
-              let ri = rval.to_number().to_int()
-              let shift = ri & 31
-              let u = if li < 0.0 { li + 4294967296.0 } else { li }
+              let li = self.to_number_value(lval)
+              let ri = self.to_number_value(rval)
+              // ToUint32: NaN, Infinity, -Infinity, +/-0 => +0
+              if li.is_nan() || li.is_inf() || li == 0.0 {
+                return Number(0.0)
+              }
+              if ri.is_nan() || ri.is_inf() {
+                // Shift by 0 when right operand is NaN/Infinity
+                // ToUint32 of left operand
+                let u = if li < 0.0 {
+                  (li.trunc() % 4294967296.0 + 4294967296.0) % 4294967296.0
+                } else {
+                  li.trunc() % 4294967296.0
+                }
+                return Number(if u == 0.0 { 0.0 } else { u })
+              }
+              let shift = ri.to_int() & 31
+              // ToUint32 conversion
+              let u = if li < 0.0 {
+                (li.trunc() % 4294967296.0 + 4294967296.0) % 4294967296.0
+              } else {
+                li.trunc() % 4294967296.0
+              }
               let denom = @math.pow(2.0, shift.to_double())
-              Number(@math.floor(u / denom))
+              let result = @math.floor(u / denom)
+              // Ensure +0 (not -0) is returned
+              Number(if result == 0.0 { 0.0 } else { result })
             }
-            @ast.TsBinOp::BinLt => js_lt(lval, rval)
-            @ast.TsBinOp::BinLe => js_le(lval, rval)
-            @ast.TsBinOp::BinGt => js_gt(lval, rval)
-            @ast.TsBinOp::BinGe => js_ge(lval, rval)
+            @ast.TsBinOp::BinLt => {
+              let lprim = self.to_primitive_number(lval)
+              let rprim = self.to_primitive_number(rval)
+              js_lt(lprim, rprim)
+            }
+            @ast.TsBinOp::BinLe => {
+              let lprim = self.to_primitive_number(lval)
+              let rprim = self.to_primitive_number(rval)
+              js_le(lprim, rprim)
+            }
+            @ast.TsBinOp::BinGt => {
+              let lprim = self.to_primitive_number(lval)
+              let rprim = self.to_primitive_number(rval)
+              js_gt(lprim, rprim)
+            }
+            @ast.TsBinOp::BinGe => {
+              let lprim = self.to_primitive_number(lval)
+              let rprim = self.to_primitive_number(rval)
+              js_ge(lprim, rprim)
+            }
             @ast.TsBinOp::BinEq => js_strict_eq(lval, rval) // === (strict equality)
             @ast.TsBinOp::BinNe => js_strict_ne(lval, rval) // !== (strict inequality)
             @ast.TsBinOp::AbstractEq => js_eq(lval, rval) // == (abstract equality)
@@ -3125,6 +3186,8 @@ fn JSInterpreter::exec_for_loop(
   } else {
     []
   }
+  // Pre-compute whether we have per-iteration bindings
+  let has_per_iter = per_iteration_bindings.length() > 0
 
   // initialize
   match init {
@@ -3171,9 +3234,13 @@ fn JSInterpreter::exec_for_loop(
   }
 
   // Create the first per-iteration environment after initialization
-  if per_iteration_bindings.length() > 0 {
+  if has_per_iter {
     iter_env = create_per_iteration_env(env, loop_env, per_iteration_bindings)
   }
+
+  // Cache lexical names from body - only scan AST once
+  let body_lexical_names = collect_block_lexical_names(body)
+  let has_body_lexicals = body_lexical_names.length() > 0
 
   // loop
   while (match cond {
@@ -3190,8 +3257,14 @@ fn JSInterpreter::exec_for_loop(
       None => ()
     }
     // Create a new block scope for the loop body (ES6 block scoping)
-    let body_env = js_new_env(Some(iter_env))
-    self.hoist_block_lexical(body, body_env)
+    // Use cached lexical names instead of re-scanning AST each iteration
+    let body_env = if has_body_lexicals {
+      let new_env = js_new_env(Some(iter_env))
+      apply_cached_lexical_names(new_env, body_lexical_names)
+      new_env
+    } else {
+      js_new_env(Some(iter_env))
+    }
     match self.exec_block(body, body_env) {
       Some(BreakSignal(label)) =>
         if loop_label_matches(loop_label, label) {
@@ -3202,7 +3275,7 @@ fn JSInterpreter::exec_for_loop(
       Some(ContinueSignal(label)) =>
         if loop_label_matches(loop_label, label) {
           // ES6: Create new per-iteration environment BEFORE update
-          if per_iteration_bindings.length() > 0 {
+          if has_per_iter {
             iter_env = create_per_iteration_env(
               env, iter_env, per_iteration_bindings,
             )
@@ -3225,7 +3298,7 @@ fn JSInterpreter::exec_for_loop(
     // ES6: Create new per-iteration environment BEFORE executing update
     // This ensures closures from this iteration capture the current iteration's values,
     // while the update modifies the new environment for the next iteration
-    if per_iteration_bindings.length() > 0 {
+    if has_per_iter {
       iter_env = create_per_iteration_env(env, iter_env, per_iteration_bindings)
     }
     match update {
@@ -3791,7 +3864,7 @@ pub fn JSInterpreter::exec_stmt(
       for i, case_ in cases {
         match case_.test_expr {
           None => default_index = Some(i) // Remember default case location
-          Some(test_expr) => {
+          Some(test_expr) =>
             if matched_index is None {
               let test_val = self.eval_expr(test_expr, switch_env)
               match self.peek_error() {
@@ -3803,7 +3876,6 @@ pub fn JSInterpreter::exec_stmt(
                 _ => ()
               }
             }
-          }
         }
       }
       // If no case matched, use default
@@ -4288,6 +4360,44 @@ fn JSInterpreter::hoist_block_lexical(
         }
       }
       _ => ()
+    }
+  }
+}
+
+///|
+/// Collect lexical (let/const) names from a block - used for caching in loops
+/// Returns array of (name, is_const) pairs
+fn collect_block_lexical_names(block : @ast.TsBlock) -> Array[(String, Bool)] {
+  let result : Array[(String, Bool)] = []
+  for stmt in block.stmts {
+    match stmt {
+      @ast.TsStmt::Let(binding, _, _) => {
+        let names : Array[String] = []
+        collect_binding_names(binding, names)
+        for name in names {
+          result.push((name, false))
+        }
+      }
+      @ast.TsStmt::Const(binding, _, _) => {
+        let names : Array[String] = []
+        collect_binding_names(binding, names)
+        for name in names {
+          result.push((name, true))
+        }
+      }
+      _ => ()
+    }
+  }
+  result
+}
+
+///|
+/// Apply cached lexical names to an environment - faster than hoist_block_lexical
+fn apply_cached_lexical_names(env : JSEnv, names : Array[(String, Bool)]) -> Unit {
+  for pair in names {
+    let (name, is_const) = pair
+    if not(env.has_local(name)) {
+      env.define_uninitialized(name, is_const)
     }
   }
 }
