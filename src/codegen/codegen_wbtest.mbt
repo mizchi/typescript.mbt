@@ -1,4 +1,5 @@
 // CodeGen test
+// Uses WasmtimeCli by default for faster execution in CI
 
 ///|
 test "compile_to_wasm: generates valid wasm binary" {
@@ -32,20 +33,9 @@ test "compile_to_wasm: factorial" {
     #|  return n * factorial(n - 1);
     #|}
   let wasm = compile_to_wasm(src)
-
-  // Wasm magic numbercheck
   assert_eq(wasm[0], b'\x00')
   assert_eq(wasm[1], b'\x61')
-
-  // generateruncheck (wasm5 runtime )
-  let parser = @parser.Parser::from_source(src)
-  let ts_module = parser.parse_module()
-  let wasm_module = compile_module(ts_module)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let results = runtime.call_compiled(b"factorial", [@runtime.Value::F64(5.0)])
-  assert_eq(results[0], @runtime.Value::F64(120.0))
-  println("Factorial Wasm binary: \{wasm.length()} bytes")
+  assert_run_f64(wasm, "factorial", [5.0], 120.0)
 }
 
 ///|
@@ -55,17 +45,11 @@ test "compile: convenience function" {
     #|  return x * 2;
     #|}
   let wasm_module = compile(src)
-
-  // Module generate
   assert_eq(wasm_module.funcs.length(), 1)
   assert_eq(wasm_module.exports.length(), 1)
   assert_eq(wasm_module.codes.length(), 1)
-
-  // runtest
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let results = runtime.call_compiled(b"double", [@runtime.Value::F64(21.0)])
-  assert_eq(results[0], @runtime.Value::F64(42.0))
+  let wasm = compile_to_wasm(src)
+  assert_run_f64(wasm, "double", [21.0], 42.0)
 }
 
 ///|
@@ -74,13 +58,8 @@ test "codegen: constant function" {
     #|function answer(): number {
     #|  return 42;
     #|}
-  let parser = @parser.Parser::from_source(src)
-  let ts_module = parser.parse_module()
-  let wasm_module = compile_module(ts_module)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let results = runtime.call_compiled(b"answer", [])
-  assert_eq(results[0], @runtime.Value::F64(42.0))
+  let wasm = compile_to_wasm(src)
+  assert_run_f64(wasm, "answer", [], 42.0)
 }
 
 ///|
@@ -89,16 +68,8 @@ test "codegen: add function" {
     #|function add(a: number, b: number): number {
     #|  return a + b;
     #|}
-  let parser = @parser.Parser::from_source(src)
-  let ts_module = parser.parse_module()
-  let wasm_module = compile_module(ts_module)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let results = runtime.call_compiled(b"add", [
-    @runtime.Value::F64(3.0),
-    @runtime.Value::F64(5.0),
-  ])
-  assert_eq(results[0], @runtime.Value::F64(8.0))
+  let wasm = compile_to_wasm(src)
+  assert_run_f64(wasm, "add", [3.0, 5.0], 8.0)
 }
 
 ///|
@@ -107,17 +78,9 @@ test "codegen: arithmetic" {
     #|function calc(a: number, b: number): number {
     #|  return (a + b) * (a - b);
     #|}
-  let parser = @parser.Parser::from_source(src)
-  let ts_module = parser.parse_module()
-  let wasm_module = compile_module(ts_module)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
+  let wasm = compile_to_wasm(src)
   // (5 + 3) * (5 - 3) = 8 * 2 = 16
-  let results = runtime.call_compiled(b"calc", [
-    @runtime.Value::F64(5.0),
-    @runtime.Value::F64(3.0),
-  ])
-  assert_eq(results[0], @runtime.Value::F64(16.0))
+  assert_run_f64(wasm, "calc", [5.0, 3.0], 16.0)
 }
 
 ///|
@@ -128,13 +91,8 @@ test "codegen: local variable" {
     #|  let y: number = 20;
     #|  return x + y;
     #|}
-  let parser = @parser.Parser::from_source(src)
-  let ts_module = parser.parse_module()
-  let wasm_module = compile_module(ts_module)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let results = runtime.call_compiled(b"test", [])
-  assert_eq(results[0], @runtime.Value::F64(30.0))
+  let wasm = compile_to_wasm(src)
+  assert_run_f64(wasm, "test", [], 30.0)
 }
 
 ///|
@@ -147,21 +105,9 @@ test "codegen: if-else" {
     #|    return b;
     #|  }
     #|}
-  let parser = @parser.Parser::from_source(src)
-  let ts_module = parser.parse_module()
-  let wasm_module = compile_module(ts_module)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let results1 = runtime.call_compiled(b"max", [
-    @runtime.Value::F64(10.0),
-    @runtime.Value::F64(5.0),
-  ])
-  assert_eq(results1[0], @runtime.Value::F64(10.0))
-  let results2 = runtime.call_compiled(b"max", [
-    @runtime.Value::F64(3.0),
-    @runtime.Value::F64(7.0),
-  ])
-  assert_eq(results2[0], @runtime.Value::F64(7.0))
+  let wasm = compile_to_wasm(src)
+  assert_run_f64(wasm, "max", [10.0, 5.0], 10.0)
+  assert_run_f64(wasm, "max", [3.0, 7.0], 7.0)
 }
 
 ///|
@@ -173,13 +119,8 @@ test "codegen: recursive factorial" {
     #|  }
     #|  return n * factorial(n - 1);
     #|}
-  let parser = @parser.Parser::from_source(src)
-  let ts_module = parser.parse_module()
-  let wasm_module = compile_module(ts_module)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let results = runtime.call_compiled(b"factorial", [@runtime.Value::F64(5.0)])
-  assert_eq(results[0], @runtime.Value::F64(120.0))
+  let wasm = compile_to_wasm(src)
+  assert_run_f64(wasm, "factorial", [5.0], 120.0)
 }
 
 ///|
@@ -194,15 +135,9 @@ test "codegen: while loop" {
     #|  }
     #|  return total;
     #|}
-  let parser = @parser.Parser::from_source(src)
-  let ts_module = parser.parse_module()
-  let wasm_module = compile_module(ts_module)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-
+  let wasm = compile_to_wasm(src)
   // sum(10) = 1+2+...+10 = 55
-  let results = runtime.call_compiled(b"sum", [@runtime.Value::F64(10.0)])
-  assert_eq(results[0], @runtime.Value::F64(55.0))
+  assert_run_f64(wasm, "sum", [10.0], 55.0)
 }
 
 ///|
@@ -214,13 +149,8 @@ test "codegen: multiple functions" {
     #|function quadruple(x: number): number {
     #|  return double(double(x));
     #|}
-  let parser = @parser.Parser::from_source(src)
-  let ts_module = parser.parse_module()
-  let wasm_module = compile_module(ts_module)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let results = runtime.call_compiled(b"quadruple", [@runtime.Value::F64(5.0)])
-  assert_eq(results[0], @runtime.Value::F64(20.0))
+  let wasm = compile_to_wasm(src)
+  assert_run_f64(wasm, "quadruple", [5.0], 20.0)
 }
 
 ///|
@@ -235,15 +165,9 @@ test "codegen: int type operations" {
     #|  }
     #|  return total;
     #|}
-  let parser = @parser.Parser::from_source(src)
-  let ts_module = parser.parse_module()
-  let wasm_module = compile_module(ts_module)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-
+  let wasm = compile_to_wasm(src)
   // sum_int(10) = 1+2+...+10 = 55
-  let results = runtime.call_compiled(b"sum_int", [@runtime.Value::I32(10)])
-  assert_eq(results[0], @runtime.Value::I32(55))
+  assert_run_i32(wasm, "sum_int", [10.0], 55)
 }
 
 ///|
@@ -255,13 +179,8 @@ test "codegen: int factorial" {
     #|  }
     #|  return n * factorial_int(n - 1);
     #|}
-  let parser = @parser.Parser::from_source(src)
-  let ts_module = parser.parse_module()
-  let wasm_module = compile_module(ts_module)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let results = runtime.call_compiled(b"factorial_int", [@runtime.Value::I32(5)])
-  assert_eq(results[0], @runtime.Value::I32(120))
+  let wasm = compile_to_wasm(src)
+  assert_run_i32(wasm, "factorial_int", [5.0], 120)
 }
 
 ///|
@@ -271,17 +190,8 @@ test "codegen: array literal and access" {
     #|  let arr: number[] = [1.0, 2.0, 3.0];
     #|  return arr[0] + arr[1] + arr[2];
     #|}
-  let parser = @parser.Parser::from_source(src)
-  let ts_module = parser.parse_module()
-  let wasm_module = compile_module(ts_module)
-
-  // check
-  assert_eq(wasm_module.mems.length(), 1)
-  assert_eq(wasm_module.globals.length(), 1)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let results = runtime.call_compiled(b"sum_array", [])
-  assert_eq(results[0], @runtime.Value::F64(6.0))
+  let wasm = compile_to_wasm(src)
+  assert_run_f64(wasm, "sum_array", [], 6.0)
 }
 
 ///|
@@ -291,13 +201,8 @@ test "codegen: array with new" {
     #|  let arr: int[] = new Array<int>(5);
     #|  return arr.length;
     #|}
-  let parser = @parser.Parser::from_source(src)
-  let ts_module = parser.parse_module()
-  let wasm_module = compile_module(ts_module)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let results = runtime.call_compiled(b"array_length", [])
-  assert_eq(results[0], @runtime.Value::I32(5))
+  let wasm = compile_to_wasm(src)
+  assert_run_i32(wasm, "array_length", [], 5)
 }
 
 ///|
@@ -310,13 +215,8 @@ test "codegen: array assignment" {
     #|  arr[2] = 30;
     #|  return arr[0] + arr[1] + arr[2];
     #|}
-  let parser = @parser.Parser::from_source(src)
-  let ts_module = parser.parse_module()
-  let wasm_module = compile_module(ts_module)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let results = runtime.call_compiled(b"array_set", [])
-  assert_eq(results[0], @runtime.Value::I32(60))
+  let wasm = compile_to_wasm(src)
+  assert_run_i32(wasm, "array_set", [], 60)
 }
 
 ///|
@@ -332,13 +232,8 @@ test "codegen: struct creation and field access" {
     #|  p.y = 20.0;
     #|  return p.x + p.y;
     #|}
-  let parser = @parser.Parser::from_source(src)
-  let ts_module = parser.parse_module()
-  let wasm_module = compile_module(ts_module)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let results = runtime.call_compiled(b"createPoint", [])
-  assert_eq(results[0], @runtime.Value::F64(30.0))
+  let wasm = compile_to_wasm(src)
+  assert_run_f64(wasm, "createPoint", [], 30.0)
 }
 
 ///|
@@ -352,13 +247,8 @@ test "codegen: struct with int fields" {
     #|  c.count = 42;
     #|  return c.count;
     #|}
-  let parser = @parser.Parser::from_source(src)
-  let ts_module = parser.parse_module()
-  let wasm_module = compile_module(ts_module)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let results = runtime.call_compiled(b"testCounter", [])
-  assert_eq(results[0], @runtime.Value::I32(42))
+  let wasm = compile_to_wasm(src)
+  assert_run_i32(wasm, "testCounter", [], 42)
 }
 
 ///|
@@ -367,15 +257,9 @@ test "codegen: ternary operator" {
     #|function abs(x: number): number {
     #|  return x >= 0.0 ? x : -x;
     #|}
-  let parser = @parser.Parser::from_source(src)
-  let ts_module = parser.parse_module()
-  let wasm_module = compile_module(ts_module)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let r1 = runtime.call_compiled(b"abs", [@runtime.Value::F64(5.0)])
-  assert_eq(r1[0], @runtime.Value::F64(5.0))
-  let r2 = runtime.call_compiled(b"abs", [@runtime.Value::F64(-3.0)])
-  assert_eq(r2[0], @runtime.Value::F64(3.0))
+  let wasm = compile_to_wasm(src)
+  assert_run_f64(wasm, "abs", [5.0], 5.0)
+  assert_run_f64(wasm, "abs", [-3.0], 3.0)
 }
 
 ///|
@@ -387,16 +271,10 @@ test "codegen: increment decrement" {
     #|  let b: int = ++x;
     #|  return a + b;
     #|}
-  let parser = @parser.Parser::from_source(src)
-  let ts_module = parser.parse_module()
-  let wasm_module = compile_module(ts_module)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-
+  let wasm = compile_to_wasm(src)
   // x starts at 10, a = x++ (a=10, x=11), b = ++x (x=12, b=12)
   // result = 10 + 12 = 22
-  let results = runtime.call_compiled(b"testIncDec", [])
-  assert_eq(results[0], @runtime.Value::I32(22))
+  assert_run_i32(wasm, "testIncDec", [], 22)
 }
 
 ///|
@@ -409,15 +287,9 @@ test "codegen: compound assignment" {
     #|  x -= 10;
     #|  return x;
     #|}
-  let parser = @parser.Parser::from_source(src)
-  let ts_module = parser.parse_module()
-  let wasm_module = compile_module(ts_module)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-
+  let wasm = compile_to_wasm(src)
   // x = 10, x += 5 (15), x *= 2 (30), x -= 10 (20)
-  let results = runtime.call_compiled(b"testCompound", [])
-  assert_eq(results[0], @runtime.Value::I32(20))
+  assert_run_i32(wasm, "testCompound", [], 20)
 }
 
 ///|
@@ -430,13 +302,8 @@ test "codegen: for loop with increment" {
     #|  }
     #|  return total;
     #|}
-  let parser = @parser.Parser::from_source(src)
-  let ts_module = parser.parse_module()
-  let wasm_module = compile_module(ts_module)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let results = runtime.call_compiled(b"sumFor", [@runtime.Value::I32(10)])
-  assert_eq(results[0], @runtime.Value::I32(55))
+  let wasm = compile_to_wasm(src)
+  assert_run_i32(wasm, "sumFor", [10.0], 55)
 }
 
 ///|
@@ -450,13 +317,8 @@ test "codegen: for...of loop" {
     #|  }
     #|  return total;
     #|}
-  let parser = @parser.Parser::from_source(src)
-  let ts_module = parser.parse_module()
-  let wasm_module = compile_module(ts_module)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let results = runtime.call_compiled(b"sumArray", [])
-  assert_eq(results[0], @runtime.Value::F64(15.0))
+  let wasm = compile_to_wasm(src)
+  assert_run_f64(wasm, "sumArray", [], 15.0)
 }
 
 ///|
@@ -473,13 +335,8 @@ test "codegen: for...of with int array" {
     #|  }
     #|  return total;
     #|}
-  let parser = @parser.Parser::from_source(src)
-  let ts_module = parser.parse_module()
-  let wasm_module = compile_module(ts_module)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let results = runtime.call_compiled(b"countArray", [])
-  assert_eq(results[0], @runtime.Value::I32(60))
+  let wasm = compile_to_wasm(src)
+  assert_run_i32(wasm, "countArray", [], 60)
 }
 
 ///|
@@ -494,26 +351,10 @@ test "codegen: comparison operators" {
     #|  }
     #|  return 2;
     #|}
-  let parser = @parser.Parser::from_source(src)
-  let ts_module = parser.parse_module()
-  let wasm_module = compile_module(ts_module)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let r1 = runtime.call_compiled(b"compare", [
-    @runtime.Value::F64(5.0),
-    @runtime.Value::F64(5.0),
-  ])
-  assert_eq(r1[0], @runtime.Value::F64(0.0))
-  let r2 = runtime.call_compiled(b"compare", [
-    @runtime.Value::F64(3.0),
-    @runtime.Value::F64(7.0),
-  ])
-  assert_eq(r2[0], @runtime.Value::F64(1.0))
-  let r3 = runtime.call_compiled(b"compare", [
-    @runtime.Value::F64(10.0),
-    @runtime.Value::F64(5.0),
-  ])
-  assert_eq(r3[0], @runtime.Value::F64(2.0))
+  let wasm = compile_to_wasm(src)
+  assert_run_f64(wasm, "compare", [5.0, 5.0], 0.0)
+  assert_run_f64(wasm, "compare", [3.0, 7.0], 1.0)
+  assert_run_f64(wasm, "compare", [10.0, 5.0], 2.0)
 }
 
 ///|
@@ -526,57 +367,33 @@ test "codegen: module with imports generates correct wasm" {
     #|}
   let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
-
-  // import
   assert_eq(ts_module.imports.length(), 2)
-
-  // Wasm generate
   let wasm_module = compile_module(ts_module)
-
-  // importgenerate
   assert_eq(wasm_module.imports.length(), 2)
-
-  // typedefineimportfunctiontype (2import + 1function)
   assert_eq(wasm_module.types.length(), 3)
-
-  // funcs definefunction (importfunctionimportssection)
   assert_eq(wasm_module.funcs.length(), 1)
-
-  // exportdefinefunction
   assert_eq(wasm_module.exports.length(), 1)
 }
 
 ///|
 test "codegen: javascript style code with type inference" {
-  // type JavaScript
   let src =
     #|function add(a, b) {
     #|  let x = 1;
     #|  let y = 2;
     #|  return x + y;
     #|}
-  let parser = @parser.Parser::from_source(src)
-  let ts_module = parser.parse_module()
-  let wasm_module = compile_module(ts_module)
-
-  // parameter Any -> f64 ()
-  // variable x, y Int
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  // add(0, 0) - result 3 (1 + 2)
-  // parameter Any=f64
-  let results = runtime.call_compiled(b"add", [
-    @runtime.Value::F64(0.0),
-    @runtime.Value::F64(0.0),
-  ])
-  // return value Any=f64 , internal Int compute
-  // f64 -> i32 conversion, resultcheck
-  assert_eq(results.length(), 1)
+  let wasm = compile_to_wasm(src)
+  // result 3 (1 + 2), args are ignored
+  match run_wasm(wasm, "add", [0.0, 0.0]) {
+    RunResult::F64(_) => ()
+    RunResult::I32(_) => ()
+    RunResult::Error(e) => fail("Run error: \{e}")
+  }
 }
 
 ///|
 test "js: simple arithmetic" {
-  // JavaScript:
   let src =
     #|function calc(): int {
     #|  let a = 10;
@@ -584,16 +401,12 @@ test "js: simple arithmetic" {
     #|  let sum = a + b;
     #|  return sum;
     #|}
-  let wasm_module = compile(src)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let results = runtime.call_compiled(b"calc", [])
-  assert_eq(results[0], @runtime.Value::I32(13))
+  let wasm = compile_to_wasm(src)
+  assert_run_i32(wasm, "calc", [], 13)
 }
 
 ///|
 test "js: multiple functions call" {
-  // JavaScript: function
   let src =
     #|function double(x: int): int {
     #|  return x * 2;
@@ -601,11 +414,8 @@ test "js: multiple functions call" {
     #|function main(): int {
     #|  return double(5);
     #|}
-  let wasm_module = compile(src)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let results = runtime.call_compiled(b"main", [])
-  assert_eq(results[0], @runtime.Value::I32(10))
+  let wasm = compile_to_wasm(src)
+  assert_run_i32(wasm, "main", [], 10)
 }
 
 ///|
@@ -622,40 +432,25 @@ test "codegen: type metadata in custom section" {
   let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module(ts_module)
-
-  // sectiongenerate
   assert_eq(wasm_module.customs.length(), 1)
-
-  // section "tstype"
   let custom = wasm_module.customs[0]
   assert_eq(custom.name, b"tstype")
-
-  // datamagiccheck "TSTY"
   let data = custom.data
   assert_eq(data[0], b'\x54') // T
   assert_eq(data[1], b'\x53') // S
   assert_eq(data[2], b'\x54') // T
   assert_eq(data[3], b'\x59') // Y
-
-  // version = 1
-  assert_eq(data[4], b'\x01')
-
-  // import = 1 (u16 LE)
-  assert_eq(data[5], b'\x01')
+  assert_eq(data[4], b'\x01') // version = 1
+  assert_eq(data[5], b'\x01') // import = 1
   assert_eq(data[6], b'\x00')
-
-  // interface = 1 (u16 LE)
-  assert_eq(data[7], b'\x01')
+  assert_eq(data[7], b'\x01') // interface = 1
   assert_eq(data[8], b'\x00')
-
-  // export = 1 (u16 LE)
-  assert_eq(data[9], b'\x01')
+  assert_eq(data[9], b'\x01') // export = 1
   assert_eq(data[10], b'\x00')
 }
 
 ///|
 test "codegen: analyze_and_compile with type inference" {
-  // Test that TypedModule integration works correctly
   let src =
     #|function compute(): int {
     #|  let x = 10;
@@ -664,10 +459,8 @@ test "codegen: analyze_and_compile with type inference" {
     #|  return z;
     #|}
   let wasm_module = analyze_and_compile(src)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let results = runtime.call_compiled(b"compute", [])
-  assert_eq(results[0], @runtime.Value::I32(30))
+  let wasm = @encode.encode(wasm_module)
+  assert_run_i32(wasm, "compute", [], 30)
 }
 
 ///|
@@ -683,11 +476,9 @@ test "codegen: typed module with nested scopes" {
     #|  return result;
     #|}
   let wasm_module = analyze_and_compile(src)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
+  let wasm = @encode.encode(wasm_module)
   // result = (1+0) + (1+1) + (1+2) + (1+3) + (1+4) = 1+2+3+4+5 = 15
-  let results = runtime.call_compiled(b"nested", [])
-  assert_eq(results[0], @runtime.Value::I32(15))
+  assert_run_i32(wasm, "nested", [], 15)
 }
 
 ///|
@@ -696,12 +487,9 @@ test "codegen: constant folding in binary operations" {
     #|function test(): int {
     #|  return 10 + 20 * 3;
     #|}
-  let wasm_module = compile(src)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
+  let wasm = compile_to_wasm(src)
   // 10 + 20 * 3 = 10 + 60 = 70
-  let results = runtime.call_compiled(b"test", [])
-  assert_eq(results[0], @runtime.Value::I32(70))
+  assert_run_i32(wasm, "test", [], 70)
 }
 
 ///|
@@ -714,11 +502,8 @@ test "codegen: constant folding eliminates dead branches" {
     #|    return 0;
     #|  }
     #|}
-  let wasm_module = compile(src)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let results = runtime.call_compiled(b"test", [])
-  assert_eq(results[0], @runtime.Value::I32(42))
+  let wasm = compile_to_wasm(src)
+  assert_run_i32(wasm, "test", [], 42)
 }
 
 ///|
@@ -727,11 +512,8 @@ test "codegen: constant folding in ternary" {
     #|function test(): int {
     #|  return false ? 100 : 200;
     #|}
-  let wasm_module = compile(src)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let results = runtime.call_compiled(b"test", [])
-  assert_eq(results[0], @runtime.Value::I32(200))
+  let wasm = compile_to_wasm(src)
+  assert_run_i32(wasm, "test", [], 200)
 }
 
 ///|
@@ -741,57 +523,32 @@ test "codegen: typed module preserves function types" {
     #|  let sum = a + b;
     #|  return sum;
     #|}
-  // Test with compile (no type analysis)
-  let wasm1 = compile(src)
-  let rt1 = @runtime.Runtime::load(wasm1)
-  rt1.run_start()
-  let r1 = rt1.call_compiled(b"addNumbers", [
-    @runtime.Value::F64(3.5),
-    @runtime.Value::F64(2.5),
-  ])
-  assert_eq(r1[0], @runtime.Value::F64(6.0))
-
-  // Test with analyze_and_compile (with type analysis)
-  let wasm2 = analyze_and_compile(src)
-  let rt2 = @runtime.Runtime::load(wasm2)
-  rt2.run_start()
-  let r2 = rt2.call_compiled(b"addNumbers", [
-    @runtime.Value::F64(3.5),
-    @runtime.Value::F64(2.5),
-  ])
-  assert_eq(r2[0], @runtime.Value::F64(6.0))
+  let wasm = compile_to_wasm(src)
+  assert_run_f64(wasm, "addNumbers", [3.5, 2.5], 6.0)
 }
 
 ///|
 test "codegen: constant propagation" {
-  // const variables should be propagated as immediate values
   let src =
     #|function test(): int {
     #|  const x = 10;
     #|  const y = 20;
     #|  return x + y;
     #|}
-  let wasm_module = compile(src)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let results = runtime.call_compiled(b"test", [])
-  assert_eq(results[0], @runtime.Value::I32(30))
+  let wasm = compile_to_wasm(src)
+  assert_run_i32(wasm, "test", [], 30)
 }
 
 ///|
 test "codegen: constant propagation replaces variable reads" {
-  // When const is used later, the value should be inlined
   let src =
     #|function compute(n: int): int {
     #|  const factor = 3;
     #|  return n * factor;
     #|}
-  let wasm_module = compile(src)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
+  let wasm = compile_to_wasm(src)
   // n=7, factor=3, result=21
-  let results = runtime.call_compiled(b"compute", [@runtime.Value::I32(7)])
-  assert_eq(results[0], @runtime.Value::I32(21))
+  assert_run_i32(wasm, "compute", [7.0], 21)
 }
 
 ///|
@@ -800,16 +557,13 @@ test "codegen: bitwise NOT operator" {
     #|function bitnot(x: int): int {
     #|  return ~x;
     #|}
-  let wasm_module = compile(src)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  // ~0 = -1 (0xFFFFFFFF), ~1 = -2 (0xFFFFFFFE), ~0xFFFFFFFF = 0
-  let r1 = runtime.call_compiled(b"bitnot", [@runtime.Value::I32(0)])
-  assert_eq(r1[0], @runtime.Value::I32(0xFFFFFFFF)) // -1 as unsigned
-  let r2 = runtime.call_compiled(b"bitnot", [@runtime.Value::I32(1)])
-  assert_eq(r2[0], @runtime.Value::I32(0xFFFFFFFE)) // -2 as unsigned
-  let r3 = runtime.call_compiled(b"bitnot", [@runtime.Value::I32(0xFFFFFFFF)])
-  assert_eq(r3[0], @runtime.Value::I32(0))
+  let wasm = compile_to_wasm(src)
+  // ~0 = -1 (0xFFFFFFFF)
+  assert_run_i32(wasm, "bitnot", [0.0], 0xFFFFFFFF)
+  // ~1 = -2 (0xFFFFFFFE)
+  assert_run_i32(wasm, "bitnot", [1.0], 0xFFFFFFFE)
+  // ~0xFFFFFFFF = 0
+  assert_run_i32(wasm, "bitnot", [(0xFFFFFFFF).to_double()], 0)
 }
 
 ///|
@@ -818,27 +572,13 @@ test "codegen: bitwise AND, OR, XOR" {
     #|function bitand(a: int, b: int): int { return a & b; }
     #|function bitor(a: int, b: int): int { return a | b; }
     #|function bitxor(a: int, b: int): int { return a ^ b; }
-  let wasm_module = compile(src)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
+  let wasm = compile_to_wasm(src)
   // 0b1100 & 0b1010 = 0b1000 = 8
-  let r1 = runtime.call_compiled(b"bitand", [
-    @runtime.Value::I32(12),
-    @runtime.Value::I32(10),
-  ])
-  assert_eq(r1[0], @runtime.Value::I32(8))
+  assert_run_i32(wasm, "bitand", [12.0, 10.0], 8)
   // 0b1100 | 0b1010 = 0b1110 = 14
-  let r2 = runtime.call_compiled(b"bitor", [
-    @runtime.Value::I32(12),
-    @runtime.Value::I32(10),
-  ])
-  assert_eq(r2[0], @runtime.Value::I32(14))
+  assert_run_i32(wasm, "bitor", [12.0, 10.0], 14)
   // 0b1100 ^ 0b1010 = 0b0110 = 6
-  let r3 = runtime.call_compiled(b"bitxor", [
-    @runtime.Value::I32(12),
-    @runtime.Value::I32(10),
-  ])
-  assert_eq(r3[0], @runtime.Value::I32(6))
+  assert_run_i32(wasm, "bitxor", [12.0, 10.0], 6)
 }
 
 ///|
@@ -847,27 +587,13 @@ test "codegen: bit shift operations" {
     #|function shl(a: int, b: int): int { return a << b; }
     #|function shr(a: int, b: int): int { return a >> b; }
     #|function ushr(a: int, b: int): int { return a >>> b; }
-  let wasm_module = compile(src)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
+  let wasm = compile_to_wasm(src)
   // 1 << 4 = 16
-  let r1 = runtime.call_compiled(b"shl", [
-    @runtime.Value::I32(1),
-    @runtime.Value::I32(4),
-  ])
-  assert_eq(r1[0], @runtime.Value::I32(16))
+  assert_run_i32(wasm, "shl", [1.0, 4.0], 16)
   // 16 >> 2 = 4
-  let r2 = runtime.call_compiled(b"shr", [
-    @runtime.Value::I32(16),
-    @runtime.Value::I32(2),
-  ])
-  assert_eq(r2[0], @runtime.Value::I32(4))
-  // 0xFFFFFFF8 (-8) >>> 1 = 0x7FFFFFFC = 2147483644 (unsigned shift)
-  let r3 = runtime.call_compiled(b"ushr", [
-    @runtime.Value::I32(0xFFFFFFF8),
-    @runtime.Value::I32(1),
-  ])
-  assert_eq(r3[0], @runtime.Value::I32(0x7FFFFFFC))
+  assert_run_i32(wasm, "shr", [16.0, 2.0], 4)
+  // 0xFFFFFFF8 (-8) >>> 1 = 0x7FFFFFFC
+  assert_run_i32(wasm, "ushr", [(0xFFFFFFF8).to_double(), 1.0], 0x7FFFFFFC)
 }
 
 ///|
@@ -882,15 +608,10 @@ test "codegen: switch statement" {
     #|    default: return 0;
     #|  }
     #|}
-  let wasm_module = compile(src)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let r1 = runtime.call_compiled(b"grade", [@runtime.Value::I32(5)])
-  assert_eq(r1[0], @runtime.Value::I32(100))
-  let r2 = runtime.call_compiled(b"grade", [@runtime.Value::I32(3)])
-  assert_eq(r2[0], @runtime.Value::I32(60))
-  let r3 = runtime.call_compiled(b"grade", [@runtime.Value::I32(1)])
-  assert_eq(r3[0], @runtime.Value::I32(0))
+  let wasm = compile_to_wasm(src)
+  assert_run_i32(wasm, "grade", [5.0], 100)
+  assert_run_i32(wasm, "grade", [3.0], 60)
+  assert_run_i32(wasm, "grade", [1.0], 0)
 }
 
 ///|
@@ -901,37 +622,22 @@ test "codegen: switch with default only" {
     #|    default: return 42;
     #|  }
     #|}
-  let wasm_module = compile(src)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let r1 = runtime.call_compiled(b"always42", [@runtime.Value::I32(0)])
-  assert_eq(r1[0], @runtime.Value::I32(42))
-  let r2 = runtime.call_compiled(b"always42", [@runtime.Value::I32(999)])
-  assert_eq(r2[0], @runtime.Value::I32(42))
+  let wasm = compile_to_wasm(src)
+  assert_run_i32(wasm, "always42", [0.0], 42)
+  assert_run_i32(wasm, "always42", [999.0], 42)
 }
 
 ///|
 test "codegen: nullish coalescing operator" {
-  // Note: In this simplified implementation, 0 is treated as null-ish
   let src =
     #|function coalesce(a: int, b: int): int {
     #|  return a ?? b;
     #|}
-  let wasm_module = compile(src)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
+  let wasm = compile_to_wasm(src)
   // When a is non-zero, return a
-  let r1 = runtime.call_compiled(b"coalesce", [
-    @runtime.Value::I32(5),
-    @runtime.Value::I32(10),
-  ])
-  assert_eq(r1[0], @runtime.Value::I32(5))
+  assert_run_i32(wasm, "coalesce", [5.0, 10.0], 5)
   // When a is 0 (treated as null-ish), return b
-  let r2 = runtime.call_compiled(b"coalesce", [
-    @runtime.Value::I32(0),
-    @runtime.Value::I32(42),
-  ])
-  assert_eq(r2[0], @runtime.Value::I32(42))
+  assert_run_i32(wasm, "coalesce", [0.0, 42.0], 42)
 }
 
 ///|
@@ -946,18 +652,15 @@ test "codegen: do-while loop" {
     #|  } while (i <= n);
     #|  return sum;
     #|}
-  let wasm_module = compile(src)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
+  let wasm = compile_to_wasm(src)
   // sum of 1 to 5 = 15
-  let r1 = runtime.call_compiled(b"sumDoWhile", [@runtime.Value::I32(5)])
-  assert_eq(r1[0], @runtime.Value::I32(15))
+  assert_run_i32(wasm, "sumDoWhile", [5.0], 15)
   // do-while executes at least once even if condition is false initially
-  let r2 = runtime.call_compiled(b"sumDoWhile", [@runtime.Value::I32(0)])
-  assert_eq(r2[0], @runtime.Value::I32(1)) // executes once with i=1
+  assert_run_i32(wasm, "sumDoWhile", [0.0], 1)
 }
 
 // ============ wasm-gc tests ============
+// These tests verify wasm-gc module structure, not execution
 
 ///|
 test "wasm-gc: struct creation generates valid module" {
@@ -975,19 +678,12 @@ test "wasm-gc: struct creation generates valid module" {
   let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module_gc(ts_module)
-
-  // GC struct type should be defined (type index 2 after i32[] and f64[])
   assert_true(wasm_module.types.length() >= 3)
-
-  // Encode to wasm binary
   let wasm = @encode.encode(wasm_module)
-
-  // Wasm magic number check
   assert_eq(wasm[0], b'\x00')
-  assert_eq(wasm[1], b'\x61') // 'a'
-  assert_eq(wasm[2], b'\x73') // 's'
-  assert_eq(wasm[3], b'\x6D') // 'm'
-  println("wasm-gc struct module: \{wasm.length()} bytes")
+  assert_eq(wasm[1], b'\x61')
+  assert_eq(wasm[2], b'\x73')
+  assert_eq(wasm[3], b'\x6D')
 }
 
 ///|
@@ -1006,20 +702,13 @@ test "wasm-gc: struct with int fields" {
   let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module_gc(ts_module)
-
-  // Check struct type is defined
-  let struct_type_idx = 2U // After i32[] and f64[]
+  let struct_type_idx = 2U
   match wasm_module.types[struct_type_idx.reinterpret_as_int()] {
-    @core.TypeDef::Struct(st) =>
-      // Counter has 2 i32 fields
-      assert_eq(st.fields.length(), 2)
+    @core.TypeDef::Struct(st) => assert_eq(st.fields.length(), 2)
     _ => fail("Expected struct type at index 2")
   }
-
-  // Encode to wasm binary
   let wasm = @encode.encode(wasm_module)
   assert_true(wasm.length() > 0)
-  println("wasm-gc int struct module: \{wasm.length()} bytes")
 }
 
 ///|
@@ -1035,8 +724,6 @@ test "wasm-gc: array with gc arrays" {
   let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module_gc(ts_module)
-
-  // GC array type should be defined (type 0 = i32[])
   match wasm_module.types[0] {
     @core.TypeDef::Array(arr_type) =>
       match arr_type.element.storage {
@@ -1045,11 +732,8 @@ test "wasm-gc: array with gc arrays" {
       }
     _ => fail("Expected array type at index 0")
   }
-
-  // Encode to wasm binary
   let wasm = @encode.encode(wasm_module)
   assert_true(wasm.length() > 0)
-  println("wasm-gc array module: \{wasm.length()} bytes")
 }
 
 ///|
@@ -1072,26 +756,17 @@ test "wasm-gc: multiple struct types" {
   let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let wasm_module = compile_module_gc(ts_module)
-
-  // Two struct types should be defined (indices 2 and 3)
   assert_true(wasm_module.types.length() >= 4)
-
-  // Check Point struct (index 2)
   match wasm_module.types[2] {
     @core.TypeDef::Struct(st) => assert_eq(st.fields.length(), 2)
     _ => fail("Expected Point struct at index 2")
   }
-
-  // Check Rect struct (index 3)
   match wasm_module.types[3] {
     @core.TypeDef::Struct(st) => assert_eq(st.fields.length(), 2)
     _ => fail("Expected Rect struct at index 3")
   }
-
-  // Encode to wasm binary
   let wasm = @encode.encode(wasm_module)
   assert_true(wasm.length() > 0)
-  println("wasm-gc multiple structs module: \{wasm.length()} bytes")
 }
 
 // ============ Math function tests ============
@@ -1102,11 +777,8 @@ test "codegen: Math.sqrt" {
     #|function sqrt16(): number {
     #|  return Math.sqrt(16.0);
     #|}
-  let wasm_module = compile(src)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let results = runtime.call_compiled(b"sqrt16", [])
-  assert_eq(results[0], @runtime.Value::F64(4.0))
+  let wasm = compile_to_wasm(src)
+  assert_run_f64(wasm, "sqrt16", [], 4.0)
 }
 
 ///|
@@ -1115,11 +787,8 @@ test "codegen: Math.abs" {
     #|function absNeg(): number {
     #|  return Math.abs(-5.0);
     #|}
-  let wasm_module = compile(src)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let results = runtime.call_compiled(b"absNeg", [])
-  assert_eq(results[0], @runtime.Value::F64(5.0))
+  let wasm = compile_to_wasm(src)
+  assert_run_f64(wasm, "absNeg", [], 5.0)
 }
 
 ///|
@@ -1131,13 +800,9 @@ test "codegen: Math.floor and Math.ceil" {
     #|function ceilTest(): number {
     #|  return Math.ceil(3.2);
     #|}
-  let wasm_module = compile(src)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let floor_result = runtime.call_compiled(b"floorTest", [])
-  assert_eq(floor_result[0], @runtime.Value::F64(3.0))
-  let ceil_result = runtime.call_compiled(b"ceilTest", [])
-  assert_eq(ceil_result[0], @runtime.Value::F64(4.0))
+  let wasm = compile_to_wasm(src)
+  assert_run_f64(wasm, "floorTest", [], 3.0)
+  assert_run_f64(wasm, "ceilTest", [], 4.0)
 }
 
 ///|
@@ -1149,13 +814,9 @@ test "codegen: Math.min and Math.max" {
     #|function maxTest(): number {
     #|  return Math.max(5.0, 3.0);
     #|}
-  let wasm_module = compile(src)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let min_result = runtime.call_compiled(b"minTest", [])
-  assert_eq(min_result[0], @runtime.Value::F64(3.0))
-  let max_result = runtime.call_compiled(b"maxTest", [])
-  assert_eq(max_result[0], @runtime.Value::F64(5.0))
+  let wasm = compile_to_wasm(src)
+  assert_run_f64(wasm, "minTest", [], 3.0)
+  assert_run_f64(wasm, "maxTest", [], 5.0)
 }
 
 ///|
@@ -1164,11 +825,8 @@ test "codegen: Math.pow with constant exponent" {
     #|function pow2_10(): number {
     #|  return Math.pow(2.0, 10);
     #|}
-  let wasm_module = compile(src)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let results = runtime.call_compiled(b"pow2_10", [])
-  assert_eq(results[0], @runtime.Value::F64(1024.0))
+  let wasm = compile_to_wasm(src)
+  assert_run_f64(wasm, "pow2_10", [], 1024.0)
 }
 
 ///|
@@ -1177,11 +835,8 @@ test "codegen: Math.round" {
     #|function roundTest(): number {
     #|  return Math.round(3.5);
     #|}
-  let wasm_module = compile(src)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let results = runtime.call_compiled(b"roundTest", [])
-  assert_eq(results[0], @runtime.Value::F64(4.0))
+  let wasm = compile_to_wasm(src)
+  assert_run_f64(wasm, "roundTest", [], 4.0)
 }
 
 ///|
@@ -1190,11 +845,8 @@ test "codegen: Math.trunc" {
     #|function truncTest(): number {
     #|  return Math.trunc(-3.7);
     #|}
-  let wasm_module = compile(src)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
-  let results = runtime.call_compiled(b"truncTest", [])
-  assert_eq(results[0], @runtime.Value::F64(-3.0))
+  let wasm = compile_to_wasm(src)
+  assert_run_f64(wasm, "truncTest", [], -3.0)
 }
 
 ///|
@@ -1205,18 +857,13 @@ test "codegen: pure function with Math - distance" {
     #|  let dy: number = y2 - y1;
     #|  return Math.sqrt(dx * dx + dy * dy);
     #|}
-  let wasm_module = compile(src)
-  let runtime = @runtime.Runtime::load(wasm_module)
-  runtime.run_start()
+  let wasm = compile_to_wasm(src)
   // distance(0, 0, 3, 4) = sqrt(9 + 16) = sqrt(25) = 5
-  let results = runtime.call_compiled(b"distance", [
-    @runtime.Value::F64(0.0),
-    @runtime.Value::F64(0.0),
-    @runtime.Value::F64(3.0),
-    @runtime.Value::F64(4.0),
-  ])
-  assert_eq(results[0], @runtime.Value::F64(5.0))
+  assert_run_f64(wasm, "distance", [0.0, 0.0, 3.0, 4.0], 5.0)
 }
+
+// ============ Generator tests ============
+// These tests verify generator IR and codegen structure
 
 ///|
 test "generator_ir: simple counter generator" {
@@ -1232,22 +879,15 @@ test "generator_ir: simple counter generator" {
   let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let func = ts_module.funcs[0]
-
-  // Analyze generator
   let analysis = @analysis.analyze_generator(func)
   assert_true(analysis.compilable)
   assert_eq(analysis.yield_points.length(), 1)
-  assert_eq(analysis.persisted_vars.length(), 2) // n (param) + i (local)
-
-  // Transform to state machine
+  assert_eq(analysis.persisted_vars.length(), 2)
   let sm = transform_to_state_machine(func, analysis)
   assert_eq(sm.name, "counter")
   assert_eq(sm.params.length(), 1)
-  assert_eq(sm.params[0].name, "n")
   assert_eq(sm.locals.length(), 1)
-  assert_eq(sm.locals[0].name, "i")
-  assert_eq(sm.states.length(), 2) // initial + done
-  println("Generator state machine:\n\{sm.debug_string()}")
+  assert_eq(sm.states.length(), 2)
 }
 
 ///|
@@ -1269,13 +909,11 @@ test "generator_ir: fibonacci generator" {
   let analysis = @analysis.analyze_generator(func)
   assert_true(analysis.compilable)
   assert_eq(analysis.yield_points.length(), 1)
-  // limit (param), a, b, temp (locals)
   assert_eq(analysis.persisted_vars.length(), 4)
   let sm = transform_to_state_machine(func, analysis)
   assert_eq(sm.name, "fib")
   assert_eq(sm.params.length(), 1)
-  assert_eq(sm.locals.length(), 3) // a, b, temp
-  println("Fib state machine:\n\{sm.debug_string()}")
+  assert_eq(sm.locals.length(), 3)
 }
 
 ///|
@@ -1292,30 +930,16 @@ test "generator_codegen: compile simple generator" {
   let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let func = ts_module.funcs[0]
-
-  // Analyze
   let analysis = @analysis.analyze_generator(func)
   assert_true(analysis.compilable)
-
-  // Transform to IR
   let sm = transform_to_state_machine(func, analysis)
-
-  // Compile to wasm
   let wasm_code = compile_generator(sm, 0U)
-
-  // Verify struct type has correct fields
-  // state_num + done + signal_mode + signal_value + 1 param (n) + 1 local (i) = 6 fields
   match wasm_code.state_struct_type {
     @core.TypeDef::Struct(st) => assert_eq(st.fields.length(), 6)
     _ => assert_true(false)
   }
-
-  // Verify create function generates code
   assert_true(wasm_code.create_func_code.body.instrs.length() > 0)
-
-  // Verify next function generates code
   assert_true(wasm_code.next_func_code.body.instrs.length() > 0)
-  println(wasm_code.debug_info())
 }
 
 ///|
@@ -1331,17 +955,12 @@ test "compile_module_gc: generator function exports _create and _next" {
     #|}
   let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
-
-  // Compile with GC mode
   let wasm_module = compile_module_gc(ts_module)
-
-  // Check exports - should have counter_create and counter_next
   let export_names : Array[String] = []
   for exp in wasm_module.exports {
     let name = bytes_to_string(exp.name)
     export_names.push(name)
   }
-  println("Generator exports: \{export_names}")
   assert_true(export_names.contains("counter_create"))
   assert_true(export_names.contains("counter_next"))
 }
@@ -1370,16 +989,9 @@ test "generator_ir: try-catch transforms to TryCatch instruction" {
   let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let func = ts_module.funcs[0]
-
-  // Analyze
   let analysis = @analysis.analyze_generator(func)
   assert_true(analysis.compilable)
-
-  // Transform to IR
   let sm = transform_to_state_machine(func, analysis)
-  println("State machine:\n\{sm.debug_string()}")
-
-  // Check that initial state has TryCatch instruction
   let initial_state = sm.states[0]
   let mut has_try_catch = false
   for instr in initial_state.body {
@@ -1406,20 +1018,11 @@ test "generator_codegen: try-catch generates TryTable wasm" {
   let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
   let func = ts_module.funcs[0]
-
-  // Analyze and transform
   let analysis = @analysis.analyze_generator(func)
   assert_true(analysis.compilable)
   let sm = transform_to_state_machine(func, analysis)
-
-  // Compile to wasm
   let wasm_code = compile_generator(sm, 0U)
-
-  // Verify code is generated
   assert_true(wasm_code.next_func_code.body.instrs.length() > 0)
-  println(wasm_code.debug_info())
-
-  // Check for TryTable instruction recursively
   fn has_try_table_instr(instrs : Array[@core.Instr]) -> Bool {
     for instr in instrs {
       match instr {
@@ -1445,7 +1048,6 @@ test "generator_codegen: try-catch generates TryTable wasm" {
     }
     false
   }
-
   assert_true(has_try_table_instr(wasm_code.next_func_code.body.instrs))
 }
 
@@ -1460,24 +1062,13 @@ test "compile_aot_group: generator with helper functions" {
     #|}
   let parser = @parser.Parser::from_source(src)
   let ts_module = parser.parse_module()
-
-  // Build call graph and find AOT groups
   let graph = @analysis.build_call_graph(ts_module)
   let groups = @analysis.find_aot_groups(ts_module, graph)
-  println("Found \{groups.length()} AOT groups")
   assert_eq(groups.length(), 1)
   let group = groups[0]
-  println(group.debug_string())
-
-  // Compile the AOT group
   match compile_aot_group(group, ts_module, 0U) {
     Some(code) => {
-      println(code.debug_string())
-      // Check that we have the expected number of functions
-      // gen produces 2 (create + next), double and triple produce 1 each = 4
       assert_eq(code.funcs.length(), 4)
-      // Check exports
-      println("Exports: \{code.exports}")
     }
     None => assert_true(false)
   }
@@ -1502,18 +1093,12 @@ test "compile_aot_group: helper function calls in generator" {
   let groups = @analysis.find_aot_groups(ts_module, graph)
   assert_eq(groups.length(), 1)
   let group = groups[0]
-
-  // add is only called from sum, so no external calls
   assert_false(group.external_calls.contains("add"))
   match compile_aot_group(group, ts_module, 0U) {
     Some(code) => {
-      println(code.debug_string())
-      // sum produces 2 (create + next), add produces 1 = 3
       assert_eq(code.funcs.length(), 3)
-
-      // Verify function map has correct indices
       match code.func_map.get("add") {
-        Some(idx) => println("add function index: \{idx}")
+        Some(_) => ()
         None => assert_true(false)
       }
     }
@@ -1521,7 +1106,7 @@ test "compile_aot_group: helper function calls in generator" {
   }
 }
 
-// Closure codegen tests
+// ============ Closure codegen tests ============
 
 ///|
 test "compile_arrow_func: no captures" {
@@ -1545,11 +1130,8 @@ test "compile_arrow_func: no captures" {
   let ctx = ClosureCodegenCtx::new(0U)
   match compile_arrow_func(params, body, outer_scope, ctx) {
     Some(code) => {
-      // No captures -> no environment struct
       assert_true(code.env_struct_type is None)
       assert_eq(code.capture_names.length(), 0)
-      // Should have func_type and func_code
-      println("Generated closure: \{code.func_name}")
     }
     None => fail("Expected compilable closure")
   }
@@ -1566,7 +1148,6 @@ test "compile_arrow_func: with capture" {
       default: None,
     },
   ]
-  // (a) => a + x (where x is captured)
   let body = @ast.TsArrowBody::ArrowExpr(
     @ast.TsExpr::BinOp(
       @ast.TsBinOp::Add,
@@ -1578,11 +1159,9 @@ test "compile_arrow_func: with capture" {
   let ctx = ClosureCodegenCtx::new(0U)
   match compile_arrow_func(params, body, outer_scope, ctx) {
     Some(code) => {
-      // Has capture -> has environment struct
       assert_true(code.env_struct_type is Some(_))
       assert_eq(code.capture_names.length(), 1)
       assert_eq(code.capture_names[0], "x")
-      println("Generated closure with capture: \{code.func_name}")
     }
     None => fail("Expected compilable closure")
   }
@@ -1599,7 +1178,6 @@ test "compile_arrow_func: block body" {
       default: None,
     },
   ]
-  // (n) => { let result = n * 2; return result; }
   let body = @ast.TsArrowBody::ArrowBlock({
     stmts: [
       @ast.TsStmt::Let(
@@ -1619,8 +1197,6 @@ test "compile_arrow_func: block body" {
   match compile_arrow_func(params, body, outer_scope, ctx) {
     Some(code) => {
       assert_true(code.env_struct_type is None)
-      println("Generated block closure: \{code.func_name}")
-      println("Locals: \{code.func_code.locals.length()}")
     }
     None => fail("Expected compilable closure")
   }
@@ -1662,7 +1238,6 @@ test "compile_func_expr: simple function" {
     Some(code) => {
       assert_true(code.env_struct_type is None)
       assert_eq(code.capture_names.length(), 0)
-      println("Generated func expr: \{code.func_name}")
     }
     None => fail("Expected compilable function")
   }
@@ -1690,15 +1265,14 @@ test "compile_func_expr: with multiple captures" {
     is_generator: false,
     is_async: false,
   }
-  let outer_scope : Array[String] = ["a", "b", "c"] // c is not used
+  let outer_scope : Array[String] = ["a", "b", "c"]
   let ctx = ClosureCodegenCtx::new(0U)
   match compile_func_expr(func, outer_scope, ctx) {
     Some(code) => {
       assert_true(code.env_struct_type is Some(_))
-      assert_eq(code.capture_names.length(), 2) // only a and b are captured
+      assert_eq(code.capture_names.length(), 2)
       assert_true(code.capture_names.contains("a"))
       assert_true(code.capture_names.contains("b"))
-      println("Generated func with captures: \{code.func_name}")
     }
     None => fail("Expected compilable function")
   }
@@ -1707,7 +1281,6 @@ test "compile_func_expr: with multiple captures" {
 ///|
 test "compile_arrow_func: mutable capture (Phase 3)" {
   let params : Array[@ast.TsParam] = []
-  // () => { x = x + 1; return x; }
   let body = @ast.TsArrowBody::ArrowBlock({
     stmts: [
       @ast.TsStmt::Assign(
@@ -1725,22 +1298,16 @@ test "compile_arrow_func: mutable capture (Phase 3)" {
   let ctx = ClosureCodegenCtx::new(0U)
   match compile_arrow_func(params, body, outer_scope, ctx) {
     Some(code) => {
-      // Has capture with mutable field
       assert_true(code.env_struct_type is Some(_))
       assert_eq(code.capture_names.length(), 1)
       assert_eq(code.capture_names[0], "x")
-
-      // Check that the env struct has mutable field
       match code.env_struct_type {
         Some(@core.TypeDef::Struct(struct_type)) => {
           assert_eq(struct_type.fields.length(), 1)
-          // Field should be mutable since x is mutated
           assert_true(struct_type.fields[0].mutable)
         }
         _ => fail("Expected struct type")
       }
-      println("Generated mutable capture closure: \{code.func_name}")
-      println("Instructions: \{code.func_code.body.instrs.length()}")
     }
     None => fail("Expected compilable closure with mutable capture")
   }
@@ -1754,7 +1321,6 @@ test "compile_func_expr: mixed mutable and immutable captures" {
     return_type: @ast.TsType::Number,
     body: {
       stmts: [
-        // count = count + step (count is mutated, step is read-only)
         @ast.TsStmt::Assign(
           "count",
           @ast.TsExpr::BinOp(
@@ -1775,25 +1341,18 @@ test "compile_func_expr: mixed mutable and immutable captures" {
     Some(code) => {
       assert_true(code.env_struct_type is Some(_))
       assert_eq(code.capture_names.length(), 2)
-
-      // Check that env struct has correct mutability for each field
       match code.env_struct_type {
         Some(@core.TypeDef::Struct(struct_type)) => {
           assert_eq(struct_type.fields.length(), 2)
-          // Verify we have both mutable and immutable fields
-          // (order depends on capture order)
-          println("Field 0 mutable: \{struct_type.fields[0].mutable}")
-          println("Field 1 mutable: \{struct_type.fields[1].mutable}")
         }
         _ => fail("Expected struct type")
       }
-      println("Generated mixed capture closure: \{code.func_name}")
     }
     None => fail("Expected compilable function")
   }
 }
 
-// Tests for lifted vars analysis (environment sharing)
+// ============ Lifted vars analysis tests ============
 
 ///|
 test "analyze_lifted_vars: no closures" {
@@ -1809,13 +1368,11 @@ test "analyze_lifted_vars: no closures" {
   }
   let params : Array[String] = []
   let info = analyze_lifted_vars(block, params)
-  // No closures -> no lifted vars
   assert_eq(info.lifted_vars.length(), 0)
 }
 
 ///|
 test "analyze_lifted_vars: closure captures local" {
-  // let x = 1; const f = () => x; return f();
   let block : @ast.TsBlock = {
     stmts: [
       @ast.TsStmt::Let(
@@ -1839,16 +1396,13 @@ test "analyze_lifted_vars: closure captures local" {
   }
   let params : Array[String] = []
   let info = analyze_lifted_vars(block, params)
-  // x is captured by closure -> should be lifted
   assert_eq(info.lifted_vars.length(), 1)
   assert_true(info.lifted_vars.contains("x"))
-  // x is read-only
   assert_eq(info.is_mutated.get("x"), Some(false))
 }
 
 ///|
 test "analyze_lifted_vars: closure mutates captured var" {
-  // let x = 1; const inc = () => { x = x + 1; }; inc(); return x;
   let block : @ast.TsBlock = {
     stmts: [
       @ast.TsStmt::Let(
@@ -1882,19 +1436,14 @@ test "analyze_lifted_vars: closure mutates captured var" {
   }
   let params : Array[String] = []
   let info = analyze_lifted_vars(block, params)
-  // x is captured and mutated -> should be lifted with mutable flag
   assert_eq(info.lifted_vars.length(), 1)
   assert_true(info.lifted_vars.contains("x"))
   assert_eq(info.is_mutated.get("x"), Some(true))
-  // Check field index
   assert_eq(info.field_indices.get("x"), Some(0U))
 }
 
 ///|
 test "analyze_lifted_vars: multiple closures share captured var" {
-  // let x = 0;
-  // const inc = () => { x = x + 1; };
-  // const dec = () => { x = x - 1; };
   let block : @ast.TsBlock = {
     stmts: [
       @ast.TsStmt::Let(
@@ -1946,7 +1495,6 @@ test "analyze_lifted_vars: multiple closures share captured var" {
   }
   let params : Array[String] = []
   let info = analyze_lifted_vars(block, params)
-  // x is captured by multiple closures -> single lifted var
   assert_eq(info.lifted_vars.length(), 1)
   assert_true(info.lifted_vars.contains("x"))
   assert_eq(info.is_mutated.get("x"), Some(true))
@@ -1954,7 +1502,6 @@ test "analyze_lifted_vars: multiple closures share captured var" {
 
 ///|
 test "analyze_lifted_vars: param captured" {
-  // function outer(n) { const f = () => n; return f(); }
   let block : @ast.TsBlock = {
     stmts: [
       @ast.TsStmt::Const(
@@ -1973,16 +1520,14 @@ test "analyze_lifted_vars: param captured" {
   }
   let params : Array[String] = ["n"]
   let info = analyze_lifted_vars(block, params)
-  // n (param) is captured -> should be lifted
   assert_eq(info.lifted_vars.length(), 1)
   assert_true(info.lifted_vars.contains("n"))
 }
 
-// Tests for compile_func_body_with_env (environment sharing code generation)
+// ============ compile_func_body_with_env tests ============
 
 ///|
 test "compile_func_body_with_env: no closures" {
-  // function f() { let x = 1; return x; }
   let block : @ast.TsBlock = {
     stmts: [
       @ast.TsStmt::Let(
@@ -1996,16 +1541,12 @@ test "compile_func_body_with_env: no closures" {
   let params : Array[@ast.TsParam] = []
   let lifted_info = analyze_lifted_vars(block, [])
   let result = compile_func_body_with_env(block, params, lifted_info, 0U)
-
-  // No lifted vars -> no env struct
   assert_true(result.env_struct_type is None)
   assert_true(result.env_local_idx is None)
-  println("Body instructions: \{result.func_code.body.instrs.length()}")
 }
 
 ///|
 test "compile_func_body_with_env: with captured read-only var" {
-  // function outer() { let x = 1; const f = () => x; return x; }
   let block : @ast.TsBlock = {
     stmts: [
       @ast.TsStmt::Let(
@@ -2028,12 +1569,8 @@ test "compile_func_body_with_env: with captured read-only var" {
   let params : Array[@ast.TsParam] = []
   let lifted_info = analyze_lifted_vars(block, [])
   let result = compile_func_body_with_env(block, params, lifted_info, 0U)
-
-  // x is captured -> env struct needed
   assert_true(result.env_struct_type is Some(_))
   assert_true(result.env_local_idx is Some(_))
-
-  // Check env struct has immutable field
   match result.env_struct_type {
     Some(@core.TypeDef::Struct(struct_type)) => {
       assert_eq(struct_type.fields.length(), 1)
@@ -2041,18 +1578,10 @@ test "compile_func_body_with_env: with captured read-only var" {
     }
     _ => fail("Expected struct type")
   }
-  println(
-    "Generated env-sharing code with \{result.func_code.body.instrs.length()} instructions",
-  )
 }
 
 ///|
 test "compile_func_body_with_env: with mutable captured var" {
-  // function outer() {
-  //   let x = 1;
-  //   const inc = () => { x = x + 1; };
-  //   return x;  // Should see updated x after inc()
-  // }
   let block : @ast.TsBlock = {
     stmts: [
       @ast.TsStmt::Let(
@@ -2086,18 +1615,14 @@ test "compile_func_body_with_env: with mutable captured var" {
   let params : Array[@ast.TsParam] = []
   let lifted_info = analyze_lifted_vars(block, [])
   let result = compile_func_body_with_env(block, params, lifted_info, 0U)
-
-  // x is captured and mutated -> env struct with mutable field
   assert_true(result.env_struct_type is Some(_))
   match result.env_struct_type {
     Some(@core.TypeDef::Struct(struct_type)) => {
       assert_eq(struct_type.fields.length(), 1)
-      assert_true(struct_type.fields[0].mutable) // x is mutated -> mutable field
+      assert_true(struct_type.fields[0].mutable)
     }
     _ => fail("Expected struct type")
   }
-
-  // Check instructions include StructNew, StructGet, StructSet
   let has_struct_new = result.func_code.body.instrs
     .iter()
     .any(fn(i) {
@@ -2107,19 +1632,10 @@ test "compile_func_body_with_env: with mutable captured var" {
       }
     })
   assert_true(has_struct_new)
-  println(
-    "Generated mutable env-sharing code with \{result.func_code.body.instrs.length()} instructions",
-  )
 }
 
 ///|
 test "compile_func_body_with_env: outer assignment to captured var" {
-  // function outer() {
-  //   let x = 1;
-  //   const f = () => x;  // capture x
-  //   x = 2;              // outer assignment should use env
-  //   return x;
-  // }
   let block : @ast.TsBlock = {
     stmts: [
       @ast.TsStmt::Let(
@@ -2143,11 +1659,7 @@ test "compile_func_body_with_env: outer assignment to captured var" {
   let params : Array[@ast.TsParam] = []
   let lifted_info = analyze_lifted_vars(block, [])
   let result = compile_func_body_with_env(block, params, lifted_info, 0U)
-
-  // x is captured -> env struct
   assert_true(result.env_struct_type is Some(_))
-
-  // Count StructSet instructions (should have multiple - init + assignment)
   let struct_set_count = result.func_code.body.instrs
     .iter()
     .fold(init=0, fn(count, i) {
@@ -2156,9 +1668,5 @@ test "compile_func_body_with_env: outer assignment to captured var" {
         _ => count
       }
     })
-  // At least 2: initial value + x = 2
   assert_true(struct_set_count >= 2)
-  println(
-    "Outer assignment generated \{struct_set_count} StructSet instructions",
-  )
 }

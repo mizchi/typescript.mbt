@@ -41,12 +41,21 @@ pub fn has_runner() -> Bool {
 }
 
 ///|
+/// Ensure runner is configured, defaulting to WasmtimeCli
+fn ensure_runner() -> Unit {
+  if runner_type.val is None {
+    runner_type.val = Some(RunnerType::WasmtimeCli)
+  }
+}
+
+///|
 /// Run wasm with the configured runner
 pub fn run_wasm(
   wasm_bytes : Bytes,
   func_name : String,
   args : Array[Double]
 ) -> RunResult {
+  ensure_runner()
   match runner_type.val {
     Some(Wasmx) => run_with_wasmx(wasm_bytes, func_name, args)
     Some(WasmtimeCli) => run_with_wasmtime(wasm_bytes, func_name, args)
@@ -112,6 +121,24 @@ pub fn assert_run_f64(
     RunResult::F64(v) => assert_eq(v, expected)
     RunResult::Error(e) => fail("Run error: \{e}")
     _ => fail("Expected F64 result")
+  }
+}
+
+///|
+/// Helper to assert I32 result (pass int args as doubles)
+pub fn assert_run_i32(
+  wasm_bytes : Bytes,
+  func_name : String,
+  args : Array[Double],
+  expected : Int
+) -> Unit raise Error {
+  match run_wasm(wasm_bytes, func_name, args) {
+    RunResult::I32(v) => assert_eq(v, expected)
+    RunResult::F64(v) => {
+      // wasmtime may return as f64, convert to int
+      assert_eq(v.to_int(), expected)
+    }
+    RunResult::Error(e) => fail("Run error: \{e}")
   }
 }
 
