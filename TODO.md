@@ -71,6 +71,25 @@ These bugs share common patterns:
 2. **Type inference** producing wrong types (i32 vs f64) in certain contexts
 3. **Return value handling** in block-based control structures
 
+## Expansion Plan (easy + coverage mix)
+
+### Implemented (recent)
+- [x] Comma operator (Seq) codegen + compilability
+- [x] Logical `&&` / `||` short-circuit (i32/f64)
+- [x] Unary `void` (evaluate side effects, return undefined)
+- [x] `typeof` (restricted: only when operand type is statically known; return string literal)
+- [x] Logical assignments `&&=` / `||=` / `??=` (Var/Prop/Index variants)
+- [x] Template literals (untagged only, string-typed expressions only; desugar to concat)
+- [x] Full template literals (ToString coercion for non-strings)
+- [x] Computed property access in literals (const key only)
+
+### Next in order
+1. Spread in arrays/args (requires iterator protocol fixes)
+
+### Candidates (need more groundwork)
+- Spread in arrays/args (requires iterator protocol fixes)
+- Arbitrary call expressions (function values / closures)
+
 ## CI Notes
 
 - 4 parser tests also fail due to missing TypeScript submodule (not a codegen issue)

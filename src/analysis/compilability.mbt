@@ -268,9 +268,17 @@ fn can_compile_expr(expr : @ast.TsExpr) -> CompilabilityResult {
     // Supported: array literal
     @ast.TsExpr::ArrayLit(elements) => {
       for elem in elements {
-        match can_compile_expr(elem) {
-          NotCompilable(r) => return NotCompilable(r)
-          Compilable => continue
+        match elem {
+          @ast.TsExpr::Spread(inner) =>
+            match can_compile_expr(inner) {
+              NotCompilable(r) => return NotCompilable(r)
+              Compilable => ()
+            }
+          _ =>
+            match can_compile_expr(elem) {
+              NotCompilable(r) => return NotCompilable(r)
+              Compilable => ()
+            }
         }
       }
       Compilable
@@ -318,21 +326,55 @@ fn can_compile_expr(expr : @ast.TsExpr) -> CompilabilityResult {
     @ast.TsExpr::Call(name, args) =>
       // Check if it's a known compilable function
       if is_compilable_call(name) {
-        for arg in args {
-          match can_compile_expr(arg) {
-            NotCompilable(r) => return NotCompilable(r)
-            Compilable => continue
+        let mut spread_index = -1
+        for i, arg in args {
+          match arg {
+            @ast.TsExpr::Spread(inner) =>
+              if spread_index >= 0 {
+                return NotCompilable("multiple spread arguments not supported")
+              } else {
+                spread_index = i
+                match can_compile_expr(inner) {
+                  NotCompilable(r) => return NotCompilable(r)
+                  Compilable => ()
+                }
+              }
+            _ =>
+              match can_compile_expr(arg) {
+                NotCompilable(r) => return NotCompilable(r)
+                Compilable => ()
+              }
           }
+        }
+        if spread_index >= 0 && spread_index != args.length() - 1 {
+          return NotCompilable("spread argument must be last in call")
         }
         Compilable
       } else {
         // User-defined functions need to be checked separately
         // For now, allow named calls (will fail at codegen if not found)
-        for arg in args {
-          match can_compile_expr(arg) {
-            NotCompilable(r) => return NotCompilable(r)
-            Compilable => continue
+        let mut spread_index = -1
+        for i, arg in args {
+          match arg {
+            @ast.TsExpr::Spread(inner) =>
+              if spread_index >= 0 {
+                return NotCompilable("multiple spread arguments not supported")
+              } else {
+                spread_index = i
+                match can_compile_expr(inner) {
+                  NotCompilable(r) => return NotCompilable(r)
+                  Compilable => ()
+                }
+              }
+            _ =>
+              match can_compile_expr(arg) {
+                NotCompilable(r) => return NotCompilable(r)
+                Compilable => ()
+              }
           }
+        }
+        if spread_index >= 0 && spread_index != args.length() - 1 {
+          return NotCompilable("spread argument must be last in call")
         }
         Compilable
       }
@@ -379,19 +421,50 @@ fn can_compile_expr(expr : @ast.TsExpr) -> CompilabilityResult {
     @ast.TsExpr::DynamicImport(_) =>
       NotCompilable("dynamic import not supported")
     @ast.TsExpr::ImportMeta => NotCompilable("import.meta not supported")
-    // Not supported: template literals
-    @ast.TsExpr::TemplateLiteral(_, _) =>
-      NotCompilable("template literals not supported")
+    // Supported: template literals (string-only expressions)
+    @ast.TsExpr::TemplateLiteral(_, exprs) => {
+      for expr in exprs {
+        match can_compile_expr(expr) {
+          NotCompilable(r) => return NotCompilable(r)
+          Compilable => continue
+        }
+      }
+      Compilable
+    }
     @ast.TsExpr::TaggedTemplate(_, _, _, _) =>
       NotCompilable("tagged templates not supported")
     // Not supported: comma operator
-    @ast.TsExpr::Seq(_, _) => NotCompilable("comma operator not supported")
-    // Not supported: spread, computed property
+    @ast.TsExpr::Seq(left, right) => {
+      match can_compile_expr(left) {
+        NotCompilable(r) => return NotCompilable(r)
+        Compilable => ()
+      }
+      can_compile_expr(right)
+    }
+    // Not supported: spread
     @ast.TsExpr::Spread(_) => NotCompilable("spread operator not supported")
-    @ast.TsExpr::ComputedProp(_, _) =>
-      NotCompilable("computed property not supported")
-    // Not supported: object literal (complex)
-    @ast.TsExpr::ObjectLit(_) => NotCompilable("object literals not supported")
+    @ast.TsExpr::ComputedProp(key, value) =>
+      match eval_const(key) {
+        ConstValue::NotConst =>
+          NotCompilable("computed property key must be constant")
+        _ => can_compile_expr(value)
+      }
+    @ast.TsExpr::ObjectLit(fields) => {
+      for item in fields {
+        let (key, value) = item
+        if key.has_prefix("@@spread:") {
+          return NotCompilable("object spread not supported")
+        }
+        if key.has_prefix("@@get:") || key.has_prefix("@@set:") {
+          return NotCompilable("object accessors not supported")
+        }
+        match can_compile_expr(value) {
+          NotCompilable(r) => return NotCompilable(r)
+          Compilable => ()
+        }
+      }
+      Compilable
+    }
     // Function expressions: could be supported but complex due to closures
     @ast.TsExpr::ArrowFunc(_, _, _) =>
       NotCompilable("arrow functions not supported (closures)")

@@ -180,105 +180,15 @@ fn serialize_type_metadata(module_ : @ast.TsModule) -> Bytes {
   Bytes::from_array(buf)
 }
 
-// ============================================
-// type inference (literal)
-// ============================================
-
 ///|
-// / literaltype()
-fn infer_literal_type(expr : @ast.TsExpr) -> @ast.TsType {
-  match expr {
-    // In TypeScript, all number literals are f64 (number type)
-    @ast.TsExpr::IntLit(_) => @ast.TsType::Number
-    @ast.TsExpr::NumberLit(_) => @ast.TsType::Number
-    @ast.TsExpr::BigIntLit(_) => @ast.TsType::Any
-    @ast.TsExpr::BoolLit(_) => @ast.TsType::Boolean
-    @ast.TsExpr::StringLit(_) => @ast.TsType::String_
-    @ast.TsExpr::NullLit => @ast.TsType::Any // null @ast.TsType::Any
-    @ast.TsExpr::ArrayHole => @ast.TsType::Any
-    @ast.TsExpr::ArrayLit(_) => @ast.TsType::Any // elementtype @ast.TsType::Any
-    @ast.TsExpr::Spread(_) => @ast.TsType::Any
-    @ast.TsExpr::ComputedProp(_, _) => @ast.TsType::Any
-    @ast.TsExpr::ObjectLit(_) => @ast.TsType::Any // objectliteral @ast.TsType::Any
-    @ast.TsExpr::Var(_) => @ast.TsType::Any // variablestatement
-    @ast.TsExpr::Yield(_) => @ast.TsType::Any
-    @ast.TsExpr::YieldStar(_) => @ast.TsType::Any
-    @ast.TsExpr::Await(_) => @ast.TsType::Any
-    @ast.TsExpr::DynamicImport(_) => @ast.TsType::Any
-    @ast.TsExpr::ImportMeta => @ast.TsType::Any
-    @ast.TsExpr::TemplateLiteral(_, _) => @ast.TsType::String_
-    @ast.TsExpr::TaggedTemplate(_, _, _, _) => @ast.TsType::Any
-    @ast.TsExpr::Seq(_, right) => infer_literal_type(right)
-    @ast.TsExpr::PropAssignExpr(_, _, value) => infer_literal_type(value)
-    @ast.TsExpr::IndexAssignExpr(_, _, value) => infer_literal_type(value)
-    @ast.TsExpr::CompoundAssignExpr(left, _, _) => infer_literal_type(left)
-    @ast.TsExpr::BinOp(op, lhs, _) =>
-      // comparisonoperator @ast.TsType::Boolean
-      match op {
-        @ast.TsBinOp::BinEq
-        | @ast.TsBinOp::BinNe
-        | @ast.TsBinOp::AbstractEq
-        | @ast.TsBinOp::AbstractNe
-        | @ast.TsBinOp::BinLt
-        | @ast.TsBinOp::BinLe
-        | @ast.TsBinOp::BinGt
-        | @ast.TsBinOp::BinGe
-        | @ast.TsBinOp::Instanceof
-        | @ast.TsBinOp::In
-        | @ast.TsBinOp::And
-        | @ast.TsBinOp::Or
-        | @ast.TsBinOp::Coalesce => @ast.TsType::Boolean
-        @ast.TsBinOp::Add
-        | @ast.TsBinOp::Sub
-        | @ast.TsBinOp::Mul
-        | @ast.TsBinOp::Div
-        | @ast.TsBinOp::Mod
-        | @ast.TsBinOp::Pow
-        | @ast.TsBinOp::BitAnd
-        | @ast.TsBinOp::BitOr
-        | @ast.TsBinOp::BitXor
-        | @ast.TsBinOp::Shl
-        | @ast.TsBinOp::Shr
-        | @ast.TsBinOp::UShr => infer_literal_type(lhs) // type
-      }
-    @ast.TsExpr::UnaryOp(op, e) =>
-      match op {
-        @ast.TsUnaryOp::Neg | @ast.TsUnaryOp::Plus => infer_literal_type(e)
-        @ast.TsUnaryOp::Not => @ast.TsType::Boolean
-        @ast.TsUnaryOp::BitwiseNot => @ast.TsType::Number // i32 result
-        @ast.TsUnaryOp::Typeof => @ast.TsType::String_
-        @ast.TsUnaryOp::Void => @ast.TsType::Any
-        @ast.TsUnaryOp::Delete => @ast.TsType::Boolean
-        @ast.TsUnaryOp::PreInc
-        | @ast.TsUnaryOp::PreDec
-        | @ast.TsUnaryOp::PostInc
-        | @ast.TsUnaryOp::PostDec => infer_literal_type(e)
-      }
-    @ast.TsExpr::Call(_, _) => @ast.TsType::Any // functionreturn valuetypestatement
-    @ast.TsExpr::CallExpr(_, _) => @ast.TsType::Any
-    @ast.TsExpr::Cond(_, then_, _) => infer_literal_type(then_) // then type
-    @ast.TsExpr::IndexAccess(_, _) => @ast.TsType::Any // arrayelementtype
-    @ast.TsExpr::PropAccess(_, prop) =>
-      if prop == "length" {
-        @ast.TsType::Int
-      } else {
-        @ast.TsType::Any
-      }
-    @ast.TsExpr::New(_, _) => @ast.TsType::Any // type
-    @ast.TsExpr::NewExpr(_, _) => @ast.TsType::Any
-    @ast.TsExpr::MethodCall(_, _, _) => @ast.TsType::Any // methodreturn valuetype
-    @ast.TsExpr::AssignExpr(_, e) => infer_literal_type(e) // assignmentexpressiontypetype
-    @ast.TsExpr::AssignPattern(_, e) => infer_literal_type(e)
-    @ast.TsExpr::ArrowFunc(_, _, _) => @ast.TsType::Any // function @ast.TsType::Any
-    @ast.TsExpr::FuncExpr(_) => @ast.TsType::Any // functionexpression @ast.TsType::Any
-  }
-}
-
-///|
-// / @ast.TsType::Any typeresolve()
-fn resolve_any(declared : @ast.TsType, init : @ast.TsExpr) -> @ast.TsType {
+// / @ast.TsType::Any type resolve with context
+fn resolve_any_with_ctx(
+  ctx : CodeGenCtx,
+  declared : @ast.TsType,
+  init : @ast.TsExpr,
+) -> @ast.TsType {
   match declared {
-    @ast.TsType::Any => infer_literal_type(init)
+    @ast.TsType::Any => infer_type(ctx, init)
     _ => declared
   }
 }
@@ -301,6 +211,8 @@ priv struct CodeGenCtx {
   mut next_local : UInt
   // function ( -> )
   funcs : Map[String, UInt]
+  // function signature map (name -> (param types, return type))
+  func_types : Map[String, (Array[@ast.TsType], @ast.TsType)]
   // interface ( -> field)
   interfaces : Map[String, Array[(String, @ast.TsType)]]
   // importfunctiontype ( -> parametertypereturn valuetype)
@@ -331,6 +243,7 @@ fn CodeGenCtx::new(
   funcs : Map[String, UInt],
   interfaces : Map[String, Array[(String, @ast.TsType)]],
   import_types : Map[String, (Array[@ast.TsType], @ast.TsType)],
+  func_types : Map[String, (Array[@ast.TsType], @ast.TsType)],
   string_pool : StringPool,
   builtins_used : Map[String, Bool],
 ) -> CodeGenCtx {
@@ -339,6 +252,7 @@ fn CodeGenCtx::new(
     local_types: [],
     next_local: 0,
     funcs,
+    func_types,
     interfaces,
     import_types,
     instrs: [],
@@ -457,6 +371,49 @@ fn is_f64_type(t : @ast.TsType) -> Bool {
 }
 
 ///|
+// / numeric/boolean coercion for codegen
+fn emit_coerce(
+  ctx : CodeGenCtx,
+  from_type : @ast.TsType,
+  to_type : @ast.TsType,
+) -> Unit {
+  if from_type == to_type {
+    return
+  }
+  match (from_type, to_type) {
+    // i32 -> f64 (including Any treated as f64)
+    (@ast.TsType::Int, @ast.TsType::Any)
+    | (@ast.TsType::Boolean, @ast.TsType::Any) =>
+      ctx.emit(F64ConvertI32S)
+    // f64 (Any) -> i32/bool
+    (@ast.TsType::Any, @ast.TsType::Int) =>
+      ctx.emit(I32TruncF64S)
+    (@ast.TsType::Any, @ast.TsType::Boolean) => {
+      ctx.emit(F64Const(0.0))
+      ctx.emit(F64Ne)
+    }
+    // i32 -> f64
+    (@ast.TsType::Int, @ast.TsType::Number)
+    | (@ast.TsType::Boolean, @ast.TsType::Number) =>
+      ctx.emit(F64ConvertI32S)
+    // f64 -> i32
+    (@ast.TsType::Number, @ast.TsType::Int) =>
+      ctx.emit(I32TruncF64S)
+    // f64 -> bool (non-zero)
+    (@ast.TsType::Number, @ast.TsType::Boolean) => {
+      ctx.emit(F64Const(0.0))
+      ctx.emit(F64Ne)
+    }
+    // i32 -> bool (non-zero)
+    (@ast.TsType::Int, @ast.TsType::Boolean) => {
+      ctx.emit(I32Const(0U))
+      ctx.emit(I32Ne)
+    }
+    _ => ()
+  }
+}
+
+///|
 /// Unify two types for codegen, preferring the more specific one.
 fn codegen_unify_types(t1 : @ast.TsType, t2 : @ast.TsType) -> @ast.TsType {
   if t1 == t2 {
@@ -468,6 +425,60 @@ fn codegen_unify_types(t1 : @ast.TsType, t2 : @ast.TsType) -> @ast.TsType {
     (@ast.TsType::Number, @ast.TsType::Int) => @ast.TsType::Number
     (@ast.TsType::Int, @ast.TsType::Number) => @ast.TsType::Number
     _ => t1
+  }
+}
+
+///|
+/// Get typeof string when it is statically known.
+fn typeof_string_for_type(t : @ast.TsType) -> String? {
+  match t {
+    @ast.TsType::String_ | @ast.TsType::Literal(_) => Some("string")
+    @ast.TsType::Number | @ast.TsType::Int => Some("number")
+    @ast.TsType::Boolean => Some("boolean")
+    @ast.TsType::Undefined | @ast.TsType::Void => Some("undefined")
+    @ast.TsType::Func(_, _) => Some("function")
+    @ast.TsType::Null => Some("object")
+    @ast.TsType::Object(_)
+    | @ast.TsType::Array(_)
+    | @ast.TsType::Tuple(_)
+    | @ast.TsType::Struct(_, _) => Some("object")
+    @ast.TsType::Symbol => Some("symbol")
+    @ast.TsType::BigInt => Some("bigint")
+    @ast.TsType::Union(types) => {
+      let mut kind : String? = None
+      for t in types {
+        match typeof_string_for_type(t) {
+          Some(k) =>
+            match kind {
+              None => kind = Some(k)
+              Some(prev) =>
+                if prev != k {
+                  return None
+                }
+            }
+          None => return None
+        }
+      }
+      kind
+    }
+    @ast.TsType::Intersection(types) => {
+      let mut kind : String? = None
+      for t in types {
+        match typeof_string_for_type(t) {
+          Some(k) =>
+            match kind {
+              None => kind = Some(k)
+              Some(prev) =>
+                if prev != k {
+                  return None
+                }
+            }
+          None => return None
+        }
+      }
+      kind
+    }
+    _ => None
   }
 }
 
@@ -489,9 +500,9 @@ fn codegen_unify_numeric(t1 : @ast.TsType, t2 : @ast.TsType) -> @ast.TsType {
 // / expressiontype
 fn infer_type(ctx : CodeGenCtx, expr : @ast.TsExpr) -> @ast.TsType {
   match expr {
-    // In TypeScript, all number literals are f64 (number type)
+    // Number literals are f64; IntLit is i32
     @ast.TsExpr::NumberLit(_) => @ast.TsType::Number
-    @ast.TsExpr::IntLit(_) => @ast.TsType::Number
+    @ast.TsExpr::IntLit(_) => @ast.TsType::Int
     @ast.TsExpr::BigIntLit(_) => @ast.TsType::Any
     @ast.TsExpr::BoolLit(_) => @ast.TsType::Boolean
     @ast.TsExpr::StringLit(_) => @ast.TsType::String_
@@ -514,7 +525,7 @@ fn infer_type(ctx : CodeGenCtx, expr : @ast.TsExpr) -> @ast.TsType {
     @ast.TsExpr::Var(name) =>
       match ctx.get_local(name) {
         Some(local_var) => local_var.type_
-        None => @ast.TsType::Number
+        None => @ast.TsType::Any
       }
     @ast.TsExpr::BinOp(op, left, right) =>
       match op {
@@ -585,8 +596,16 @@ fn infer_type(ctx : CodeGenCtx, expr : @ast.TsExpr) -> @ast.TsType {
         | @ast.TsUnaryOp::PostInc
         | @ast.TsUnaryOp::PostDec => infer_type(ctx, operand)
       }
-    @ast.TsExpr::Call(_, _) => @ast.TsType::Number // functionreturn valuetypeget
-    @ast.TsExpr::CallExpr(_, _) => @ast.TsType::Number
+    @ast.TsExpr::Call(name, _) =>
+      match ctx.import_types.get(name) {
+        Some((_, return_type)) => return_type
+        None =>
+          match ctx.func_types.get(name) {
+            Some((_, return_type)) => return_type
+            None => @ast.TsType::Any
+          }
+      }
+    @ast.TsExpr::CallExpr(_, _) => @ast.TsType::Any
     @ast.TsExpr::Cond(_, then_expr, _) => infer_type(ctx, then_expr)
     @ast.TsExpr::ArrayLit(elements) =>
       if elements.length() > 0 {
@@ -827,7 +846,10 @@ fn compile_expr(
         | Some(@analysis.ConstValue::Undefined) => ctx.emit(I32Const(0U)) // null/undefined as 0
         Some(@analysis.ConstValue::NotConst) | None =>
           match ctx.get_local(name) {
-            Some(local_var) => ctx.emit(LocalGet(local_var.index))
+            Some(local_var) => {
+              ctx.emit(LocalGet(local_var.index))
+              emit_coerce(ctx, local_var.type_, expected_type)
+            }
             None => raise CodeGenError("Undefined variable: \{name}")
           }
       }
@@ -851,18 +873,37 @@ fn compile_expr(
       raise CodeGenError(
         "import.meta is not supported in Wasm compiler (use interpreter)",
       )
-    @ast.TsExpr::TemplateLiteral(_, _) =>
-      raise CodeGenError(
-        "template literals are not supported in Wasm compiler (use interpreter)",
-      )
+    @ast.TsExpr::TemplateLiteral(parts, exprs) => {
+      if parts.length() == 0 {
+        raise CodeGenError("template literal must have at least one part")
+      }
+      let mut acc : @ast.TsExpr = @ast.TsExpr::StringLit(parts[0])
+      for i in 0..<exprs.length() {
+        let name = store_string_expr(ctx, exprs[i])
+        acc = @ast.TsExpr::BinOp(@ast.TsBinOp::Add, acc, @ast.TsExpr::Var(name))
+        if i + 1 < parts.length() {
+          let part = parts[i + 1]
+          if part.length() > 0 {
+            acc = @ast.TsExpr::BinOp(
+              @ast.TsBinOp::Add,
+              acc,
+              @ast.TsExpr::StringLit(part),
+            )
+          }
+        }
+      }
+      compile_expr(ctx, acc, @ast.TsType::String_)
+    }
     @ast.TsExpr::TaggedTemplate(_, _, _, _) =>
       raise CodeGenError(
         "tagged templates are not supported in Wasm compiler (use interpreter)",
       )
-    @ast.TsExpr::Seq(_, _) =>
-      raise CodeGenError(
-        "comma operator is not supported in Wasm compiler (use interpreter)",
-      )
+    @ast.TsExpr::Seq(left, right) => {
+      let left_type = infer_type(ctx, left)
+      compile_expr(ctx, left, left_type)
+      ctx.emit(Drop)
+      compile_expr(ctx, right, expected_type)
+    }
     @ast.TsExpr::PropAssignExpr(obj, prop, value) =>
       compile_prop_assign_expr(ctx, obj, prop, value)
     @ast.TsExpr::IndexAssignExpr(arr, index, value) =>
@@ -873,8 +914,10 @@ fn compile_expr(
       compile_binop(ctx, op, left, right, expected_type)
     @ast.TsExpr::UnaryOp(op, operand) =>
       compile_unaryop(ctx, op, operand, expected_type)
-    @ast.TsExpr::Call(name, args) =>
-      compile_call(ctx, name, args, expected_type)
+    @ast.TsExpr::Call(name, args) => {
+      let return_type = compile_call(ctx, name, args, expected_type)
+      emit_coerce(ctx, return_type, expected_type)
+    }
     @ast.TsExpr::CallExpr(_, _) =>
       raise CodeGenError("call expression is not supported in Wasm compiler")
     @ast.TsExpr::Cond(cond, then_expr, else_expr) => {
@@ -904,6 +947,7 @@ fn compile_expr(
         local_types: ctx.local_types,
         next_local: ctx.next_local,
         funcs: ctx.funcs,
+        func_types: ctx.func_types,
         interfaces: ctx.interfaces,
         import_types: ctx.import_types,
         instrs: [],
@@ -922,6 +966,7 @@ fn compile_expr(
         local_types: ctx.local_types,
         next_local: ctx.next_local,
         funcs: ctx.funcs,
+        func_types: ctx.func_types,
         interfaces: ctx.interfaces,
         import_types: ctx.import_types,
         instrs: [],
@@ -961,10 +1006,8 @@ fn compile_expr(
     // Wasm(interpreter)
     @ast.TsExpr::NullLit => ctx.emit(I32Const(0U)) // null = 0
     @ast.TsExpr::ArrayHole => ctx.emit(I32Const(0U))
-    @ast.TsExpr::ObjectLit(_) =>
-      raise CodeGenError(
-        "ObjectLit is not supported in Wasm compiler (use interpreter)",
-      )
+    @ast.TsExpr::ObjectLit(fields) =>
+      compile_object_lit(ctx, fields, expected_type)
     @ast.TsExpr::AssignExpr(name, value) =>
       match ctx.get_local(name) {
         Some(lvar) => {
@@ -989,6 +1032,140 @@ fn compile_expr(
 }
 
 ///|
+fn const_key_to_string(key_expr : @ast.TsExpr) -> String? {
+  match @analysis.eval_const(key_expr) {
+    @analysis.ConstValue::String_(s) => Some(s)
+    @analysis.ConstValue::Int(n) => Some(n.to_string())
+    @analysis.ConstValue::Number(n) => Some(n.to_string())
+    @analysis.ConstValue::Boolean(b) =>
+      Some(if b { "true" } else { "false" })
+    @analysis.ConstValue::Null => Some("null")
+    @analysis.ConstValue::Undefined => Some("undefined")
+    @analysis.ConstValue::NotConst => None
+  }
+}
+
+///|
+fn resolve_object_lit_field(
+  key : String,
+  value : @ast.TsExpr,
+) -> (String, @ast.TsExpr) raise CodeGenError {
+  if key.has_prefix("@@spread:") {
+    raise CodeGenError(
+      "object spread is not supported in Wasm compiler (use interpreter)",
+    )
+  }
+  if key.has_prefix("@@get:") || key.has_prefix("@@set:") {
+    raise CodeGenError(
+      "object accessors are not supported in Wasm compiler (use interpreter)",
+    )
+  }
+  if key.has_prefix("@@computed:") {
+    match value {
+      @ast.TsExpr::ComputedProp(key_expr, value_expr) =>
+        match const_key_to_string(key_expr) {
+          Some(prop_key) => (prop_key, value_expr)
+          None =>
+            raise CodeGenError(
+              "computed property key must be constant in Wasm compiler",
+            )
+        }
+      _ =>
+        raise CodeGenError(
+          "computed property missing ComputedProp wrapper",
+        )
+    }
+  } else {
+    (key, value)
+  }
+}
+
+///|
+fn compile_object_lit(
+  ctx : CodeGenCtx,
+  fields : Array[(String, @ast.TsExpr)],
+  expected_type : @ast.TsType,
+) -> Unit raise CodeGenError {
+  let type_name = match expected_type {
+    @ast.TsType::Named(name) => name
+    _ =>
+      raise CodeGenError(
+        "ObjectLit requires a named type in Wasm compiler",
+      )
+  }
+  let obj_local = ctx.add_temp_local(@ast.TsType::Named(type_name))
+  compile_new_expr(ctx, type_name, [], expected_type)
+  ctx.emit(LocalSet(obj_local))
+
+  if ctx.use_gc {
+    match ctx.gc_struct_types.get(type_name) {
+      Some(type_idx) =>
+        match ctx.gc_struct_fields.get(type_name) {
+          Some(field_map) =>
+            for item in fields {
+              let (raw_key, raw_val) = item
+              let (prop_key, value_expr) = resolve_object_lit_field(
+                raw_key,
+                raw_val,
+              )
+              match field_map.get(prop_key) {
+                Some(field_idx) =>
+                  match
+                    field_type_from_interface(
+                      ctx.interfaces,
+                      type_name,
+                      prop_key,
+                    ) {
+                    Some(ft) => {
+                      ctx.emit(LocalGet(obj_local))
+                      compile_expr(ctx, value_expr, ft)
+                      ctx.emit(StructSet(type_idx, field_idx))
+                    }
+                    None => raise CodeGenError("Field not found: \{prop_key}")
+                  }
+                None => raise CodeGenError("Unknown field: \{prop_key}")
+              }
+            }
+          None => raise CodeGenError("Unknown struct fields: \{type_name}")
+        }
+      None => raise CodeGenError("Unknown gc struct type: \{type_name}")
+    }
+  } else {
+    match ctx.interfaces.get(type_name) {
+      Some(struct_fields) =>
+        for item in fields {
+          let (raw_key, raw_val) = item
+          let (prop_key, value_expr) = resolve_object_lit_field(
+            raw_key,
+            raw_val,
+          )
+          match field_offset(struct_fields, prop_key) {
+            Some(offset) =>
+              match field_type(struct_fields, prop_key) {
+                Some(ft) => {
+                  ctx.emit(LocalGet(obj_local))
+                  ctx.emit(I32Const(offset.reinterpret_as_uint()))
+                  ctx.emit(I32Add)
+                  compile_expr(ctx, value_expr, ft)
+                  if is_f64_type(ft) {
+                    ctx.emit(F64Store(3U, 0U, 0U))
+                  } else {
+                    ctx.emit(I32Store(2U, 0U, 0U))
+                  }
+                }
+                None => raise CodeGenError("Field not found: \{prop_key}")
+              }
+            None => raise CodeGenError("Unknown field: \{prop_key}")
+          }
+        }
+      None => raise CodeGenError("Unknown struct type: \{type_name}")
+    }
+  }
+
+  ctx.emit(LocalGet(obj_local))
+}
+
+///|
 // / arrayliteral
 fn compile_array_lit(
   ctx : CodeGenCtx,
@@ -1000,9 +1177,19 @@ fn compile_array_lit(
     _ => @ast.TsType::Number
   }
   let length = elements.length()
+  let mut has_spread = false
+  for elem in elements {
+    match elem {
+      @ast.TsExpr::Spread(_) => {
+        has_spread = true
+        break
+      }
+      _ => ()
+    }
+  }
 
   // wasm-gc mode: use ArrayNewFixed
-  if ctx.use_gc {
+  if ctx.use_gc && !has_spread {
     // Check for spread elements
     for elem in elements {
       match elem {
@@ -1027,9 +1214,233 @@ fn compile_array_lit(
     }
     return
   }
+  if ctx.use_gc {
+    let total_len = ctx.add_temp_local(@ast.TsType::Int)
+    ctx.emit(I32Const(0U))
+    ctx.emit(LocalSet(total_len))
+    let segments : Array[(Bool, UInt, UInt)] = []
+    for elem in elements {
+      match elem {
+        @ast.TsExpr::Spread(inner) => {
+          let arr_type = infer_type(ctx, inner)
+          match arr_type {
+            @ast.TsType::Array(_) => ()
+            _ =>
+              raise CodeGenError(
+                "spread element must be an array in Wasm compiler",
+              )
+          }
+          let arr_local = ctx.add_temp_local(arr_type)
+          compile_expr(ctx, inner, arr_type)
+          ctx.emit(LocalSet(arr_local))
+          let len_local = ctx.add_temp_local(@ast.TsType::Int)
+          ctx.emit(LocalGet(arr_local))
+          ctx.emit(ArrayLen)
+          ctx.emit(LocalSet(len_local))
+          ctx.emit(LocalGet(total_len))
+          ctx.emit(LocalGet(len_local))
+          ctx.emit(I32Add)
+          ctx.emit(LocalSet(total_len))
+          segments.push((true, arr_local, len_local))
+        }
+        _ => {
+          compile_expr(ctx, elem, elem_type)
+          let val_local = ctx.add_temp_local(elem_type)
+          ctx.emit(LocalSet(val_local))
+          ctx.emit(LocalGet(total_len))
+          ctx.emit(I32Const(1U))
+          ctx.emit(I32Add)
+          ctx.emit(LocalSet(total_len))
+          segments.push((false, val_local, 0U))
+        }
+      }
+    }
+    let type_key = if is_f64_type(elem_type) { "f64" } else { "i32" }
+    let type_idx = match ctx.gc_array_types.get(type_key) {
+      Some(idx) => idx
+      None =>
+        raise CodeGenError("wasm-gc array type not defined for: \{type_key}")
+    }
+    let arr_local = ctx.add_temp_local(@ast.TsType::Array(elem_type))
+    ctx.emit(LocalGet(total_len))
+    ctx.emit(ArrayNewDefault(type_idx))
+    ctx.emit(LocalSet(arr_local))
+    let idx_local = ctx.add_temp_local(@ast.TsType::Int)
+    ctx.emit(I32Const(0U))
+    ctx.emit(LocalSet(idx_local))
+    for seg in segments {
+      let (is_spread, a, b) = seg
+      if is_spread {
+        let i_local = ctx.add_temp_local(@ast.TsType::Int)
+        ctx.emit(I32Const(0U))
+        ctx.emit(LocalSet(i_local))
+        let loop_instrs : Array[@core.Instr] = []
+        loop_instrs.push(LocalGet(i_local))
+        loop_instrs.push(LocalGet(b))
+        loop_instrs.push(I32GeS)
+        loop_instrs.push(BrIf(1U))
+        loop_instrs.push(LocalGet(arr_local))
+        loop_instrs.push(LocalGet(idx_local))
+        loop_instrs.push(LocalGet(i_local))
+        loop_instrs.push(I32Add)
+        loop_instrs.push(LocalGet(a))
+        loop_instrs.push(LocalGet(i_local))
+        loop_instrs.push(ArrayGet(type_idx))
+        loop_instrs.push(ArraySet(type_idx))
+        loop_instrs.push(LocalGet(i_local))
+        loop_instrs.push(I32Const(1U))
+        loop_instrs.push(I32Add)
+        loop_instrs.push(LocalSet(i_local))
+        loop_instrs.push(Br(0U))
+        ctx.emit(Block(Empty, [Loop(Empty, loop_instrs)]))
+        ctx.emit(LocalGet(idx_local))
+        ctx.emit(LocalGet(b))
+        ctx.emit(I32Add)
+        ctx.emit(LocalSet(idx_local))
+      } else {
+        ctx.emit(LocalGet(arr_local))
+        ctx.emit(LocalGet(idx_local))
+        ctx.emit(LocalGet(a))
+        ctx.emit(ArraySet(type_idx))
+        ctx.emit(LocalGet(idx_local))
+        ctx.emit(I32Const(1U))
+        ctx.emit(I32Add)
+        ctx.emit(LocalSet(idx_local))
+      }
+    }
+    ctx.emit(LocalGet(arr_local))
+    return
+  }
 
   // Linear memory mode (original implementation)
   let elem_sz = element_size(elem_type)
+  if has_spread {
+    let total_len = ctx.add_temp_local(@ast.TsType::Int)
+    ctx.emit(I32Const(0U))
+    ctx.emit(LocalSet(total_len))
+    let segments : Array[(Bool, UInt, UInt)] = []
+    for elem in elements {
+      match elem {
+        @ast.TsExpr::Spread(inner) => {
+          let arr_type = infer_type(ctx, inner)
+          match arr_type {
+            @ast.TsType::Array(_) => ()
+            _ =>
+              raise CodeGenError(
+                "spread element must be an array in Wasm compiler",
+              )
+          }
+          let arr_local = ctx.add_temp_local(arr_type)
+          compile_expr(ctx, inner, arr_type)
+          ctx.emit(LocalSet(arr_local))
+          let len_local = ctx.add_temp_local(@ast.TsType::Int)
+          ctx.emit(LocalGet(arr_local))
+          ctx.emit(I32Load(2U, 0U, 0U))
+          ctx.emit(LocalSet(len_local))
+          ctx.emit(LocalGet(total_len))
+          ctx.emit(LocalGet(len_local))
+          ctx.emit(I32Add)
+          ctx.emit(LocalSet(total_len))
+          segments.push((true, arr_local, len_local))
+        }
+        _ => {
+          compile_expr(ctx, elem, elem_type)
+          let val_local = ctx.add_temp_local(elem_type)
+          ctx.emit(LocalSet(val_local))
+          ctx.emit(LocalGet(total_len))
+          ctx.emit(I32Const(1U))
+          ctx.emit(I32Add)
+          ctx.emit(LocalSet(total_len))
+          segments.push((false, val_local, 0U))
+        }
+      }
+    }
+    let base_local = ctx.add_temp_local(@ast.TsType::Int)
+    ctx.emit(GlobalGet(0U))
+    ctx.emit(LocalSet(base_local))
+    ctx.emit(LocalGet(base_local))
+    ctx.emit(LocalGet(total_len))
+    ctx.emit(I32Store(2U, 0U, 0U))
+    let idx_local = ctx.add_temp_local(@ast.TsType::Int)
+    ctx.emit(I32Const(0U))
+    ctx.emit(LocalSet(idx_local))
+    for seg in segments {
+      let (is_spread, a, b) = seg
+      if is_spread {
+        let i_local = ctx.add_temp_local(@ast.TsType::Int)
+        ctx.emit(I32Const(0U))
+        ctx.emit(LocalSet(i_local))
+        let loop_instrs : Array[@core.Instr] = []
+        loop_instrs.push(LocalGet(i_local))
+        loop_instrs.push(LocalGet(b))
+        loop_instrs.push(I32GeS)
+        loop_instrs.push(BrIf(1U))
+        // dst
+        loop_instrs.push(LocalGet(base_local))
+        loop_instrs.push(I32Const(4U))
+        loop_instrs.push(I32Add)
+        loop_instrs.push(LocalGet(idx_local))
+        loop_instrs.push(LocalGet(i_local))
+        loop_instrs.push(I32Add)
+        loop_instrs.push(I32Const(elem_sz.reinterpret_as_uint()))
+        loop_instrs.push(I32Mul)
+        loop_instrs.push(I32Add)
+        // src
+        loop_instrs.push(LocalGet(a))
+        loop_instrs.push(I32Const(4U))
+        loop_instrs.push(I32Add)
+        loop_instrs.push(LocalGet(i_local))
+        loop_instrs.push(I32Const(elem_sz.reinterpret_as_uint()))
+        loop_instrs.push(I32Mul)
+        loop_instrs.push(I32Add)
+        if is_f64_type(elem_type) {
+          loop_instrs.push(F64Load(3U, 0U, 0U))
+          loop_instrs.push(F64Store(3U, 0U, 0U))
+        } else {
+          loop_instrs.push(I32Load(2U, 0U, 0U))
+          loop_instrs.push(I32Store(2U, 0U, 0U))
+        }
+        loop_instrs.push(LocalGet(i_local))
+        loop_instrs.push(I32Const(1U))
+        loop_instrs.push(I32Add)
+        loop_instrs.push(LocalSet(i_local))
+        loop_instrs.push(Br(0U))
+        ctx.emit(Block(Empty, [Loop(Empty, loop_instrs)]))
+        ctx.emit(LocalGet(idx_local))
+        ctx.emit(LocalGet(b))
+        ctx.emit(I32Add)
+        ctx.emit(LocalSet(idx_local))
+      } else {
+        ctx.emit(LocalGet(base_local))
+        ctx.emit(I32Const(4U))
+        ctx.emit(I32Add)
+        ctx.emit(LocalGet(idx_local))
+        ctx.emit(I32Const(elem_sz.reinterpret_as_uint()))
+        ctx.emit(I32Mul)
+        ctx.emit(I32Add)
+        ctx.emit(LocalGet(a))
+        if is_f64_type(elem_type) {
+          ctx.emit(F64Store(3U, 0U, 0U))
+        } else {
+          ctx.emit(I32Store(2U, 0U, 0U))
+        }
+        ctx.emit(LocalGet(idx_local))
+        ctx.emit(I32Const(1U))
+        ctx.emit(I32Add)
+        ctx.emit(LocalSet(idx_local))
+      }
+    }
+    ctx.emit(LocalGet(base_local))
+    ctx.emit(I32Const(4U))
+    ctx.emit(I32Add)
+    ctx.emit(LocalGet(total_len))
+    ctx.emit(I32Const(elem_sz.reinterpret_as_uint()))
+    ctx.emit(I32Mul)
+    ctx.emit(I32Add)
+    ctx.emit(GlobalSet(0U))
+    ctx.emit(LocalGet(base_local))
+    return
+  }
 
   // : 4 (length) + length * elem_size
   // variable 0 =
@@ -1089,6 +1500,7 @@ fn compile_index_access(
       None =>
         raise CodeGenError("wasm-gc array type not defined for: \{type_key}")
     }
+    emit_coerce(ctx, elem_type, expected_type)
     return
   }
 
@@ -1108,6 +1520,7 @@ fn compile_index_access(
   } else {
     ctx.emit(I32Load(2U, 0U, 0U))
   }
+  emit_coerce(ctx, elem_type, expected_type)
 }
 
 ///|
@@ -1116,7 +1529,7 @@ fn compile_prop_access(
   ctx : CodeGenCtx,
   obj : @ast.TsExpr,
   prop : String,
-  _expected_type : @ast.TsType,
+  expected_type : @ast.TsType,
 ) -> Unit raise CodeGenError {
   let obj_type = infer_type(ctx, obj)
 
@@ -1131,12 +1544,14 @@ fn compile_prop_access(
         } else {
           ctx.emit(I32Load(2U, 0U, 0U)) // 4 = length
         }
+        emit_coerce(ctx, @ast.TsType::Int, expected_type)
         return
       }
     @ast.TsType::String_ =>
       if prop == "length" {
         compile_expr(ctx, obj, obj_type)
         ctx.emit(I32Load(2U, 0U, 0U)) // 4 = length
+        emit_coerce(ctx, @ast.TsType::Int, expected_type)
         return
       }
     @ast.TsType::Named(type_name) =>
@@ -1628,7 +2043,6 @@ fn compile_string_method(
       ctx.emit(I32Add)
       ctx.emit(I32Const(0xFFFFFFFCU))
       ctx.emit(I32And)
-      ctx.emit(I32Add)
       ctx.emit(GlobalSet(0U))
     }
     "concat" => {
@@ -1678,11 +2092,13 @@ fn compile_string_concat(
   let total_len = ctx.add_local("__concat_total_len__", @ast.TsType::Int)
   ctx.emit(LocalSet(total_len))
 
-  // string
+  // result base pointer
   ctx.emit(GlobalGet(0U))
+  let result_local = ctx.add_temp_local(@ast.TsType::Int)
+  ctx.emit(LocalSet(result_local))
 
   // length
-  ctx.emit(GlobalGet(0U))
+  ctx.emit(LocalGet(result_local))
   ctx.emit(LocalGet(total_len))
   ctx.emit(I32Store(2U, 0U, 0U))
   let i_local = ctx.add_local("__concat_i__", @ast.TsType::Int)
@@ -1695,7 +2111,7 @@ fn compile_string_concat(
   loop1.push(BrIf(1U))
 
   // dst[4+i] = left[4+i]
-  loop1.push(GlobalGet(0U))
+  loop1.push(LocalGet(result_local))
   loop1.push(I32Const(4U))
   loop1.push(I32Add)
   loop1.push(LocalGet(i_local))
@@ -1722,7 +2138,7 @@ fn compile_string_concat(
   loop2.push(BrIf(1U))
 
   // dst[4+left_len+i] = right[4+i]
-  loop2.push(GlobalGet(0U))
+  loop2.push(LocalGet(result_local))
   loop2.push(I32Const(4U))
   loop2.push(I32Add)
   loop2.push(LocalGet(left_len))
@@ -1742,16 +2158,269 @@ fn compile_string_concat(
   loop2.push(LocalSet(i_local))
   loop2.push(Br(0U))
   ctx.emit(Block(Empty, [Loop(Empty, loop2)]))
-  ctx.emit(GlobalGet(0U))
+  ctx.emit(LocalGet(result_local))
   ctx.emit(I32Const(4U))
+  ctx.emit(I32Add)
   ctx.emit(LocalGet(total_len))
   ctx.emit(I32Add)
   ctx.emit(I32Const(3U))
   ctx.emit(I32Add)
   ctx.emit(I32Const(0xFFFFFFFCU))
   ctx.emit(I32And)
-  ctx.emit(I32Add)
   ctx.emit(GlobalSet(0U))
+  ctx.emit(LocalGet(result_local))
+}
+
+///|
+fn emit_string_literal(ctx : CodeGenCtx, s : String) -> Unit {
+  let offset = ctx.string_pool.add(s)
+  ctx.emit(I32Const(offset.reinterpret_as_uint()))
+}
+
+///|
+fn emit_int_to_string_from_local(
+  ctx : CodeGenCtx,
+  value_local : UInt,
+) -> Unit {
+  let sign_local = ctx.add_temp_local(@ast.TsType::Int)
+  let abs_local = ctx.add_temp_local(@ast.TsType::Int)
+  let tmp_local = ctx.add_temp_local(@ast.TsType::Int)
+  let count_local = ctx.add_temp_local(@ast.TsType::Int)
+  let total_len_local = ctx.add_temp_local(@ast.TsType::Int)
+  let base_local = ctx.add_temp_local(@ast.TsType::Int)
+  let write_local = ctx.add_temp_local(@ast.TsType::Int)
+  let digit_local = ctx.add_temp_local(@ast.TsType::Int)
+
+  // sign = value < 0 ? 1 : 0
+  ctx.emit(LocalGet(value_local))
+  ctx.emit(I32Const(0U))
+  ctx.emit(I32LtS)
+  ctx.emit(If(Value(I32), [I32Const(1U)], [I32Const(0U)]))
+  ctx.emit(LocalSet(sign_local))
+
+  // abs = sign ? (0 - value) : value
+  ctx.emit(LocalGet(sign_local))
+  ctx.emit(I32Eqz)
+  ctx.emit(
+    If(
+      Value(I32),
+      [LocalGet(value_local)],
+      [I32Const(0U), LocalGet(value_local), I32Sub],
+    ),
+  )
+  ctx.emit(LocalSet(abs_local))
+
+  let result_local = ctx.add_temp_local(@ast.TsType::String_)
+
+  // if abs == 0 -> "0"
+  ctx.emit(LocalGet(abs_local))
+  ctx.emit(I32Eqz)
+  let zero_ptr = ctx.string_pool.add("0")
+  let then_instrs : Array[@core.Instr] = [
+    I32Const(zero_ptr.reinterpret_as_uint()),
+    LocalSet(result_local),
+  ]
+
+  let else_instrs : Array[@core.Instr] = []
+  // tmp = abs
+  else_instrs.push(LocalGet(abs_local))
+  else_instrs.push(LocalSet(tmp_local))
+  else_instrs.push(I32Const(0U))
+  else_instrs.push(LocalSet(count_local))
+
+  let count_loop : Array[@core.Instr] = []
+  count_loop.push(LocalGet(tmp_local))
+  count_loop.push(I32Eqz)
+  count_loop.push(BrIf(1U))
+  count_loop.push(LocalGet(count_local))
+  count_loop.push(I32Const(1U))
+  count_loop.push(I32Add)
+  count_loop.push(LocalSet(count_local))
+  count_loop.push(LocalGet(tmp_local))
+  count_loop.push(I32Const(10U))
+  count_loop.push(I32DivS)
+  count_loop.push(LocalSet(tmp_local))
+  count_loop.push(Br(0U))
+  else_instrs.push(Block(Empty, [Loop(Empty, count_loop)]))
+
+  // total_len = digits + sign
+  else_instrs.push(LocalGet(count_local))
+  else_instrs.push(LocalGet(sign_local))
+  else_instrs.push(I32Add)
+  else_instrs.push(LocalSet(total_len_local))
+
+  // base = heap
+  else_instrs.push(GlobalGet(0U))
+  else_instrs.push(LocalSet(base_local))
+  // store length
+  else_instrs.push(LocalGet(base_local))
+  else_instrs.push(LocalGet(total_len_local))
+  else_instrs.push(I32Store(2U, 0U, 0U))
+
+  // write_ptr = base + 4 + total_len - 1
+  else_instrs.push(LocalGet(base_local))
+  else_instrs.push(I32Const(4U))
+  else_instrs.push(I32Add)
+  else_instrs.push(LocalGet(total_len_local))
+  else_instrs.push(I32Add)
+  else_instrs.push(I32Const(1U))
+  else_instrs.push(I32Sub)
+  else_instrs.push(LocalSet(write_local))
+
+  // tmp = abs
+  else_instrs.push(LocalGet(abs_local))
+  else_instrs.push(LocalSet(tmp_local))
+
+  let digit_loop : Array[@core.Instr] = []
+  digit_loop.push(LocalGet(tmp_local))
+  digit_loop.push(I32Eqz)
+  digit_loop.push(BrIf(1U))
+  digit_loop.push(LocalGet(tmp_local))
+  digit_loop.push(I32Const(10U))
+  digit_loop.push(I32RemS)
+  digit_loop.push(LocalSet(digit_local))
+  digit_loop.push(LocalGet(write_local))
+  digit_loop.push(LocalGet(digit_local))
+  digit_loop.push(I32Const(48U))
+  digit_loop.push(I32Add)
+  digit_loop.push(I32Store8(0U, 0U, 0U))
+  digit_loop.push(LocalGet(write_local))
+  digit_loop.push(I32Const(1U))
+  digit_loop.push(I32Sub)
+  digit_loop.push(LocalSet(write_local))
+  digit_loop.push(LocalGet(tmp_local))
+  digit_loop.push(I32Const(10U))
+  digit_loop.push(I32DivS)
+  digit_loop.push(LocalSet(tmp_local))
+  digit_loop.push(Br(0U))
+  else_instrs.push(Block(Empty, [Loop(Empty, digit_loop)]))
+
+  // write sign if needed
+  else_instrs.push(LocalGet(sign_local))
+  else_instrs.push(I32Eqz)
+  let sign_else : Array[@core.Instr] = [
+    LocalGet(base_local),
+    I32Const(4U),
+    I32Add,
+    I32Const(45U),
+    I32Store8(0U, 0U, 0U),
+  ]
+  else_instrs.push(If(Empty, [], sign_else))
+
+  // update heap pointer
+  else_instrs.push(LocalGet(base_local))
+  else_instrs.push(I32Const(4U))
+  else_instrs.push(I32Add)
+  else_instrs.push(LocalGet(total_len_local))
+  else_instrs.push(I32Add)
+  else_instrs.push(I32Const(3U))
+  else_instrs.push(I32Add)
+  else_instrs.push(I32Const(0xFFFFFFFCU))
+  else_instrs.push(I32And)
+  else_instrs.push(GlobalSet(0U))
+
+  // return base pointer
+  else_instrs.push(LocalGet(base_local))
+  else_instrs.push(LocalSet(result_local))
+
+  ctx.emit(If(Empty, then_instrs, else_instrs))
+  ctx.emit(LocalGet(result_local))
+}
+
+///|
+fn compile_expr_to_string(
+  ctx : CodeGenCtx,
+  expr : @ast.TsExpr,
+) -> Unit raise CodeGenError {
+  match @analysis.eval_const(expr) {
+    @analysis.ConstValue::String_(s) => {
+      emit_string_literal(ctx, s)
+      return
+    }
+    @analysis.ConstValue::Int(n) => {
+      emit_string_literal(ctx, n.to_string())
+      return
+    }
+    @analysis.ConstValue::Number(n) => {
+      emit_string_literal(ctx, n.to_string())
+      return
+    }
+    @analysis.ConstValue::Boolean(b) => {
+      emit_string_literal(ctx, if b { "true" } else { "false" })
+      return
+    }
+    @analysis.ConstValue::Null => {
+      emit_string_literal(ctx, "null")
+      return
+    }
+    @analysis.ConstValue::Undefined => {
+      emit_string_literal(ctx, "undefined")
+      return
+    }
+    @analysis.ConstValue::NotConst => ()
+  }
+  let expr_type = infer_type(ctx, expr)
+  match expr_type {
+    @ast.TsType::String_ => compile_expr(ctx, expr, @ast.TsType::String_)
+    @ast.TsType::Boolean => {
+      compile_expr(ctx, expr, @ast.TsType::Boolean)
+      let true_ptr = ctx.string_pool.add("true")
+      let false_ptr = ctx.string_pool.add("false")
+      let result_local = ctx.add_temp_local(@ast.TsType::String_)
+      let then_instrs : Array[@core.Instr] = [
+        I32Const(true_ptr.reinterpret_as_uint()),
+        LocalSet(result_local),
+      ]
+      let else_instrs : Array[@core.Instr] = [
+        I32Const(false_ptr.reinterpret_as_uint()),
+        LocalSet(result_local),
+      ]
+      ctx.emit(If(Empty, then_instrs, else_instrs))
+      ctx.emit(LocalGet(result_local))
+    }
+    @ast.TsType::Int => {
+      compile_expr(ctx, expr, @ast.TsType::Int)
+      let value_local = ctx.add_temp_local(@ast.TsType::Int)
+      ctx.emit(LocalSet(value_local))
+      emit_int_to_string_from_local(ctx, value_local)
+    }
+    @ast.TsType::Number => {
+      compile_expr(ctx, expr, @ast.TsType::Number)
+      let num_local = ctx.add_temp_local(@ast.TsType::Number)
+      ctx.emit(LocalSet(num_local))
+      ctx.emit(LocalGet(num_local))
+      ctx.emit(I32TruncF64S)
+      let int_local = ctx.add_temp_local(@ast.TsType::Int)
+      ctx.emit(LocalSet(int_local))
+      emit_int_to_string_from_local(ctx, int_local)
+    }
+    @ast.TsType::Null => {
+      compile_expr(ctx, expr, @ast.TsType::Any)
+      ctx.emit(Drop)
+      emit_string_literal(ctx, "null")
+    }
+    @ast.TsType::Undefined | @ast.TsType::Void => {
+      compile_expr(ctx, expr, @ast.TsType::Any)
+      ctx.emit(Drop)
+      emit_string_literal(ctx, "undefined")
+    }
+    _ =>
+      raise CodeGenError(
+        "template literal ToString not supported for this type",
+      )
+  }
+}
+
+///|
+fn store_string_expr(
+  ctx : CodeGenCtx,
+  expr : @ast.TsExpr,
+) -> String raise CodeGenError {
+  compile_expr_to_string(ctx, expr)
+  let name = "__tpl_str_\{ctx.next_local.reinterpret_as_int().to_string()}"
+  let idx = ctx.add_local(name, @ast.TsType::String_)
+  ctx.emit(LocalSet(idx))
+  name
 }
 
 ///|
@@ -2077,6 +2746,229 @@ fn emit_compound_op_instr(
 }
 
 ///|
+fn make_branch_ctx(ctx : CodeGenCtx) -> CodeGenCtx {
+  {
+    locals: ctx.locals,
+    local_types: ctx.local_types,
+    next_local: ctx.next_local,
+    funcs: ctx.funcs,
+    func_types: ctx.func_types,
+    interfaces: ctx.interfaces,
+    import_types: ctx.import_types,
+    instrs: [],
+    loop_depth: ctx.loop_depth,
+    string_pool: ctx.string_pool,
+    builtins_used: ctx.builtins_used,
+    const_values: ctx.const_values,
+    use_gc: ctx.use_gc,
+    gc_array_types: ctx.gc_array_types,
+    gc_struct_types: ctx.gc_struct_types,
+    gc_struct_fields: ctx.gc_struct_fields,
+  }
+}
+
+///|
+fn emit_is_zero_check(ctx : CodeGenCtx, operand_type : @ast.TsType) -> Unit {
+  if is_f64_type(operand_type) {
+    ctx.emit(F64Const(0.0))
+    ctx.emit(F64Eq)
+  } else {
+    ctx.emit(I32Eqz)
+  }
+}
+
+///|
+fn compile_var_logical_assign_expr(
+  ctx : CodeGenCtx,
+  name : String,
+  op : @ast.TsCompoundOp,
+  value : @ast.TsExpr,
+) -> Unit raise CodeGenError {
+  match ctx.get_local(name) {
+    Some(lvar) => {
+      let operand_type = lvar.type_
+      let tmp_local = ctx.add_temp_local(operand_type)
+      ctx.emit(LocalGet(lvar.index))
+      ctx.emit(LocalTee(tmp_local))
+      emit_is_zero_check(ctx, operand_type)
+
+      let assign_ctx = make_branch_ctx(ctx)
+      compile_expr(assign_ctx, value, operand_type)
+      assign_ctx.emit(LocalTee(lvar.index))
+
+      let result_type = ts_type_to_valtype(operand_type)
+      match op {
+        @ast.TsCompoundOp::AndAssign => {
+          let then_instrs : Array[@core.Instr] = [LocalGet(tmp_local)]
+          ctx.emit(If(Value(result_type), then_instrs, assign_ctx.instrs))
+        }
+        @ast.TsCompoundOp::OrAssign | @ast.TsCompoundOp::CoalesceAssign => {
+          let else_instrs : Array[@core.Instr] = [LocalGet(tmp_local)]
+          ctx.emit(If(Value(result_type), assign_ctx.instrs, else_instrs))
+        }
+        _ =>
+          raise CodeGenError(
+            "logical assignment expected, but got other compound op",
+          )
+      }
+    }
+    None => raise CodeGenError("Undefined variable: \{name}")
+  }
+}
+
+///|
+fn compile_prop_logical_assign_expr(
+  ctx : CodeGenCtx,
+  obj : @ast.TsExpr,
+  prop : String,
+  op : @ast.TsCompoundOp,
+  value : @ast.TsExpr,
+) -> Unit raise CodeGenError {
+  let obj_type = infer_type(ctx, obj)
+  match obj_type {
+    @ast.TsType::Named(type_name) =>
+      match ctx.interfaces.get(type_name) {
+        Some(fields) =>
+          match field_offset(fields, prop) {
+            Some(offset) =>
+              match field_type(fields, prop) {
+                Some(ft) => {
+                  let obj_local = ctx.add_temp_local(@ast.TsType::Int)
+                  let addr_local = ctx.add_temp_local(@ast.TsType::Int)
+                  let tmp_local = ctx.add_temp_local(ft)
+                  let val_local = ctx.add_temp_local(ft)
+
+                  compile_expr(ctx, obj, obj_type)
+                  ctx.emit(LocalSet(obj_local))
+                  ctx.emit(LocalGet(obj_local))
+                  ctx.emit(I32Const(offset.reinterpret_as_uint()))
+                  ctx.emit(I32Add)
+                  ctx.emit(LocalSet(addr_local))
+                  ctx.emit(LocalGet(addr_local))
+                  if is_f64_type(ft) {
+                    ctx.emit(F64Load(3U, 0U, 0U))
+                  } else {
+                    ctx.emit(I32Load(2U, 0U, 0U))
+                  }
+                  ctx.emit(LocalSet(tmp_local))
+                  ctx.emit(LocalGet(tmp_local))
+                  emit_is_zero_check(ctx, ft)
+
+                  let assign_ctx = make_branch_ctx(ctx)
+                  compile_expr(assign_ctx, value, ft)
+                  assign_ctx.emit(LocalTee(val_local))
+                  assign_ctx.emit(LocalGet(addr_local))
+                  assign_ctx.emit(LocalGet(val_local))
+                  if is_f64_type(ft) {
+                    assign_ctx.emit(F64Store(3U, 0U, 0U))
+                  } else {
+                    assign_ctx.emit(I32Store(2U, 0U, 0U))
+                  }
+
+                  let result_type = ts_type_to_valtype(ft)
+                  match op {
+                    @ast.TsCompoundOp::AndAssign => {
+                      let then_instrs : Array[@core.Instr] = [LocalGet(tmp_local)]
+                      ctx.emit(
+                        If(Value(result_type), then_instrs, assign_ctx.instrs),
+                      )
+                    }
+                    @ast.TsCompoundOp::OrAssign
+                    | @ast.TsCompoundOp::CoalesceAssign => {
+                      let else_instrs : Array[@core.Instr] = [LocalGet(tmp_local)]
+                      ctx.emit(
+                        If(Value(result_type), assign_ctx.instrs, else_instrs),
+                      )
+                    }
+                    _ =>
+                      raise CodeGenError(
+                        "logical assignment expected, but got other compound op",
+                      )
+                  }
+                  return
+                }
+                None => ()
+              }
+            None => ()
+          }
+        None => ()
+      }
+    _ => ()
+  }
+  raise CodeGenError("Cannot assign to property: \{prop}")
+}
+
+///|
+fn compile_index_logical_assign_expr(
+  ctx : CodeGenCtx,
+  arr : @ast.TsExpr,
+  index : @ast.TsExpr,
+  op : @ast.TsCompoundOp,
+  value : @ast.TsExpr,
+) -> Unit raise CodeGenError {
+  let arr_type = infer_type(ctx, arr)
+  let elem_type = match arr_type {
+    @ast.TsType::Array(t) => t
+    _ => @ast.TsType::Number
+  }
+  let elem_sz = element_size(elem_type)
+  let arr_local = ctx.add_temp_local(@ast.TsType::Int)
+  let idx_local = ctx.add_temp_local(@ast.TsType::Int)
+  let addr_local = ctx.add_temp_local(@ast.TsType::Int)
+  let tmp_local = ctx.add_temp_local(elem_type)
+  let val_local = ctx.add_temp_local(elem_type)
+
+  compile_expr(ctx, arr, arr_type)
+  ctx.emit(LocalSet(arr_local))
+  compile_expr(ctx, index, @ast.TsType::Int)
+  ctx.emit(LocalSet(idx_local))
+  ctx.emit(LocalGet(arr_local))
+  ctx.emit(I32Const(4U))
+  ctx.emit(I32Add)
+  ctx.emit(LocalGet(idx_local))
+  ctx.emit(I32Const(elem_sz.reinterpret_as_uint()))
+  ctx.emit(I32Mul)
+  ctx.emit(I32Add)
+  ctx.emit(LocalSet(addr_local))
+  ctx.emit(LocalGet(addr_local))
+  if is_f64_type(elem_type) {
+    ctx.emit(F64Load(3U, 0U, 0U))
+  } else {
+    ctx.emit(I32Load(2U, 0U, 0U))
+  }
+  ctx.emit(LocalSet(tmp_local))
+  ctx.emit(LocalGet(tmp_local))
+  emit_is_zero_check(ctx, elem_type)
+
+  let assign_ctx = make_branch_ctx(ctx)
+  compile_expr(assign_ctx, value, elem_type)
+  assign_ctx.emit(LocalTee(val_local))
+  assign_ctx.emit(LocalGet(addr_local))
+  assign_ctx.emit(LocalGet(val_local))
+  if is_f64_type(elem_type) {
+    assign_ctx.emit(F64Store(3U, 0U, 0U))
+  } else {
+    assign_ctx.emit(I32Store(2U, 0U, 0U))
+  }
+
+  let result_type = ts_type_to_valtype(elem_type)
+  match op {
+    @ast.TsCompoundOp::AndAssign => {
+      let then_instrs : Array[@core.Instr] = [LocalGet(tmp_local)]
+      ctx.emit(If(Value(result_type), then_instrs, assign_ctx.instrs))
+    }
+    @ast.TsCompoundOp::OrAssign | @ast.TsCompoundOp::CoalesceAssign => {
+      let else_instrs : Array[@core.Instr] = [LocalGet(tmp_local)]
+      ctx.emit(If(Value(result_type), assign_ctx.instrs, else_instrs))
+    }
+    _ =>
+      raise CodeGenError(
+        "logical assignment expected, but got other compound op",
+      )
+  }
+}
+
+///|
 fn compile_var_compound_assign_expr(
   ctx : CodeGenCtx,
   name : String,
@@ -2207,17 +3099,35 @@ fn compile_compound_assign_expr(
   op : @ast.TsCompoundOp,
   value : @ast.TsExpr,
 ) -> Unit raise CodeGenError {
-  match left {
-    @ast.TsExpr::Var(name) =>
-      compile_var_compound_assign_expr(ctx, name, op, value)
-    @ast.TsExpr::PropAccess(obj, prop) =>
-      compile_prop_compound_assign_expr(ctx, obj, prop, op, value)
-    @ast.TsExpr::IndexAccess(arr, index) =>
-      compile_index_compound_assign_expr(ctx, arr, index, op, value)
+  match op {
+    @ast.TsCompoundOp::AndAssign
+    | @ast.TsCompoundOp::OrAssign
+    | @ast.TsCompoundOp::CoalesceAssign =>
+      match left {
+        @ast.TsExpr::Var(name) =>
+          compile_var_logical_assign_expr(ctx, name, op, value)
+        @ast.TsExpr::PropAccess(obj, prop) =>
+          compile_prop_logical_assign_expr(ctx, obj, prop, op, value)
+        @ast.TsExpr::IndexAccess(arr, index) =>
+          compile_index_logical_assign_expr(ctx, arr, index, op, value)
+        _ =>
+          raise CodeGenError(
+            "logical assignment target is not supported in Wasm compiler",
+          )
+      }
     _ =>
-      raise CodeGenError(
-        "compound assignment target is not supported in Wasm compiler",
-      )
+      match left {
+        @ast.TsExpr::Var(name) =>
+          compile_var_compound_assign_expr(ctx, name, op, value)
+        @ast.TsExpr::PropAccess(obj, prop) =>
+          compile_prop_compound_assign_expr(ctx, obj, prop, op, value)
+        @ast.TsExpr::IndexAccess(arr, index) =>
+          compile_index_compound_assign_expr(ctx, arr, index, op, value)
+        _ =>
+          raise CodeGenError(
+            "compound assignment target is not supported in Wasm compiler",
+          )
+      }
   }
 }
 
@@ -2248,21 +3158,28 @@ fn compile_binop(
       raise CodeGenError(
         "'in' operator is not supported in Wasm compiler (use interpreter)",
       )
-    @ast.TsBinOp::Coalesce => {
-      // a ?? b: if a is null/undefined, return b, else return a
-      // For i32: approximate null/undefined as 0
-      // Note: This conflates 0 with null, which is not strictly correct
-      let temp = ctx.add_local("__coalesce_tmp__", @ast.TsType::Int)
-      compile_expr(ctx, left, @ast.TsType::Int)
+    @ast.TsBinOp::And => {
+      // a && b: if a is truthy, return b, else return a
+      let tmp_type = if is_f64_type(expected_type) {
+        @ast.TsType::Number
+      } else {
+        @ast.TsType::Int
+      }
+      let temp = ctx.add_local("__and_tmp__", tmp_type)
+      compile_expr(ctx, left, tmp_type)
       ctx.emit(LocalTee(temp))
-      ctx.emit(I32Eqz) // is left == 0 (null-ish)?
-
-      // Then branch: left was null-ish, evaluate and return right
+      if is_f64_type(tmp_type) {
+        ctx.emit(F64Const(0.0))
+        ctx.emit(F64Eq)
+      } else {
+        ctx.emit(I32Eqz)
+      }
       let then_ctx : CodeGenCtx = {
         locals: ctx.locals,
         local_types: ctx.local_types,
         next_local: ctx.next_local,
         funcs: ctx.funcs,
+        func_types: ctx.func_types,
         interfaces: ctx.interfaces,
         import_types: ctx.import_types,
         instrs: [],
@@ -2275,11 +3192,100 @@ fn compile_binop(
         gc_struct_types: ctx.gc_struct_types,
         gc_struct_fields: ctx.gc_struct_fields,
       }
-      compile_expr(then_ctx, right, @ast.TsType::Int)
+      // Then branch (a is falsy): return a (temp)
+      let then_instrs : Array[@core.Instr] = [LocalGet(temp)]
+      // Else branch (a truthy): evaluate b
+      compile_expr(then_ctx, right, tmp_type)
+      let result_type = ts_type_to_valtype(tmp_type)
+      ctx.emit(If(Value(result_type), then_instrs, then_ctx.instrs))
+      return
+    }
+    @ast.TsBinOp::Or => {
+      // a || b: if a is truthy, return a, else return b
+      let tmp_type = if is_f64_type(expected_type) {
+        @ast.TsType::Number
+      } else {
+        @ast.TsType::Int
+      }
+      let temp = ctx.add_local("__or_tmp__", tmp_type)
+      compile_expr(ctx, left, tmp_type)
+      ctx.emit(LocalTee(temp))
+      if is_f64_type(tmp_type) {
+        ctx.emit(F64Const(0.0))
+        ctx.emit(F64Eq)
+      } else {
+        ctx.emit(I32Eqz)
+      }
+      let then_ctx : CodeGenCtx = {
+        locals: ctx.locals,
+        local_types: ctx.local_types,
+        next_local: ctx.next_local,
+        funcs: ctx.funcs,
+        func_types: ctx.func_types,
+        interfaces: ctx.interfaces,
+        import_types: ctx.import_types,
+        instrs: [],
+        loop_depth: ctx.loop_depth,
+        string_pool: ctx.string_pool,
+        builtins_used: ctx.builtins_used,
+        const_values: ctx.const_values,
+        use_gc: ctx.use_gc,
+        gc_array_types: ctx.gc_array_types,
+        gc_struct_types: ctx.gc_struct_types,
+        gc_struct_fields: ctx.gc_struct_fields,
+      }
+      // Then branch (a is falsy): evaluate b
+      compile_expr(then_ctx, right, tmp_type)
+      // Else branch (a truthy): return a (temp)
+      let else_instrs : Array[@core.Instr] = [LocalGet(temp)]
+      let result_type = ts_type_to_valtype(tmp_type)
+      ctx.emit(If(Value(result_type), then_ctx.instrs, else_instrs))
+      return
+    }
+    @ast.TsBinOp::Coalesce => {
+      // a ?? b: if a is null/undefined, return b, else return a
+      // For i32: approximate null/undefined as 0
+      // Note: This conflates 0 with null, which is not strictly correct
+      let tmp_type = if is_f64_type(expected_type) {
+        @ast.TsType::Number
+      } else {
+        @ast.TsType::Int
+      }
+      let temp = ctx.add_local("__coalesce_tmp__", tmp_type)
+      compile_expr(ctx, left, tmp_type)
+      ctx.emit(LocalTee(temp))
+      if is_f64_type(tmp_type) {
+        ctx.emit(F64Const(0.0))
+        ctx.emit(F64Eq)
+      } else {
+        ctx.emit(I32Eqz)
+      }
+
+      // Then branch: left was null-ish, evaluate and return right
+      let then_ctx : CodeGenCtx = {
+        locals: ctx.locals,
+        local_types: ctx.local_types,
+        next_local: ctx.next_local,
+        funcs: ctx.funcs,
+        func_types: ctx.func_types,
+        interfaces: ctx.interfaces,
+        import_types: ctx.import_types,
+        instrs: [],
+        loop_depth: ctx.loop_depth,
+        string_pool: ctx.string_pool,
+        builtins_used: ctx.builtins_used,
+        const_values: ctx.const_values,
+        use_gc: ctx.use_gc,
+        gc_array_types: ctx.gc_array_types,
+        gc_struct_types: ctx.gc_struct_types,
+        gc_struct_fields: ctx.gc_struct_fields,
+      }
+      compile_expr(then_ctx, right, tmp_type)
 
       // Else branch: left was not null-ish, return left from temp
       let else_instrs : Array[@core.Instr] = [LocalGet(temp)]
-      ctx.emit(If(Value(I32), then_ctx.instrs, else_instrs))
+      let result_type = ts_type_to_valtype(tmp_type)
+      ctx.emit(If(Value(result_type), then_ctx.instrs, else_instrs))
       return
     }
     _ => ()
@@ -2502,16 +3508,30 @@ fn compile_unaryop(
     @ast.TsUnaryOp::Plus =>
       // unary: conversion()
       compile_expr(ctx, operand, expected_type)
-    @ast.TsUnaryOp::Typeof =>
-      // typeof Wasm
-      raise CodeGenError(
-        "typeof is not supported in Wasm compiler (use interpreter)",
-      )
-    @ast.TsUnaryOp::Void =>
-      // void
-      raise CodeGenError(
-        "void is not supported in Wasm compiler (use interpreter)",
-      )
+    @ast.TsUnaryOp::Typeof => {
+      // typeof: restricted to statically known operand types
+      let operand_type = infer_type(ctx, operand)
+      match typeof_string_for_type(operand_type) {
+        Some(kind) => {
+          compile_expr(ctx, operand, operand_type)
+          ctx.emit(Drop)
+          let offset = ctx.string_pool.add(kind)
+          ctx.emit(I32Const(offset.reinterpret_as_uint()))
+        }
+        None =>
+          raise CodeGenError(
+            "typeof is only supported for statically known operand types in Wasm compiler",
+          )
+      }
+    }
+    @ast.TsUnaryOp::Void => {
+      // void: evaluate operand for side effects, return undefined (0)
+      let operand_type = infer_type(ctx, operand)
+      compile_expr(ctx, operand, operand_type)
+      ctx.emit(Drop)
+      ctx.emit(I32Const(0U))
+      emit_coerce(ctx, @ast.TsType::Int, expected_type)
+    }
     @ast.TsUnaryOp::Delete =>
       raise CodeGenError(
         "delete is not supported in Wasm compiler (use interpreter)",
@@ -2532,43 +3552,170 @@ fn compile_call(
   name : String,
   args : Array[@ast.TsExpr],
   expected_type : @ast.TsType,
-) -> Unit raise CodeGenError {
+) -> @ast.TsType raise CodeGenError {
+  fn compile_call_args(
+    ctx : CodeGenCtx,
+    args : Array[@ast.TsExpr],
+    param_types : Array[@ast.TsType],
+    expected_type : @ast.TsType,
+  ) -> Unit raise CodeGenError {
+    let mut spread_index = -1
+    for i, arg in args {
+      match arg {
+        @ast.TsExpr::Spread(_) =>
+          if spread_index >= 0 {
+            raise CodeGenError("multiple spread arguments are not supported")
+          } else {
+            spread_index = i
+          }
+        _ => ()
+      }
+    }
+    if spread_index < 0 {
+      for i, arg in args {
+        match arg {
+          @ast.TsExpr::Spread(_) =>
+            raise CodeGenError("spread is not supported in this call")
+          _ => ()
+        }
+        let param_type = if i < param_types.length() {
+          param_types[i]
+        } else {
+          expected_type
+        }
+        compile_expr(ctx, arg, param_type)
+      }
+      return
+    }
+    if spread_index != args.length() - 1 {
+      raise CodeGenError("spread argument must be last in call")
+    }
+    let fixed_count = spread_index
+    if fixed_count > param_types.length() {
+      raise CodeGenError("too many arguments before spread")
+    }
+    for i in 0..<fixed_count {
+      let param_type = if i < param_types.length() {
+        param_types[i]
+      } else {
+        expected_type
+      }
+      compile_expr(ctx, args[i], param_type)
+    }
+    let spread_expr = match args[fixed_count] {
+      @ast.TsExpr::Spread(inner) => inner
+      _ => raise CodeGenError("spread argument missing")
+    }
+    if param_types.length() == fixed_count {
+      let spread_type = infer_type(ctx, spread_expr)
+      compile_expr(ctx, spread_expr, spread_type)
+      ctx.emit(Drop)
+      return
+    }
+    let arr_type = infer_type(ctx, spread_expr)
+    let elem_type = match arr_type {
+      @ast.TsType::Array(t) => t
+      _ => raise CodeGenError("spread argument must be an array")
+    }
+    let arr_local = ctx.add_temp_local(arr_type)
+    compile_expr(ctx, spread_expr, arr_type)
+    ctx.emit(LocalSet(arr_local))
+    let len_local = ctx.add_temp_local(@ast.TsType::Int)
+    ctx.emit(LocalGet(arr_local))
+    if ctx.use_gc {
+      ctx.emit(ArrayLen)
+    } else {
+      ctx.emit(I32Load(2U, 0U, 0U))
+    }
+    ctx.emit(LocalSet(len_local))
+    let type_key = if is_f64_type(elem_type) { "f64" } else { "i32" }
+    let type_idx = if ctx.use_gc {
+      match ctx.gc_array_types.get(type_key) {
+        Some(idx) => idx
+        None =>
+          raise CodeGenError(
+            "wasm-gc array type not defined for: \{type_key}",
+          )
+      }
+    } else {
+      0U
+    }
+    let elem_sz = element_size(elem_type)
+    let val_type = if is_f64_type(elem_type) {
+      @core.ValType::F64
+    } else {
+      @core.ValType::I32
+    }
+    for j in fixed_count..<param_types.length() {
+      let idx = (j - fixed_count).reinterpret_as_uint()
+      ctx.emit(I32Const(idx))
+      ctx.emit(LocalGet(len_local))
+      ctx.emit(I32LtS)
+      let then_instrs : Array[@core.Instr] = []
+      if ctx.use_gc {
+        then_instrs.push(LocalGet(arr_local))
+        then_instrs.push(I32Const(idx))
+        then_instrs.push(ArrayGet(type_idx))
+      } else {
+        then_instrs.push(LocalGet(arr_local))
+        then_instrs.push(I32Const(4U))
+        then_instrs.push(I32Add)
+        then_instrs.push(I32Const(idx))
+        then_instrs.push(I32Const(elem_sz.reinterpret_as_uint()))
+        then_instrs.push(I32Mul)
+        then_instrs.push(I32Add)
+        if is_f64_type(elem_type) {
+          then_instrs.push(F64Load(3U, 0U, 0U))
+        } else {
+          then_instrs.push(I32Load(2U, 0U, 0U))
+        }
+      }
+      let else_instrs : Array[@core.Instr] = if is_f64_type(elem_type) {
+        [F64Const(0.0)]
+      } else {
+        [I32Const(0U)]
+      }
+      ctx.emit(If(Value(val_type), then_instrs, else_instrs))
+      let param_type = param_types[j]
+      emit_coerce(ctx, elem_type, param_type)
+    }
+  }
+
   // functionget
   match ctx.funcs.get(name) {
     Some(idx) => {
       // importfunctiontype
       match ctx.import_types.get(name) {
-        Some((param_types, _)) =>
+        Some((param_types, return_type)) => {
           // importfunction: parametertypereference
-          for i, arg in args {
-            match arg {
-              @ast.TsExpr::Spread(_) =>
-                raise CodeGenError(
-                  "Spread is not supported in Wasm compiler (use interpreter)",
-                )
-              _ => ()
-            }
-            let param_type = if i < param_types.length() {
-              param_types[i]
-            } else {
-              expected_type // argument
-            }
-            compile_expr(ctx, arg, param_type)
-          }
-        None =>
+          compile_call_args(ctx, args, param_types, expected_type)
+          ctx.emit(Call(idx))
+          return return_type
+        }
+        None => {
           // definefunction: expected_type
-          for arg in args {
-            match arg {
-              @ast.TsExpr::Spread(_) =>
-                raise CodeGenError(
-                  "Spread is not supported in Wasm compiler (use interpreter)",
-                )
-              _ => ()
+          match ctx.func_types.get(name) {
+            Some((param_types, return_type)) => {
+              compile_call_args(ctx, args, param_types, expected_type)
+              ctx.emit(Call(idx))
+              return return_type
             }
-            compile_expr(ctx, arg, expected_type)
+            None => {
+              for arg in args {
+                match arg {
+                  @ast.TsExpr::Spread(_) =>
+                    raise CodeGenError(
+                      "Spread requires a known function signature",
+                    )
+                  _ => compile_expr(ctx, arg, expected_type)
+                }
+              }
+              ctx.emit(Call(idx))
+              return expected_type
+            }
           }
+        }
       }
-      ctx.emit(Call(idx))
     }
     None => raise CodeGenError("Undefined function: \{name}")
   }
@@ -2594,7 +3741,7 @@ fn compile_stmt(
           let (idx, resolved_type) = match ctx.get_local(name) {
             Some(existing) => (existing.index, existing.type_)
             None => {
-              let inferred = resolve_any(type_, init)
+              let inferred = resolve_any_with_ctx(ctx, type_, init)
               (ctx.add_local(name, inferred), inferred)
             }
           }
@@ -2616,7 +3763,7 @@ fn compile_stmt(
           let (idx, resolved_type) = match ctx.get_local(name) {
             Some(existing) => (existing.index, existing.type_)
             None => {
-              let inferred = resolve_any(type_, init)
+              let inferred = resolve_any_with_ctx(ctx, type_, init)
               (ctx.add_local(name, inferred), inferred)
             }
           }
@@ -2634,57 +3781,66 @@ fn compile_stmt(
         None => raise CodeGenError("Undefined variable: \{name}")
       }
     @ast.TsStmt::CompoundAssign(name, op, expr) =>
-      match ctx.get_local(name) {
-        Some(lvar) => {
-          // x op= expr → x = x op expr
-          ctx.emit(LocalGet(lvar.index))
-          compile_expr(ctx, expr, lvar.type_)
-          if is_f64_type(lvar.type_) {
-            match op {
-              @ast.TsCompoundOp::AddAssign => ctx.emit(F64Add)
-              @ast.TsCompoundOp::SubAssign => ctx.emit(F64Sub)
-              @ast.TsCompoundOp::MulAssign => ctx.emit(F64Mul)
-              @ast.TsCompoundOp::DivAssign => ctx.emit(F64Div)
-              @ast.TsCompoundOp::ModAssign
-              | @ast.TsCompoundOp::BitAndAssign
-              | @ast.TsCompoundOp::BitOrAssign
-              | @ast.TsCompoundOp::BitXorAssign
-              | @ast.TsCompoundOp::ShlAssign
-              | @ast.TsCompoundOp::ShrAssign
-              | @ast.TsCompoundOp::UShrAssign
-              | @ast.TsCompoundOp::PowAssign
-              | @ast.TsCompoundOp::AndAssign
-              | @ast.TsCompoundOp::OrAssign
-              | @ast.TsCompoundOp::CoalesceAssign =>
-                raise CodeGenError(
-                  "compound op is not supported on f64 in Wasm compiler",
-                )
-            }
-          } else {
-            match op {
-              @ast.TsCompoundOp::AddAssign => ctx.emit(I32Add)
-              @ast.TsCompoundOp::SubAssign => ctx.emit(I32Sub)
-              @ast.TsCompoundOp::MulAssign => ctx.emit(I32Mul)
-              @ast.TsCompoundOp::DivAssign => ctx.emit(I32DivS)
-              @ast.TsCompoundOp::ModAssign => ctx.emit(I32RemS)
-              @ast.TsCompoundOp::BitAndAssign => ctx.emit(I32And)
-              @ast.TsCompoundOp::BitOrAssign => ctx.emit(I32Or)
-              @ast.TsCompoundOp::BitXorAssign => ctx.emit(I32Xor)
-              @ast.TsCompoundOp::ShlAssign => ctx.emit(I32Shl)
-              @ast.TsCompoundOp::ShrAssign => ctx.emit(I32ShrS)
-              @ast.TsCompoundOp::UShrAssign => ctx.emit(I32ShrU)
-              @ast.TsCompoundOp::PowAssign
-              | @ast.TsCompoundOp::AndAssign
-              | @ast.TsCompoundOp::OrAssign
-              | @ast.TsCompoundOp::CoalesceAssign =>
-                raise CodeGenError(
-                  "logical/pow assignment is not supported in Wasm compiler (use interpreter)",
-                )
-            }
-          }
-          ctx.emit(LocalSet(lvar.index))
+      match op {
+        @ast.TsCompoundOp::AndAssign
+        | @ast.TsCompoundOp::OrAssign
+        | @ast.TsCompoundOp::CoalesceAssign => {
+          compile_var_logical_assign_expr(ctx, name, op, expr)
+          ctx.emit(Drop)
         }
-        None => raise CodeGenError("Undefined variable: \{name}")
+        _ =>
+          match ctx.get_local(name) {
+            Some(lvar) => {
+              // x op= expr → x = x op expr
+              ctx.emit(LocalGet(lvar.index))
+              compile_expr(ctx, expr, lvar.type_)
+              if is_f64_type(lvar.type_) {
+                match op {
+                  @ast.TsCompoundOp::AddAssign => ctx.emit(F64Add)
+                  @ast.TsCompoundOp::SubAssign => ctx.emit(F64Sub)
+                  @ast.TsCompoundOp::MulAssign => ctx.emit(F64Mul)
+                  @ast.TsCompoundOp::DivAssign => ctx.emit(F64Div)
+                  @ast.TsCompoundOp::ModAssign
+                  | @ast.TsCompoundOp::BitAndAssign
+                  | @ast.TsCompoundOp::BitOrAssign
+                  | @ast.TsCompoundOp::BitXorAssign
+                  | @ast.TsCompoundOp::ShlAssign
+                  | @ast.TsCompoundOp::ShrAssign
+                  | @ast.TsCompoundOp::UShrAssign
+                  | @ast.TsCompoundOp::PowAssign
+                  | @ast.TsCompoundOp::AndAssign
+                  | @ast.TsCompoundOp::OrAssign
+                  | @ast.TsCompoundOp::CoalesceAssign =>
+                    raise CodeGenError(
+                      "compound op is not supported on f64 in Wasm compiler",
+                    )
+                }
+              } else {
+                match op {
+                  @ast.TsCompoundOp::AddAssign => ctx.emit(I32Add)
+                  @ast.TsCompoundOp::SubAssign => ctx.emit(I32Sub)
+                  @ast.TsCompoundOp::MulAssign => ctx.emit(I32Mul)
+                  @ast.TsCompoundOp::DivAssign => ctx.emit(I32DivS)
+                  @ast.TsCompoundOp::ModAssign => ctx.emit(I32RemS)
+                  @ast.TsCompoundOp::BitAndAssign => ctx.emit(I32And)
+                  @ast.TsCompoundOp::BitOrAssign => ctx.emit(I32Or)
+                  @ast.TsCompoundOp::BitXorAssign => ctx.emit(I32Xor)
+                  @ast.TsCompoundOp::ShlAssign => ctx.emit(I32Shl)
+                  @ast.TsCompoundOp::ShrAssign => ctx.emit(I32ShrS)
+                  @ast.TsCompoundOp::UShrAssign => ctx.emit(I32ShrU)
+                  @ast.TsCompoundOp::PowAssign
+                  | @ast.TsCompoundOp::AndAssign
+                  | @ast.TsCompoundOp::OrAssign
+                  | @ast.TsCompoundOp::CoalesceAssign =>
+                    raise CodeGenError(
+                      "logical/pow assignment is not supported in Wasm compiler (use interpreter)",
+                    )
+                }
+              }
+              ctx.emit(LocalSet(lvar.index))
+            }
+            None => raise CodeGenError("Undefined variable: \{name}")
+          }
       }
     @ast.TsStmt::IndexAssign(arr, index, value) =>
       compile_index_assign(ctx, arr, index, value)
@@ -2825,6 +3981,7 @@ fn compile_while(
     local_types: ctx.local_types,
     next_local: ctx.next_local,
     funcs: ctx.funcs,
+    func_types: ctx.func_types,
     interfaces: ctx.interfaces,
     import_types: ctx.import_types,
     instrs: [],
@@ -2879,6 +4036,7 @@ fn compile_do_while(
     local_types: ctx.local_types,
     next_local: ctx.next_local,
     funcs: ctx.funcs,
+    func_types: ctx.func_types,
     interfaces: ctx.interfaces,
     import_types: ctx.import_types,
     instrs: [],
@@ -2926,6 +4084,7 @@ fn compile_for(
         local_types: ctx.local_types,
         next_local: ctx.next_local,
         funcs: ctx.funcs,
+        func_types: ctx.func_types,
         interfaces: ctx.interfaces,
         import_types: ctx.import_types,
         instrs: [],
@@ -2962,6 +4121,7 @@ fn compile_for(
         local_types: ctx.local_types,
         next_local: ctx.next_local,
         funcs: ctx.funcs,
+        func_types: ctx.func_types,
         interfaces: ctx.interfaces,
         import_types: ctx.import_types,
         instrs: [],
@@ -3150,6 +4310,7 @@ fn compile_switch_cases(
           local_types: ctx.local_types,
           next_local: ctx.next_local,
           funcs: ctx.funcs,
+          func_types: ctx.func_types,
           interfaces: ctx.interfaces,
           import_types: ctx.import_types,
           instrs: [],
@@ -3209,6 +4370,7 @@ fn compile_block_to_instrs(
     local_types: ctx.local_types,
     next_local: ctx.next_local,
     funcs: ctx.funcs,
+    func_types: ctx.func_types,
     interfaces: ctx.interfaces,
     import_types: ctx.import_types,
     instrs: [],
@@ -3230,6 +4392,25 @@ fn compile_block_to_instrs(
   sub_ctx.instrs
 }
 
+///|
+// / default return value for non-void functions
+fn emit_default_return(
+  ctx : CodeGenCtx,
+  return_type : @ast.TsType,
+) -> Unit {
+  match return_type {
+    @ast.TsType::Void => ()
+    _ =>
+      if is_f64_type(return_type) {
+        ctx.emit(F64Const(0.0))
+        ctx.emit(Return)
+      } else {
+        ctx.emit(I32Const(0U))
+        ctx.emit(Return)
+      }
+  }
+}
+
 // ============================================
 // functioncodegen
 // ============================================
@@ -3241,11 +4422,17 @@ fn compile_function(
   func_map : Map[String, UInt],
   interfaces : Map[String, Array[(String, @ast.TsType)]],
   import_types : Map[String, (Array[@ast.TsType], @ast.TsType)],
+  func_types : Map[String, (Array[@ast.TsType], @ast.TsType)],
   string_pool : StringPool,
   builtins_used : Map[String, Bool],
 ) -> (@core.TypeDef, @core.Code) raise CodeGenError {
   let ctx = CodeGenCtx::new(
-    func_map, interfaces, import_types, string_pool, builtins_used,
+    func_map,
+    interfaces,
+    import_types,
+    func_types,
+    string_pool,
+    builtins_used,
   )
 
   // parametervariable
@@ -3261,6 +4448,7 @@ fn compile_function(
   for stmt in func.body.stmts {
     compile_stmt(ctx, stmt, func.return_type)
   }
+  emit_default_return(ctx, func.return_type)
 
   // typedefine
   let params : Array[@core.ValType] = []
@@ -3314,6 +4502,16 @@ pub fn compile_module(
     func_map[func.name] = i.reinterpret_as_uint() + num_imports
   }
 
+  // function signature map
+  let func_types : Map[String, (Array[@ast.TsType], @ast.TsType)] = {}
+  for func in module_.funcs {
+    let param_types : Array[@ast.TsType] = []
+    for param in func.params {
+      param_types.push(param.type_)
+    }
+    func_types[func.name] = (param_types, func.return_type)
+  }
+
   // interfacecreate
   let interface_map : Map[String, Array[(String, @ast.TsType)]] = {}
   for iface in module_.interfaces {
@@ -3354,7 +4552,13 @@ pub fn compile_module(
   let builtins_used : Map[String, Bool] = {}
   for i, func in module_.funcs {
     let (func_type, code) = compile_function(
-      func, func_map, interface_map, import_types, string_pool, builtins_used,
+      func,
+      func_map,
+      interface_map,
+      import_types,
+      func_types,
+      string_pool,
+      builtins_used,
     )
     types.push(func_type)
     codes.push(code)
@@ -3446,6 +4650,16 @@ pub fn compile_module_gc(
   }
   for i, func in module_.funcs {
     func_map[func.name] = i.reinterpret_as_uint() + num_imports
+  }
+
+  // Function signature map
+  let func_types : Map[String, (Array[@ast.TsType], @ast.TsType)] = {}
+  for func in module_.funcs {
+    let param_types : Array[@ast.TsType] = []
+    for param in func.params {
+      param_types.push(param.type_)
+    }
+    func_types[func.name] = (param_types, func.return_type)
   }
 
   // Interface map
@@ -3605,7 +4819,13 @@ pub fn compile_module_gc(
           None => {
             // Fallback: compile as regular function (will fail at runtime for yield)
             let (func_type, code) = compile_function_gc(
-              func, func_map, interface_map, import_types, string_pool, builtins_used,
+              func,
+              func_map,
+              interface_map,
+              import_types,
+              func_types,
+              string_pool,
+              builtins_used,
               gc_array_types, gc_struct_types, gc_struct_fields,
             )
             types.push(func_type)
@@ -3624,7 +4844,13 @@ pub fn compile_module_gc(
       None => {
         // Regular function
         let (func_type, code) = compile_function_gc(
-          func, func_map, interface_map, import_types, string_pool, builtins_used,
+          func,
+          func_map,
+          interface_map,
+          import_types,
+          func_types,
+          string_pool,
+          builtins_used,
           gc_array_types, gc_struct_types, gc_struct_fields,
         )
         types.push(func_type)
@@ -3686,6 +4912,7 @@ fn compile_function_gc(
   func_map : Map[String, UInt],
   interfaces : Map[String, Array[(String, @ast.TsType)]],
   import_types : Map[String, (Array[@ast.TsType], @ast.TsType)],
+  func_types : Map[String, (Array[@ast.TsType], @ast.TsType)],
   string_pool : StringPool,
   builtins_used : Map[String, Bool],
   gc_array_types : Map[String, UInt],
@@ -3697,6 +4924,7 @@ fn compile_function_gc(
     local_types: [],
     next_local: 0,
     funcs: func_map,
+    func_types: func_types,
     interfaces,
     import_types,
     instrs: [],
@@ -3720,6 +4948,7 @@ fn compile_function_gc(
   for stmt in func.body.stmts {
     compile_stmt(ctx, stmt, func.return_type)
   }
+  emit_default_return(ctx, func.return_type)
 
   // Build function type (use gc types for params and results)
   let params : Array[@core.ValType] = []
@@ -3759,12 +4988,18 @@ fn compile_typed_function(
   func_map : Map[String, UInt],
   interfaces : Map[String, Array[(String, @ast.TsType)]],
   import_types : Map[String, (Array[@ast.TsType], @ast.TsType)],
+  func_types : Map[String, (Array[@ast.TsType], @ast.TsType)],
   string_pool : StringPool,
   builtins_used : Map[String, Bool],
 ) -> (@core.TypeDef, @core.Code) raise CodeGenError {
   let func = typed_func.func
   let ctx = CodeGenCtx::new(
-    func_map, interfaces, import_types, string_pool, builtins_used,
+    func_map,
+    interfaces,
+    import_types,
+    func_types,
+    string_pool,
+    builtins_used,
   )
 
   // Register parameters
@@ -3839,6 +5074,17 @@ pub fn compile_typed_module(
     func_map[func.name] = i.reinterpret_as_uint() + num_imports
   }
 
+  // Build function signature map
+  let func_types : Map[String, (Array[@ast.TsType], @ast.TsType)] = {}
+  for typed_func in typed_module.funcs {
+    let func = typed_func.func
+    let param_types : Array[@ast.TsType] = []
+    for param in func.params {
+      param_types.push(param.type_)
+    }
+    func_types[func.name] = (param_types, func.return_type)
+  }
+
   // Build interface map
   let interface_map : Map[String, Array[(String, @ast.TsType)]] = {}
   for iface in original_module.interfaces {
@@ -3877,7 +5123,13 @@ pub fn compile_typed_module(
   let builtins_used : Map[String, Bool] = {}
   for i, typed_func in typed_module.funcs {
     let (func_type, code) = compile_typed_function(
-      typed_func, func_map, interface_map, import_types, string_pool, builtins_used,
+      typed_func,
+      func_map,
+      interface_map,
+      import_types,
+      func_types,
+      string_pool,
+      builtins_used,
     )
     types.push(func_type)
     codes.push(code)

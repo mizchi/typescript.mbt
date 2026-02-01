@@ -252,6 +252,53 @@ test "codegen: struct with int fields" {
 }
 
 ///|
+test "codegen: object literal with computed key" {
+  let src =
+    #|interface Point {
+    #|  x: int;
+    #|  y: int;
+    #|}
+    #|function makePoint(a: int, b: int): int {
+    #|  let p: Point = { ["x"]: a, y: b };
+    #|  return p.x + p.y;
+    #|}
+  let wasm = compile_to_wasm(src)
+  assert_run_i32(wasm, "makePoint", [2.0, 5.0], 7)
+}
+
+///|
+test "codegen: array literal with spread" {
+  let src =
+    #|function spreadArray(): int {
+    #|  let a: int[] = [1, 2];
+    #|  let b: int[] = [3, 4, 5];
+    #|  let c: int[] = [0, ...a, 9, ...b];
+    #|  return c.length + c[1] + c[3] + c[5];
+    #|}
+  let wasm = compile_to_wasm(src)
+  assert_run_i32(wasm, "spreadArray", [], 21)
+}
+
+///|
+test "codegen: call with spread" {
+  let src =
+    #|function sum3(a: int, b: int, c: int): int {
+    #|  return a + b + c;
+    #|}
+    #|function callSpread(): int {
+    #|  let xs: int[] = [2, 3];
+    #|  return sum3(1, ...xs);
+    #|}
+    #|function callSpreadOnly(): int {
+    #|  let ys: int[] = [4, 5, 6];
+    #|  return sum3(...ys);
+    #|}
+  let wasm = compile_to_wasm(src)
+  assert_run_i32(wasm, "callSpread", [], 6)
+  assert_run_i32(wasm, "callSpreadOnly", [], 15)
+}
+
+///|
 test "codegen: ternary operator" {
   let src =
     #|function abs(x: number): number {
@@ -290,6 +337,74 @@ test "codegen: compound assignment" {
   let wasm = compile_to_wasm(src)
   // x = 10, x += 5 (15), x *= 2 (30), x -= 10 (20)
   assert_run_i32(wasm, "testCompound", [], 20)
+}
+
+///|
+test "codegen: logical assignment (var)" {
+  let src =
+    #|function andAssign(a: int): int {
+    #|  let x = a;
+    #|  x &&= 5;
+    #|  return x;
+    #|}
+    #|function orAssign(a: int): int {
+    #|  let x = a;
+    #|  x ||= 5;
+    #|  return x;
+    #|}
+    #|function coalesceAssign(a: int, b: int): int {
+    #|  let x = a;
+    #|  x ??= b;
+    #|  return x;
+    #|}
+  let wasm = compile_to_wasm(src)
+  assert_run_i32(wasm, "andAssign", [0.0], 0)
+  assert_run_i32(wasm, "andAssign", [2.0], 5)
+  assert_run_i32(wasm, "orAssign", [0.0], 5)
+  assert_run_i32(wasm, "orAssign", [2.0], 2)
+  // nullish is approximated as 0
+  assert_run_i32(wasm, "coalesceAssign", [0.0, 7.0], 7)
+  assert_run_i32(wasm, "coalesceAssign", [3.0, 7.0], 3)
+}
+
+///|
+test "codegen: logical assignment (prop)" {
+  let src =
+    #|interface Counter {
+    #|  count: int;
+    #|}
+    #|function propAndAssign(a: int): int {
+    #|  let c: Counter = new Counter();
+    #|  c.count = a;
+    #|  c.count &&= 10;
+    #|  return c.count;
+    #|}
+    #|function propOrAssign(a: int): int {
+    #|  let c: Counter = new Counter();
+    #|  c.count = a;
+    #|  c.count ||= 10;
+    #|  return c.count;
+    #|}
+  let wasm = compile_to_wasm(src)
+  assert_run_i32(wasm, "propAndAssign", [0.0], 0)
+  assert_run_i32(wasm, "propAndAssign", [2.0], 10)
+  assert_run_i32(wasm, "propOrAssign", [0.0], 10)
+  assert_run_i32(wasm, "propOrAssign", [2.0], 2)
+}
+
+///|
+test "codegen: logical assignment (index)" {
+  let src =
+    #|function indexOrAssign(a: int): int {
+    #|  let arr: int[] = new Array<int>(1);
+    #|  arr[0] = a;
+    #|  let i = 0;
+    #|  arr[i++] ||= 7;
+    #|  return i + arr[0];
+    #|}
+  let wasm = compile_to_wasm(src)
+  assert_run_i32(wasm, "indexOrAssign", [0.0], 8)
+  assert_run_i32(wasm, "indexOrAssign", [5.0], 6)
 }
 
 ///|
@@ -625,6 +740,137 @@ test "codegen: switch with default only" {
   let wasm = compile_to_wasm(src)
   assert_run_i32(wasm, "always42", [0.0], 42)
   assert_run_i32(wasm, "always42", [999.0], 42)
+}
+
+///|
+test "codegen: comma operator" {
+  let src =
+    #|function commaTest(a: int): int {
+    #|  let x = 1;
+    #|  return (x = a, x + 2);
+    #|}
+  let wasm = compile_to_wasm(src)
+  assert_run_i32(wasm, "commaTest", [5.0], 7)
+}
+
+///|
+test "codegen: logical and short-circuit" {
+  let src =
+    #|function andTest(a: int): int {
+    #|  let x = 1;
+    #|  let y = (a && (x = 5));
+    #|  return x;
+    #|}
+  let wasm = compile_to_wasm(src)
+  assert_run_i32(wasm, "andTest", [0.0], 1)
+  assert_run_i32(wasm, "andTest", [1.0], 5)
+}
+
+///|
+test "codegen: logical or short-circuit" {
+  let src =
+    #|function orTest(a: int): int {
+    #|  let x = 1;
+    #|  let y = (a || (x = 5));
+    #|  return x;
+    #|}
+  let wasm = compile_to_wasm(src)
+  assert_run_i32(wasm, "orTest", [0.0], 5)
+  assert_run_i32(wasm, "orTest", [1.0], 1)
+}
+
+///|
+test "codegen: void operator" {
+  let src =
+    #|function voidTest(a: int): int {
+    #|  let x = 1;
+    #|  void (x = a + 1);
+    #|  return x;
+    #|}
+  let wasm = compile_to_wasm(src)
+  assert_run_i32(wasm, "voidTest", [2.0], 3)
+}
+
+///|
+test "codegen: typeof operator (static)" {
+  let src =
+    #|function typeOfNumber(): string {
+    #|  return typeof 1;
+    #|}
+    #|function typeOfParam(x: number): string {
+    #|  return typeof x;
+    #|}
+  let wasm = compile_to_wasm(src)
+  let wasm_module = compile(src)
+  let pool = wasm_module.datas[0].init
+  let ptr1 = match run_wasm(wasm, "typeOfNumber", []) {
+    RunResult::I32(v) => v
+    RunResult::F64(v) => v.to_int()
+    RunResult::Error(e) => fail("Run error: \{e}")
+  }
+  let s1 = decode_string_from_pool(pool, ptr1)
+  assert_eq(s1, "number")
+  let ptr2 = match run_wasm(wasm, "typeOfParam", [5.0]) {
+    RunResult::I32(v) => v
+    RunResult::F64(v) => v.to_int()
+    RunResult::Error(e) => fail("Run error: \{e}")
+  }
+  let s2 = decode_string_from_pool(pool, ptr2)
+  assert_eq(s2, "number")
+}
+
+///|
+test "codegen: template literal (string only)" {
+  let src =
+    #|function tplLen(): int {
+    #|  let name: string = "bob";
+    #|  return `hi ${name}!`.length;
+    #|}
+    #|function tplConst(): int {
+    #|  return `ab`.length;
+    #|}
+    #|function tplMulti(): int {
+    #|  let a: string = "x";
+    #|  let b: string = "y";
+    #|  return `${a}-${b}`.length;
+    #|}
+  let wasm = compile_to_wasm(src)
+  assert_run_i32(wasm, "tplLen", [], 7)
+  assert_run_i32(wasm, "tplConst", [], 2)
+  assert_run_i32(wasm, "tplMulti", [], 3)
+}
+
+///|
+test "codegen: template literal (ToString)" {
+  let src_int =
+    #|function tplInt(n: int): int {
+    #|  return `${n}`.length;
+    #|}
+  let wasm_int = compile_to_wasm(src_int)
+  assert_run_i32(wasm_int, "tplInt", [42.0], 2)
+
+  let src_bool =
+    #|function tplBool(a: int): int {
+    #|  let b: boolean = a > 0;
+    #|  return `${b}`.length;
+    #|}
+  let wasm_bool = compile_to_wasm(src_bool)
+  assert_run_i32(wasm_bool, "tplBool", [1.0], 4)
+  assert_run_i32(wasm_bool, "tplBool", [0.0], 5)
+
+  let src_num =
+    #|function tplNum(n: number): int {
+    #|  return `${n}`.length;
+    #|}
+  let wasm_num = compile_to_wasm(src_num)
+  assert_run_i32(wasm_num, "tplNum", [12.0], 2)
+
+  let src_null =
+    #|function tplNull(): int {
+    #|  return `${null}`.length;
+    #|}
+  let wasm_null = compile_to_wasm(src_null)
+  assert_run_i32(wasm_null, "tplNull", [], 4)
 }
 
 ///|
@@ -972,6 +1218,18 @@ fn bytes_to_string(bytes : Bytes) -> String {
     s += b.to_int().unsafe_to_char().to_string()
   }
   s
+}
+
+///|
+fn decode_string_from_pool(pool : BytesView, offset : Int) -> String {
+  let b0 = pool[offset].to_int()
+  let b1 = pool[offset + 1].to_int()
+  let b2 = pool[offset + 2].to_int()
+  let b3 = pool[offset + 3].to_int()
+  let len = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
+  let start = offset + 4
+  let end = start + len
+  bytes_to_string(pool.sub(start=start, end=end).to_bytes())
 }
 
 ///|
