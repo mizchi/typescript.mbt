@@ -13,12 +13,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Checkout wasm5
-        uses: actions/checkout@v4
-        with:
-          repository: mizchi/wasm5
-          path: wasm5
-
       - name: Install MoonBit CLI
         run: |
           curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash

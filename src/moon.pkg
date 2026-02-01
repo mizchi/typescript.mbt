@@ -7,7 +7,7 @@ import {
   "mizchi/ts/runtime" as @runtime,
   "mizchi/ts/parser" as @parser,
   "mizchi/ts/codegen" as @codegen,
-  "moonbitlang/wasm5/encode" as @encode,
+  "mizchi/wasmx/encode" as @encode,
   "mizchi/ts/analysis" as @analysis,
 }
 

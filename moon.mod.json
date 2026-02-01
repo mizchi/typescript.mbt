@@ -2,9 +2,7 @@
   "name": "mizchi/ts",
   "version": "0.1.1",
   "deps": {
-    "moonbitlang/wasm5": {
-      "path": "../wasm5"
-    },
+    "mizchi/wasmx": "0.1.0",
     "moonbitlang/async": "0.14.2",
     "moonbitlang/regexp": "0.3.4"
   },

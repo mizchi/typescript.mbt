@@ -23,7 +23,7 @@ typescript.mbt/
 
 ## Dependencies
 
-- `moonbitlang/wasm5` - WebAssembly runtime (local path: `../wasm5`)
+- `mizchi/wasmx` - WebAssembly runtime
 - `moonbitlang/async` - Async file I/O
 
 ## Commands
