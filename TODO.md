@@ -5125,6 +5125,54 @@ inside a function body:
   is there; the third file, `symbolProperty21`, is a computed
   `[Symbol.toPrimitive]` key, which that function skips by design.
 
+- [x] **Batch DY: the assignment-form `for…of` target at all three
+  spellings of the write.** The check fired for a bare `Var` and was
+  blind to `o.x`, `foo().x` and `arr[0]`: the parser wraps a
+  non-identifier assignment-form head as `TsBinding::Target(expr)`, and
+  that fell through to the destructuring-pattern arm and was dropped
+  there. One shared closure now holds the eight-condition guard chain so
+  the spellings cannot diverge again.
+  **Corpus yield is ZERO, and the reason is the finding.** `ES5For-of8`
+  is `function foo() { return { x: 0 } }` with
+  `for (foo().x of ['a','b','c'])`, and an UN-ANNOTATED function's return
+  type does not resolve in this checker at all — `const bad: string =
+  foo().x` is silent too. So that file needs return-type inference from a
+  BODY, which is a Tier 3 capability, not this rule. Annotated receivers
+  (`declare function foo(): { x: number }`) do fire, which is what the
+  test pins.
+- [ ] **FILED with both blockers: a DECORATOR expression's function body
+  is never type-checked.** Probed: `@((x, p, d) => { var a = 3; func(a);
+  return d; })` on a class member reports nothing while the identical
+  arrow assigned to a `const` reports TS2345, and a decorator FACTORY's
+  body (`@dec()` where `dec` is a declared function) also reports —
+  because that function is a top-level declaration the walk already
+  reaches. What is missing is an arrow / function written INLINE in the
+  decorator position. The two halves have different blockers:
+  - a CLASS decorator's expressions ARE retained
+    (`TsClassDecl.decorators : Array[TsExpr]`) and nothing type-checks
+    their bodies — `ts2683_walk_expr` walks them only for `this`. Cheap,
+    and buys no corpus file.
+  - a MEMBER decorator's expression is not in the AST at all:
+    `parser_class.mbt` keeps only `member_decorated : Bool` for
+    TS1249 / TS1207 and discards the expression. That half is what
+    `decoratorChecksFunctionBodies` needs, and it requires the parser to
+    retain the expression first.
+- [ ] **The remaining assignability bucket is 35 files with ~35 causes**,
+  confirmed by opening every one: variadic tuples, template-literal
+  types, generic bivariance, `globalThis` modelling (3 files — the only
+  visible mini-cluster), `SymbolConstructor` lib members, the generator
+  protocol, contextual typing of function expressions, `never`
+  narrowing, protected constructors, enum assignability, salsa/JS
+  expando+namespace merging, optional-chaining nullability, `Intl` lib
+  shapes. Four of the five cheapest-LOOKING (a plain
+  `number`/`string` mismatch) were opened in batch DY and each needs
+  something different: a well-known-symbol accessor pair's inferred type
+  (`symbolProperty46`), object-literal union normalization on widening
+  (`objectLiteralNormalization`), expando/namespace declaration merging
+  (`typeFromPropertyAssignment31`), and return-type inference from a body
+  (`ES5For-of8`, closed above as far as it can be). The measured rate
+  here is ~1 file per investigation.
+
 ### Tier 3 — DEFER (~93 files, real but expensive)
 
 `assignability-core` (48), `generic-inference` (11), `iterator-protocol`

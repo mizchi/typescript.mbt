@@ -18873,3 +18873,50 @@ test "checker: excess properties at a call argument (batch DX)" {
     @test.assert_eq(issues(t + src), 0)
   }
 }
+
+///|
+/// Batch DY: the assignment-form `for…of` target check at its other two
+/// spellings. It fired for a bare `Var` and was blind to `o.x`,
+/// `foo().x` and `arr[0]` — the parser wraps a non-identifier
+/// assignment-form head as `TsBinding::Target(expr)`, which fell through
+/// to the destructuring-pattern arm and was dropped there. One shared
+/// closure now holds the guard chain, so the three spellings cannot
+/// diverge again.
+///
+/// Corpus yield is ZERO, and the reason is worth more than the rule:
+/// `ES5For-of8` is `function foo() { return { x: 0 } }` with
+/// `for (foo().x of ['a','b','c'])`, and an UN-ANNOTATED function's
+/// return type does not resolve here at all — `const bad: string =
+/// foo().x` is silent too. So the file needs return-type inference from a
+/// body, not this rule.
+test "checker: assignment-form for-of target, all three spellings (batch DY)" {
+  let issues = fn(src : String) -> Int {
+    let mut n = 0
+    for i in check_module_function_bodies_permissive(parse_module_or_empty(src)) {
+      if i.path.contains("for-of target") {
+        n = n + 1
+      }
+    }
+    n
+  }
+  for
+    src in [
+      "declare let n: number;\nfor (n of [\"a\", \"b\"]) { }", "declare const o: { x: number };\nfor (o.x of [\"a\", \"b\"]) { }",
+      "declare const arr: number[];\nfor (arr[0] of [\"a\", \"b\"]) { }", "declare function foo(): { x: number };\nfor (foo().x of [\"a\", \"b\"]) { }",
+      "function foo(): { x: number } { return { x: 0 }; }\nfor (foo().x of [\"a\", \"b\"]) { }",
+    ] {
+    assert_true(issues(src) > 0)
+  }
+  // Silent: a matching target type, `any`, and a union that admits the
+  // element type. Plus the shape the corpus file actually has — an
+  // un-annotated `foo()`, whose return type does not resolve, so this
+  // abstains rather than guessing.
+  for
+    src in [
+      "declare const o: { x: string };\nfor (o.x of [\"a\", \"b\"]) { }", "declare const arr: string[];\nfor (arr[0] of [\"a\", \"b\"]) { }",
+      "declare const o: { x: any };\nfor (o.x of [\"a\", \"b\"]) { }", "declare const o: { x: string | number };\nfor (o.x of [\"a\", \"b\"]) { }",
+      "function foo() { return { x: 0 }; }\nfor (foo().x of [\"a\", \"b\"]) { }",
+    ] {
+    @test.assert_eq(issues(src), 0)
+  }
+}

@@ -17056,6 +17056,32 @@ fn check_stmt(env : ExprEnv, stmt : @ast.TsStmt, ctx : CheckCtx) -> Unit {
       // instead of re-declaring (which would otherwise pin the
       // declared slot to the iterable element type and reject
       // any later wider-typed assignments inside the body).
+      // TS2322 for the assignment-form target, shared by all three
+      // spellings of the write. One closure rather than a copy per arm:
+      // the rule fired for a bare `Var` and was blind to `o.x`,
+      // `foo().x` and `arr[0]` — the same guard chain written once and
+      // reached from one of the three places it applies (`ES5For-of8` is
+      // the property spelling).
+      let report_forof_target = fn(target_ty : @ast.TsType, what : String) {
+        if is_checkable(target_ty) &&
+          is_checkable(elem_ty) &&
+          !is_in_scope_type_param(ctx, target_ty) &&
+          !type_contains_unresolved_named(target_ty, ctx.resolver) &&
+          !type_contains_unresolved_named(elem_ty, ctx.resolver) &&
+          !type_deeply_contains_unmodeled(target_ty, ctx.resolver) &&
+          !type_deeply_contains_unmodeled(elem_ty, ctx.resolver) &&
+          !is_assignable_to(
+            ctx.resolver.unwrap(widen_literal(elem_ty)),
+            ctx.resolver.unwrap(target_ty),
+          ) &&
+          !is_structurally_assignable_named(elem_ty, target_ty, ctx.resolver) {
+          record(
+            ctx,
+            what,
+            "iterable yields `\{type_display(widen_literal(elem_ty))}` which is not assignable to `\{type_display(target_ty)}`",
+          )
+        }
+      }
       match (kind, binding) {
         (@ast.TsForOfKind::Assign, @ast.TsBinding::Ident(n)) => {
           // TS2304: the assignment-form target must be an existing binding
@@ -17067,34 +17093,29 @@ fn check_stmt(env : ExprEnv, stmt : @ast.TsStmt, ctx : CheckCtx) -> Unit {
           // declared slot -- not the narrowed one -- is the assignment
           // target (`x = true; for (x of nums)` re-widens `x`).
           match env.lookup_declared(n) {
-            Some(target_ty) =>
-              if is_checkable(target_ty) &&
-                is_checkable(elem_ty) &&
-                !is_in_scope_type_param(ctx, target_ty) &&
-                !type_contains_unresolved_named(target_ty, ctx.resolver) &&
-                !type_contains_unresolved_named(elem_ty, ctx.resolver) &&
-                !type_deeply_contains_unmodeled(target_ty, ctx.resolver) &&
-                !type_deeply_contains_unmodeled(elem_ty, ctx.resolver) &&
-                !is_assignable_to(
-                  ctx.resolver.unwrap(widen_literal(elem_ty)),
-                  ctx.resolver.unwrap(target_ty),
-                ) &&
-                !is_structurally_assignable_named(
-                  elem_ty,
-                  target_ty,
-                  ctx.resolver,
-                ) {
-                record(
-                  ctx,
-                  "for-of target",
-                  "iterable yields `\{type_display(widen_literal(elem_ty))}` which is not assignable to `\{type_display(target_ty)}`",
-                )
-              }
+            Some(target_ty) => report_forof_target(target_ty, "for-of target")
             None => ()
           }
           if is_checkable(elem_ty) {
             env.narrow(n, elem_ty)
           }
+        }
+        // The PROPERTY / INDEX spellings of the same write. The parser
+        // wraps a non-identifier assignment-form head as
+        // `TsBinding::Target(expr)`, which used to fall through to the
+        // destructuring-pattern arm below and be dropped there. Restricted
+        // to a member reference: an arbitrary expression in that position
+        // is not a valid assignment target and is somebody else's
+        // diagnostic.
+        (
+          @ast.TsForOfKind::Assign,
+          @ast.TsBinding::Target(PropAccess(_, _) | IndexAccess(_, _) as tgt),
+        ) => {
+          check_call_args_in_expr(env, tgt, ctx)
+          report_forof_target(
+            infer_expr(env, ctx.resolver, tgt),
+            "for-of target",
+          )
         }
         (@ast.TsForOfKind::Assign, _) => {
           // Assignment-form destructuring PATTERN: the named targets keep

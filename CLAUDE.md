@@ -1343,6 +1343,41 @@ product surfaces now.
   means no bound can have been inlined — and is filed rather than built,
   because it buys no conformance file and the real-world diagnostic is
   its only argument.
+  Batches DX and DY are the first two in this series whose conformance
+  yield is ZERO BY DESIGN, and they are the answer to a question the gate
+  cannot ask. DX runs the excess-property check at a CALL argument — the
+  commonest place real code hits TS2353, and a position the corpus does
+  not test at all — behind the one fact that makes it decidable:
+  `callee_non_generic`, proven only at a direct call to a resolved
+  function declaration and at `new` on a resolved class, defaulting to
+  `false` so any site that cannot answer keeps the suppression. An
+  ABSENT entry in `func_type_params` is explicitly not proof, since a
+  call-signature-typed variable and a lib method have no entry either.
+  Both nested shapes under an argument come along, because a nested
+  target came from a `lookup_field` on a written parameter type. A method
+  call and a call through a function-typed binding stay MISSes, neither
+  site being able to prove the callee's genericity.
+  DY is the assignment-form `for…of` target at its other two spellings:
+  the check fired for a bare `Var` and was blind to `o.x`, `foo().x` and
+  `arr[0]`, because the parser wraps a non-identifier head as
+  `TsBinding::Target(expr)` and that fell through to the
+  destructuring-pattern arm. Its zero is more informative than the rule:
+  `ES5For-of8` is `function foo() { return { x: 0 } }`, and an
+  UN-ANNOTATED function's return type does not resolve here at all —
+  `const bad: string = foo().x` is silent too — so the file needs
+  return-type inference from a BODY and never needed this rule.
+  The same round priced the rest of the assignability bucket by opening
+  every file, and the answer settles the strategy: **35 files, ~35
+  causes.** The four cheapest-LOOKING (a plain `number` / `string`
+  mismatch, a shape this checker does flag) each need something
+  different — a well-known-symbol accessor pair's inferred type,
+  object-literal union normalization on widening, expando + namespace
+  declaration merging, and the return-type inference above. `globalThis`
+  at 3 files is the only mini-cluster. The measured rate is about one
+  file per investigation, so the conformance number has stopped ranking
+  work a second time, and what remains worth taking is what the corpus
+  cannot score: 83 of the 134 misses carry exactly one error code and 25
+  of the 39 solo codes have exactly one file.
 - `src/transform` is the JS-side pipeline behind `mtsc`: bundling, folding,
   tree-shaking, and the property mangler. Its safety story is type-driven and
   has two halves — `export_surface.mbt` (names reachable from the entry's
