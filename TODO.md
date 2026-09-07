@@ -3,6 +3,112 @@
 The wasm interpreter / codegen / AOT compiler that originally lived in this
 repo has been removed. Items below are scoped to the bridge generator only.
 
+## Bridge runtime: the generated JS was never executed (2026-09-07) — DONE
+
+- [x] **`instanceof` against an erased TypeScript name.** A tagged-union
+  case whose payload is `Named(N)` was discriminated with `value instanceof
+  N` whether or not `N` exists at runtime.
+  `tagged_union_named_constructor_name` asks whether a name is PascalCase
+  and MoonBit-spellable — a NAMING test — and the discriminator read that as
+  licence to emit the predicate, so an interface, a type alias, an enum and
+  a type parameter all got one. **411 unbound sites over 197 distinct names
+  across the generated corpus, against 14 globals and 4 bound; 2,126 of
+  2,530 converter calls threw `ReferenceError`.** The names say it: `T` /
+  `TResult` / `TDriverParam` are type parameters, `PathLike` / `Booleanish`
+  are aliases, `ScriptTarget` / `ModifierFlags` are enums, `Expression` /
+  `SourceFile` / `Identifier` are interfaces.
+  - The rule ALREADY EXISTED. `moonbit_inline_union_runtime_named_ok` is the
+    global-constructor allowlist and its own doc comment states this exact
+    hazard; it was consulted at ONE site and there only when the union has a
+    FUNCTION member, because the call sits inside `if func_members > 0` —
+    a condition that is right for the check next to it (a second function
+    case collides on `typeof === "function"`) and unrelated to whether a
+    sibling's `instanceof` resolves. Same shape as the namespace
+    `if outer_modules.length() == 0` case: one item's condition inherited by
+    others that do not share it.
+  - The two converter DIRECTIONS are now emitted independently, which is the
+    part that makes declining cheap: `_to_js` reads `$tag` and needs no
+    predicate, so parameters keep their types; only `_from_js` is withheld,
+    with a note naming the case. Before the split a declined `_from_js` took
+    the sound `_to_js` down with it.
+  - Costs nothing measurable: the bridge quality report is identical on
+    every metric (3 unsupported exports, 5409 declared functions, 2580
+    declared types, 5673 JSValue refs), because `ffi_tagged_union_return_is_safe_to_wrap`
+    already refused to CALL these converters. The 411 sites were dead
+    broken code — which is also why no harness noticed.
+- [x] **`scripts/verify_bridge_runtime.mjs`** (`just verify-bridge-runtime`,
+  wired into `just ci`). Every other bridge harness asks whether a generated
+  package COMPILES (`verify-scaffolds`, `verify-generated-fixtures`,
+  `verify-examples`) or whether a REJECTED export is budgeted
+  (`bridge_quality_report.sh`). **Nothing asked whether the code emitted for
+  an ACCEPTED export runs.** Two checks, because neither alone is complete:
+  static — every `instanceof X` must have `X` a JS global or a binding of
+  that module, which sees a site whichever arm a probe value reaches;
+  runtime — import each of the 86 generated bridge modules and call every
+  exported `_from_js` over a value battery, which is what proves the static
+  list is real rather than a grep artifact. 411 sites and 2,126 failures ->
+  0, with 363 calls still exercised so the harness is not merely emptied.
+  - The one fixture with live `_from_js` calls
+    (`scaffold_ts_to_moonbit_heterogeneous_union`) is `boolean | "boundary"`
+    — no `Named` member at all. That is why the bug survived: not one
+    fixture in the corpus put a named type in a return position.
+- [ ] **Bind a module-exported class so its `instanceof` resolves.** The
+  ceiling is measured and small: of the 197 declined names, the runtime
+  classes are node_fs's `Stats` / `StatsFs` / `BigIntStats` /
+  `BigIntStatsFs`, hono__node_server's `Server` / `IncomingMessage` /
+  `ServerResponse` / the three `Http2*`, and drizzle's `Table` / `View` —
+  about ten. Each needs `const N = __ts_mbt_module.N` threaded through
+  `bridge_imports` at the converter-emission point, and then `Stats |
+  BigIntStats` returns get a typed enum instead of a raw passthrough. Worth
+  doing for the `stat()` family specifically; not worth it for the ~187
+  names that are erased no matter what.
+- [ ] **Drop `ffi_synthesize_inline_union`'s `func_members > 0` gate.** Now
+  that soundness lives centrally the gate is conservative rather than
+  load-bearing: it refuses to synthesize an enum whose `_from_js` would be
+  withheld, while the same union WITHOUT a function member is synthesized
+  and keeps its `_to_js`. Dropping it types more parameter positions. Left
+  alone here because it changes generated output broadly and deserves its
+  own measurement.
+
+## Bridge quality report: the heterogeneous-union budget (2026-09-07) — DONE
+
+- [x] **A count could not rank the work, and had been failing silently.**
+  `heterogeneous_union_unsupported_export_budget` was set to 0 in `14a2a6c`
+  when the count was 0; the `typescript-node-imports` example landed later
+  (`b84b7cb`, NOT an ancestor of `14a2a6c`) and reintroduced two, so the
+  report has been exiting 1 ever since — verified pre-existing by re-running
+  it at `a94e5c6`, which fails identically. A bare count cannot say whether
+  an occurrence is an accepted limitation or a regression, which is the same
+  defect that retired `docs/checker-priority.md`.
+  `scripts/bridge_widened_unions.txt` declares each occurrence with a kind
+  and a reason, an UNDECLARED occurrence fails, and a declared entry that no
+  longer occurs is reported STALE — the mechanism
+  `scripts/checker_out_of_scope.txt` uses, including the stale report that
+  keeps it from decaying into a suppression list. **Both directions proven
+  by mutation**: an empty declaration file reports 2 UNDECLARED and exits 1;
+  a bogus entry is named as stale and exits 1. Report `Overall: pass` for
+  the first time in this branch.
+- [x] **The diagnostic named a cause that cannot occur.** "non-PascalCase
+  named, function, or unsupported shape" — a function member IS accepted
+  (as `FnValue`), and everything real fell into "unsupported shape", so the
+  two occurrences (an anonymous object type; an object intersection) could
+  not be told apart from a lowercase name by reading the message.
+  `tagged_union_member_shape_description` names the member and what would
+  have to be supported, which is what makes the declaration file legible.
+- [ ] **Object-payload union members** (the one capability both declared
+  entries need: a synthesized payload struct plus `typeof v === "object" &&
+  v !== null && !Array.isArray(v)`, admissible only when the union has
+  exactly one object-ish member). REJECTED for now with the reasons in the
+  declaration file, and the honest summary is that neither corpus occurrence
+  earns it: `BufferEncodingOption`'s `{ encoding: "buffer" }` is redundant
+  with its `"buffer"` string member, which `buffer_encoding_option_from_string`
+  already constructs; and `WriteFileOptions` needs a SECOND thing —
+  its sibling `BufferEncoding` is a node global this package does not
+  resolve, so even a successful lowering hands the user a case payload they
+  cannot build. Take it when a target needs an options object that is not
+  also spellable another way. `decl_synthesized_object_interfaces` is the
+  registry to reuse; `decl_normalize_alias_union_body` is the hook.
+
 ## Interop Bridge Quality Roadmap: 60% -> 90%
 
 Current assessment: the project is around 55-60% complete as a practical

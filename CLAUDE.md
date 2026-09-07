@@ -2629,6 +2629,80 @@ product surfaces now.
   keeps domain-specific specialization for Node FS / React / Hono / crypto /
   class-shape generation, plus `.mbti` -> `.d.ts` emission for MoonBit-generated
   packages.
+  Its gates all asked one of two questions and neither was the important
+  one. `verify-scaffolds` / `verify-generated-fixtures` /
+  `verify-examples` ask whether a generated package COMPILES;
+  `scripts/bridge_quality_report.sh` asks whether a REJECTED export is
+  budgeted. **Nothing asked whether the code emitted for an ACCEPTED
+  export RUNS**, and the answer was no. A tagged-union case whose payload
+  is `Named(N)` was discriminated with `value instanceof N` whether or not
+  `N` exists at runtime: `tagged_union_named_constructor_name` asks
+  whether a name is PascalCase and MoonBit-spellable — a NAMING test —
+  and the discriminator read that as licence to emit the predicate, so an
+  interface, a type alias, an enum and a type parameter all got one. 411
+  unbound sites over 197 distinct names, against 14 globals and 4 bound;
+  **2,126 of 2,530 converter calls threw `ReferenceError`** under Node.
+  The names are the diagnosis on their own — `T` / `TResult` /
+  `TDriverParam` are type parameters, `PathLike` / `Booleanish` are
+  aliases, `ScriptTarget` / `ModifierFlags` are enums, `Expression` /
+  `SourceFile` / `Identifier` are TypeScript interfaces.
+  The rule ALREADY EXISTED, which makes this the family this file keeps
+  recording rather than a missing feature.
+  `moonbit_inline_union_runtime_named_ok` is the global-constructor
+  allowlist and its own doc comment states this exact hazard ("interfaces,
+  type aliases, and type parameters have no runtime binding, so `value
+  instanceof Name` would throw in the generated converter"); it was
+  consulted at ONE site, and there only when the union has a FUNCTION
+  member, because the call sits inside `if func_members > 0`. That
+  condition is right for the check immediately above it — a second
+  function case collides on `typeof === "function"` — and has nothing to
+  do with whether a sibling's `instanceof` resolves, so it is the
+  namespace `if outer_modules.length() == 0` shape again: one item's
+  condition inherited by others that do not share it.
+  What made declining cheap is splitting the two converter DIRECTIONS,
+  which had been emitted as a pair: `_to_js` reads `$tag` and needs no
+  runtime predicate at all, so parameter positions keep their types and
+  only the return-side `_from_js` is withheld, with a note naming the
+  case. Before the split a declined `_from_js` took the sound `_to_js`
+  down with it. The whole fix costs ZERO product surface — the bridge
+  quality report is identical on every metric — because
+  `ffi_tagged_union_return_is_safe_to_wrap` already refused to CALL these
+  converters, so the 411 sites were dead broken code. That is also why
+  nothing noticed: `just verify-bridge-runtime`
+  (`scripts/verify_bridge_runtime.mjs`) is the harness that was missing,
+  and it needs BOTH of its halves — a static check that every
+  `instanceof X` has `X` a JS global or a module binding (complete, since
+  it sees a site whichever arm a probe value reaches) and a runtime check
+  that imports all 86 generated bridge modules and calls every exported
+  `_from_js` over a value battery (which is what proves the static list is
+  real rather than a grep artifact). The reason the corpus could not reach
+  it is the recurring one: the ONLY fixture with live `_from_js` calls is
+  `boolean | "boundary"`, with no `Named` member anywhere, so not one
+  fixture put a named type in a return position.
+  The rejection side got the same treatment, and its lesson is the
+  count-versus-item one. `heterogeneous_union_unsupported_export_budget`
+  was set to 0 when the count was 0, an example added later
+  reintroduced two, and the report had been exiting 1 ever since with no
+  way to tell an accepted limitation from a regression — the defect that
+  retired `docs/checker-priority.md`, in a shell script.
+  `scripts/bridge_widened_unions.txt` declares each occurrence with a kind
+  and a reason; an UNDECLARED occurrence fails, and a declared entry that
+  no longer occurs is reported STALE, which is the one mechanism that
+  keeps such a file from becoming a suppression list (both directions
+  proven by mutation, not asserted). The diagnostic it declares had to be
+  fixed first, because it named a cause that CANNOT OCCUR: "non-PascalCase
+  named, function, or unsupported shape" lists a function member, which is
+  accepted as `FnValue`, and put everything real under "unsupported
+  shape" — so an anonymous object type and an object intersection, the two
+  actual occurrences, could not be told apart from a lowercase name by
+  reading the message. And the honest verdict on those two is that neither
+  earns the object-payload feature they both want:
+  `BufferEncodingOption`'s `{ encoding: "buffer" }` is redundant with its
+  `"buffer"` string member, which the existing fallback already
+  constructs, and `WriteFileOptions` needs a SECOND thing — its sibling
+  `BufferEncoding` is a node global this package does not resolve, so even
+  a successful lowering would hand the user a case payload they cannot
+  build.
 
 ## Project Structure
 

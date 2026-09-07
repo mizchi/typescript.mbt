@@ -299,6 +299,42 @@ pub(all) struct BridgeTaggedUnionDecl {
 /// the decl through bridge emission.
 
 ///|
+/// Human-readable shape of a union member that has no tagged-union case, for
+/// the widening diagnostic. The point is to say what would have to be
+/// SUPPORTED, not merely that something was not: an anonymous object type
+/// and an object intersection both need a synthesized payload struct plus an
+/// object-shaped predicate, a lowercase `Named` needs nothing (it is simply
+/// not spellable), and a qualified name needs namespace flattening. Those are
+/// four different pieces of work and the old wording made them one line.
+fn tagged_union_member_shape_description(t : @ast.TsType) -> String {
+  match t {
+    @ast.TsType::Named(name) =>
+      if name.contains(".") {
+        "the qualified name `\{name}` cannot be spelled as an enum case"
+      } else {
+        "the name `\{name}` is not PascalCase-spellable as an enum case"
+      }
+    @ast.TsType::Applied(name, _) =>
+      "the generic reference `\{name}<...>` has no monomorphic payload type"
+    @ast.TsType::Object(_) =>
+      "an anonymous object type needs a synthesized payload struct and an object-shaped predicate"
+    @ast.TsType::Intersection(_) =>
+      "an object intersection needs a flattened payload struct and an object-shaped predicate"
+    @ast.TsType::Tuple(_) =>
+      "a tuple type has no discriminator distinct from an array member"
+    @ast.TsType::Constructor(_, _, _) =>
+      "a constructor type is indistinguishable from a function member at runtime"
+    @ast.TsType::Any | @ast.TsType::Unknown =>
+      "`any` / `unknown` admits every runtime value, so no sibling stays discriminable"
+    @ast.TsType::NonPrimitiveObject =>
+      "the `object` keyword type admits every non-primitive, so no object sibling stays discriminable"
+    @ast.TsType::Symbol | @ast.TsType::UniqueSymbol(_) =>
+      "a symbol member has no MoonBit payload type"
+    _ => "the member shape has no runtime discriminator"
+  }
+}
+
+///|
 /// Diagnose why a tagged-union-shaped alias would be widened to `JSValue`.
 /// Returns `Some(reason)` for unions of at least two members where every
 /// member is a literal but `tagged_union_cases` rejects (e.g. literal
@@ -356,12 +392,20 @@ pub fn tagged_union_widen_reason_for_alias(
       "heterogeneous union has overlapping primitive discriminators (a literal collides with a non-literal sibling).",
     )
   }
-  // Member with no constructor name: non-PascalCase Named, function type,
-  // or another shape not representable as a tagged-union case.
+  // Member with no constructor name. The old wording listed
+  // "non-PascalCase named, function, or unsupported shape", which named a
+  // cause that cannot occur — a function member IS accepted, as `FnValue` —
+  // and lumped everything real under "unsupported shape". The two
+  // occurrences in the fixture corpus are an anonymous object type and an
+  // object intersection, and neither could be told apart from a lowercase
+  // name by reading the message. Name the member instead, so
+  // `scripts/bridge_widened_unions.txt` can declare it by cause.
   for m in load_bearing {
     if tagged_union_member_constructor_name(m) is None {
       return Some(
-        "heterogeneous union member is not runtime-discriminable (non-PascalCase named, function, or unsupported shape).",
+        "heterogeneous union member is not runtime-discriminable: " +
+        tagged_union_member_shape_description(m) +
+        ".",
       )
     }
   }

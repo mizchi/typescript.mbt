@@ -13,11 +13,11 @@ ambiguous_unsupported_export_budget=1
 namespace_omitted_unsupported_export_budget=0
 namespace_widened_unsupported_export_budget=0
 # Heterogeneous unions whose members carry no runtime-discriminable
-# constructor name. Function members, branded-string intersections,
-# empty-registry indexed accesses, and qualified namespace refs now
-# lower (2026-07-15), so the budget is 0: any new occurrence is a real
-# regression.
-heterogeneous_union_unsupported_export_budget=0
+# constructor name are DECLARED rather than counted -- see
+# scripts/bridge_widened_unions.txt for why a count could not rank work,
+# and for the two entries. An undeclared occurrence fails this report; a
+# declared entry that no longer occurs is reported as STALE.
+heterogeneous_union_declared_file="${BRIDGE_WIDENED_UNIONS_FILE:-$repo_root/scripts/bridge_widened_unions.txt}"
 
 rm -rf "$report_root"
 mkdir -p "$log_root"
@@ -147,20 +147,58 @@ count_matching_files() {
   printf '%s\n' "$total"
 }
 
+# Export names declared in scripts/bridge_widened_unions.txt, one per line.
+declared_widened_union_names() {
+  if [ ! -f "$heterogeneous_union_declared_file" ]; then
+    return
+  fi
+  # `<name> | <kind> | <reason>`; ignore comments and blanks.
+  sed -e 's/#.*$//' "$heterogeneous_union_declared_file" \
+    | awk -F'|' 'NF >= 1 { gsub(/^[ \t]+|[ \t]+$/, "", $1); if ($1 != "") print $1 }'
+}
+
+declared_widened_union_kind() {
+  local want="$1"
+  if [ ! -f "$heterogeneous_union_declared_file" ]; then
+    printf 'undeclared\n'
+    return
+  fi
+  sed -e 's/#.*$//' "$heterogeneous_union_declared_file" \
+    | awk -F'|' -v want="$want" '
+        NF >= 2 {
+          name = $1; kind = $2
+          gsub(/^[ \t]+|[ \t]+$/, "", name)
+          gsub(/^[ \t]+|[ \t]+$/, "", kind)
+          if (name == want) { print kind; found = 1; exit }
+        }
+        END { if (!found) print "undeclared" }
+      '
+}
+
+# The export name out of a `/// Unsupported export <name>: ...` line.
+unsupported_export_name() {
+  printf '%s\n' "$1" \
+    | sed -e 's|^/// Unsupported export ||' -e 's|:.*$||'
+}
+
 collect_unsupported_export_counts() {
   local details_file="$1"
+  local seen_file="$2"
   local total=0
   local ambiguous=0
   local namespace_omitted=0
   local namespace_widened=0
   local heterogeneous_union=0
+  local heterogeneous_union_undeclared=0
   local unbudgeted=0
   local file
   local line
   local line_no
   local classification
+  local export_name
 
   : > "$details_file"
+  : > "$seen_file"
 
   while IFS= read -r file; do
     line_no=0
@@ -182,8 +220,15 @@ collect_unsupported_export_counts() {
         classification="namespace-widened"
         namespace_widened=$((namespace_widened + 1))
       elif [[ "$line" == *"heterogeneous union member is not runtime-discriminable"* ]]; then
-        classification="heterogeneous-union-widened"
         heterogeneous_union=$((heterogeneous_union + 1))
+        export_name="$(unsupported_export_name "$line")"
+        printf '%s\n' "$export_name" >> "$seen_file"
+        if [ "$(declared_widened_union_kind "$export_name")" = "undeclared" ]; then
+          classification="heterogeneous-union-UNDECLARED"
+          heterogeneous_union_undeclared=$((heterogeneous_union_undeclared + 1))
+        else
+          classification="heterogeneous-union-declared"
+        fi
       else
         unbudgeted=$((unbudgeted + 1))
       fi
@@ -196,12 +241,13 @@ collect_unsupported_export_counts() {
     done < "$file"
   done < <(find_metric_files 'bridge.mbti')
 
-  printf '%s|%s|%s|%s|%s|%s\n' \
+  printf '%s|%s|%s|%s|%s|%s|%s\n' \
     "$total" \
     "$ambiguous" \
     "$namespace_omitted" \
     "$namespace_widened" \
     "$heterogeneous_union" \
+    "$heterogeneous_union_undeclared" \
     "$unbudgeted"
 }
 
@@ -283,13 +329,27 @@ moonbit_decl_lines="$(sum_lines 'bridge.mbti')"
 typescript_decl_lines="$(sum_lines '*.d.ts')"
 javascript_lines="$(sum_lines '*.js')"
 diagnostic_files=$(( $(count_files 'SCAFFOLD_DIAGNOSTICS.md') + $(count_files 'AUTOLINK_DIAGNOSTICS.md') ))
+widened_union_seen_file="$report_root/widened-unions-seen.txt"
 IFS='|' read -r \
   unsupported_exports \
   ambiguous_unsupported_exports \
   namespace_omitted_unsupported_exports \
   namespace_widened_unsupported_exports \
   heterogeneous_union_unsupported_exports \
-  unbudgeted_unsupported_exports < <(collect_unsupported_export_counts "$unsupported_details_file")
+  heterogeneous_union_undeclared_exports \
+  unbudgeted_unsupported_exports < <(collect_unsupported_export_counts "$unsupported_details_file" "$widened_union_seen_file")
+
+# A declared entry that no longer occurs. This is the mechanism that keeps
+# the file from decaying into a suppression list: the whole point of
+# declaring an occurrence is that removing the limitation removes the entry,
+# and nothing else would notice.
+stale_widened_unions=()
+while IFS= read -r declared_name; do
+  [ -n "$declared_name" ] || continue
+  if ! grep -Fxq "$declared_name" "$widened_union_seen_file" 2>/dev/null; then
+    stale_widened_unions+=("$declared_name")
+  fi
+done < <(declared_widened_union_names)
 moonbit_declared_functions="$(count_matching_files 'bridge.mbti' '^declare pub fn ')"
 moonbit_declared_types="$(count_matching_files 'bridge.mbti' '^declare pub type ')"
 typescript_exported_declarations="$(count_matching_files '*.d.ts' '^export (declare )?(function|interface|class|const|type) ')"
@@ -323,7 +383,10 @@ fi
 if [ "$namespace_widened_unsupported_exports" -gt "$namespace_widened_unsupported_export_budget" ]; then
   overall="fail"
 fi
-if [ "$heterogeneous_union_unsupported_exports" -gt "$heterogeneous_union_unsupported_export_budget" ]; then
+if [ "$heterogeneous_union_undeclared_exports" -gt 0 ]; then
+  overall="fail"
+fi
+if [ "${#stale_widened_unions[@]}" -gt 0 ]; then
   overall="fail"
 fi
 
@@ -358,7 +421,9 @@ fi
   printf '| budgeted ambiguous unsupported exports | %s / %s |\n' "$ambiguous_unsupported_exports" "$ambiguous_unsupported_export_budget"
   printf '| budgeted namespace-runtime omitted exports | %s / %s |\n' "$namespace_omitted_unsupported_exports" "$namespace_omitted_unsupported_export_budget"
   printf '| budgeted namespace-widened exports | %s / %s |\n' "$namespace_widened_unsupported_exports" "$namespace_widened_unsupported_export_budget"
-  printf '| budgeted heterogeneous-union widened exports | %s / %s |\n' "$heterogeneous_union_unsupported_exports" "$heterogeneous_union_unsupported_export_budget"
+  printf '| declared heterogeneous-union widened exports | %s |\n' "$heterogeneous_union_unsupported_exports"
+  printf '| UNDECLARED heterogeneous-union widened exports | %s |\n' "$heterogeneous_union_undeclared_exports"
+  printf '| stale heterogeneous-union declarations | %s |\n' "${#stale_widened_unions[@]}"
   printf '| unbudgeted unsupported exports | %s |\n' "$unbudgeted_unsupported_exports"
   printf '| JSValue refs | %s |\n' "$jsvalue_refs"
   printf '| JSValue surface lines | %s |\n' "$jsvalue_surface_lines"
@@ -378,6 +443,8 @@ fi
   printf '\n'
   printf '## Unsupported Export Budget\n\n'
   printf 'Only ambiguous re-export surfaces with explicit candidate diagnostics are budgeted in this fixture corpus. Any other unsupported export class fails this report unless its budget is raised deliberately.\n\n'
+  printf 'Heterogeneous-union widenings are DECLARED rather than counted: every occurrence must appear in `%s` with a kind and a reason. An `heterogeneous-union-UNDECLARED` row fails this report, and so does a declared entry that no longer occurs (a count could do neither).\n\n' \
+    "${heterogeneous_union_declared_file#"$repo_root"/}"
   printf '| class | location | diagnostic |\n'
   printf '| --- | --- | --- |\n'
   if [ -s "$unsupported_details_file" ]; then
@@ -386,6 +453,17 @@ fi
     done < "$unsupported_details_file"
   else
     printf '| none |  |  |\n'
+  fi
+  printf '\n'
+  printf '### Stale heterogeneous-union declarations\n\n'
+  if [ "${#stale_widened_unions[@]}" -gt 0 ]; then
+    printf 'These exports are declared in `%s` but no longer widen. The limitation is gone: delete the entry.\n\n' \
+      "${heterogeneous_union_declared_file#"$repo_root"/}"
+    for name in "${stale_widened_unions[@]}"; do
+      printf -- '- `%s`\n' "$name"
+    done
+  else
+    printf 'none\n'
   fi
 } > "$report_file"
 
