@@ -12617,6 +12617,34 @@ fn optionality_level(t : @ast.TsType) -> (@ast.TsType, Int) {
 }
 
 ///|
+/// The utility types whose field shape `lookup_field` and
+/// `collect_declared_fields` can actually project. `Record<K, V>` answers
+/// every key with `V`; the other five project their argument's fields.
+///
+/// One predicate rather than a second literal list, because a second list
+/// is the defect this exists to fix: the `(ObjectLit, Applied(name, _))`
+/// dispatcher in `check_expr_against` deliberately routes these six into
+/// `check_object_lit_against_target` — its comment says so, "since
+/// `lookup_field` / `collect_declared_fields` know how to project their
+/// field shapes" — and that function then threw them out again through
+/// `member_recv_unmodeled`, which calls any `Applied` to a non-class,
+/// non-interface name unmodeled. Two sites, one decision, opposite
+/// answers.
+fn target_is_projectable_record(
+  ty : @ast.TsType,
+  resolver : Resolver,
+  ctx : CheckCtx,
+) -> Bool {
+  match resolver.unwrap(ty) {
+    Applied("Record", [k, v]) =>
+      resolver.unwrap(k) is (String_ | Number | Int) &&
+      not(type_contains_unresolved_named(v, resolver)) &&
+      not(is_in_scope_type_param(ctx, v))
+    _ => false
+  }
+}
+
+///|
 fn check_object_lit_against_target(
   env : ExprEnv,
   entries : Array[(String, @ast.TsExpr)],
@@ -12642,14 +12670,45 @@ fn check_object_lit_against_target(
   // supplied key would look like an excess property and every declared field
   // like a missing one. TypeScript resolves these fully — suppress the whole
   // excess/missing check rather than emit false positives.
-  if member_recv_unmodeled(target, resolver) {
+  //
+  // The six projectable utility types are exempt: `member_recv_unmodeled`
+  // calls every `Applied` to a non-class, non-interface name unmodeled,
+  // which catches `Record<string, Color>` — and the caller routed it here
+  // precisely because its shape CAN be projected. Without the exemption
+  // the two sites disagree and `{ black: { r, g, d } } satisfies
+  // Record<string, Color>` reports nothing.
+  //
+  // The missing-required half stays vacuous for `Record` by construction:
+  // `collect_declared_fields` has no `Record` arm, so it returns no
+  // declared names and nothing can be reported missing — which is right,
+  // since `Record<string, V>` requires no particular key.
+  if member_recv_unmodeled(target, resolver) &&
+    not(target_is_projectable_record(target, resolver, ctx)) {
     return
   }
   // An unresolved `Named` / `Applied` target — typically a method-level type
   // parameter (`foo<U extends T>(x: U)`) the enclosing-scope check above
   // doesn't track — has an unknown shape, so TypeScript allows extra
   // properties (the instantiation may be wider). Suppress excess/missing.
-  if type_contains_unresolved_named(target, resolver) {
+  //
+  // `Record<string, V>` is judged by its VALUE argument instead of as a
+  // whole. `Record` is not a class or an interface, so the predicate calls
+  // it unresolved, and that is the second of the two early returns that
+  // made `{ black: { r, g, d } } satisfies Record<string, Color>` silent —
+  // while `lookup_field` answers every key of a `Record` with `V`, which
+  // is why the caller routed it here in the first place.
+  //
+  // Only `Record`, and only with a bare `string` / `number` KEY. The wider
+  // version — every projectable utility, judged by all of its arguments —
+  // was implemented and MEASURED, and it is a false positive on
+  // `isomorphicMappedTypeInference`: `f20<T, K extends keyof T>(obj:
+  // Pick<T, K>)` accepts any object literal, because `T` is inferred FROM
+  // the argument, and `Pick`'s arguments there are type parameters that
+  // this predicate does not recognise as unresolved. A type-parameter KEY
+  // is the same hazard (`f<K extends string>(o: Record<K, number>)`), so
+  // the key must be the concrete keyword.
+  if not(target_is_projectable_record(target, resolver, ctx)) &&
+    type_contains_unresolved_named(target, resolver) {
     return
   }
   // Excess-property reporting is suppressed for a bare anonymous `Object`

@@ -18750,3 +18750,54 @@ test "checker: TS7022 indirect through the iteration protocol (batch DV)" {
     @test.assert_eq(issues(h + src), 0)
   }
 }
+
+///|
+/// Batch DW: the excess-property check reaches a `Record<string, V>`
+/// target. Two sites held one decision and gave opposite answers.
+///
+/// `check_expr_against`'s `(ObjectLit, Applied(name, _))` arm
+/// deliberately routes the six projectable utility types into
+/// `check_object_lit_against_target` — its comment says so, "since
+/// `lookup_field` / `collect_declared_fields` know how to project their
+/// field shapes" — and that function then threw them straight back out
+/// through TWO early returns, `member_recv_unmodeled` and
+/// `type_contains_unresolved_named`, both of which call any `Applied` to
+/// a non-class, non-interface name unresolvable.
+///
+/// The exemption is `Record` only, and only with a bare `string` /
+/// `number` KEY. The wider version — every projectable utility, judged by
+/// all of its arguments — was implemented and MEASURED: it is +1 TP and
+/// +1 FP, the false positive being `isomorphicMappedTypeInference`'s
+/// `f20<T, K extends keyof T>(obj: Pick<T, K>)`, which accepts any object
+/// literal because `T` is inferred FROM the argument.
+test "checker: excess properties through Record<string, V> (batch DW)" {
+  let issues = fn(src : String) -> Int {
+    let mut n = 0
+    for i in check_module_function_bodies_permissive(parse_module_or_empty(src)) {
+      if i.message.contains("does not exist on target type") {
+        n = n + 1
+      }
+    }
+    n
+  }
+  let color = "type Color = { r: number, g: number, b: number };\n"
+  // The corpus shape (`typeSatisfaction_propertyValueConformance3`) and its
+  // plain-annotation twin.
+  for
+    src in [
+      "const P = { black: { r: 0, g: 0, d: 0 } } satisfies Record<string, Color>;",
+      "const P: Record<string, Color> = { black: { r: 0, g: 0, d: 0 } };", "const P: Record<number, Color> = { 1: { r: 0, g: 0, d: 0 } };",
+    ] {
+    assert_true(issues(color + src) > 0)
+  }
+  // Silent: a well-formed value; and the two shapes whose keys are not
+  // enumerable, where excess properties are legal because the
+  // instantiation may be wider.
+  for
+    src in [
+      "const P: Record<string, Color> = { black: { r: 0, g: 0, b: 0 } };", "declare function f20<T, K extends keyof T>(obj: Pick<T, K>): T;\nconst x = f20({ foo: 1, bar: 2 });",
+      "declare function g<K extends string>(o: Record<K, number>): void;\ng({ a: 1, b: 2 });",
+    ] {
+    @test.assert_eq(issues(color + src), 0)
+  }
+}

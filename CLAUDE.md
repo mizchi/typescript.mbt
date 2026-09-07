@@ -1309,6 +1309,40 @@ product surfaces now.
   reports while `let x = g(() => x)` with `g` declaring its return type
   is ACCEPTED, as are `let x = function () { return x }`, `[() => x]`
   and `{ m: () => x }`.
+  Batch DW is +1 and is the first batch here whose target abstention
+  probing CONFIRMED, which is worth as much as the four it refuted. The
+  rule that shipped is a different bug: two sites held one decision and
+  gave opposite answers. `check_expr_against`'s
+  `(ObjectLit, Applied(name, _))` arm deliberately routes the six
+  projectable utility types into `check_object_lit_against_target` — its
+  own comment says so, "since `lookup_field` / `collect_declared_fields`
+  know how to project their field shapes" — and that function threw them
+  straight back out through TWO early returns, `member_recv_unmodeled`
+  and `type_contains_unresolved_named`, both of which call any `Applied`
+  to a non-class, non-interface name unresolvable. So
+  `{ black: { r, g, d } } satisfies Record<string, Color>` reported
+  nothing. The exemption is `Record` ONLY and only with a bare
+  `string` / `number` key, and the wider version was implemented and
+  MEASURED before being cut down: every projectable utility judged by all
+  of its arguments is +1 TP and +1 FP, the false positive being
+  `f20<T, K extends keyof T>(obj: Pick<T, K>)`, which accepts any object
+  literal because `T` is inferred FROM the argument.
+  The confirmed abstention is the excess-property check at CALL
+  ARGUMENTS. A position matrix says the check covers the annotated
+  declaration, `return`, an array element, `satisfies`, assignment and a
+  nested property and is missing at every CALL position, which is the
+  commonest place real code hits TS2353 — and the one-line suppression
+  guarding it (`sub_path.contains("arg[") && target is Object(_)`) is
+  load-bearing: removing it is +0 TP and +3 FPs on hand-written
+  TS7-accepted code, because a constrained type parameter's bound really
+  IS inlined into the parameter position, so
+  `foo<U extends { length: number }>(x: U)` accepts
+  `{ length: 1, extra: 2 }` and the earlier early returns do not catch
+  it. Corpus-wide the blunt removal is +0 TP / +1 FP. The shippable
+  version gates on the CALLEE being non-generic — no type parameters
+  means no bound can have been inlined — and is filed rather than built,
+  because it buys no conformance file and the real-world diagnostic is
+  its only argument.
 - `src/transform` is the JS-side pipeline behind `mtsc`: bundling, folding,
   tree-shaking, and the property mangler. Its safety story is type-driven and
   has two halves — `export_surface.mbt` (names reachable from the entry's

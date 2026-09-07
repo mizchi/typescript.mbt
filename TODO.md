@@ -5039,6 +5039,65 @@ inside a function body:
 - [x] strict-null / narrowing: 3 of 8 in batch DO (the `logicalAssignment`
   files). Five left.
 
+- [x] **Batch DW: the excess-property check reaches a `Record<string, V>`
+  target, +1 file at FP 0** (TP 2581 -> 2582, in-scope MISS 134 -> 133).
+  Two sites held one decision and gave opposite answers.
+  `check_expr_against`'s `(ObjectLit, Applied(name, _))` arm deliberately
+  routes the six projectable utility types into
+  `check_object_lit_against_target` — its own comment says so, "since
+  `lookup_field` / `collect_declared_fields` know how to project their
+  field shapes" — and that function threw them straight back out through
+  TWO early returns, `member_recv_unmodeled` and
+  `type_contains_unresolved_named`, both of which call any `Applied` to a
+  non-class, non-interface name unresolvable. So
+  `{ black: { r, g, d } } satisfies Record<string, Color>` reported
+  nothing.
+  The exemption is `Record` ONLY, and only with a bare `string` /
+  `number` key. The wider version — every projectable utility, judged by
+  all of its arguments — was implemented and MEASURED before being cut
+  down: +1 TP and **+1 FP**, the false positive being
+  `isomorphicMappedTypeInference`'s
+  `f20<T, K extends keyof T>(obj: Pick<T, K>)`, which accepts any object
+  literal because `T` is inferred FROM the argument. A type-parameter KEY
+  is the same hazard (`f<K extends string>(o: Record<K, number>)`), which
+  is why the key must be the concrete keyword. The missing-required half
+  stays vacuous for `Record` by construction, since
+  `collect_declared_fields` has no `Record` arm — which is right, as
+  `Record<string, V>` requires no particular key.
+- [ ] **MEASURED AND REJECTED: the excess-property check at CALL
+  ARGUMENTS.** A position matrix says the check covers the annotated
+  declaration, `return`, an array element, `satisfies`, assignment and a
+  nested property, and is missing at every CALL position — a
+  `declare function` argument, a method call, an arrow-typed binding's
+  call, and a `new` — which is the commonest place real code hits
+  TS2353. The suppression is one line
+  (`sub_path.contains("arg[") && target is Object(_)`) with a stated
+  reason, and this is the FIRST of five recorded abstentions in this
+  series whose reason probing CONFIRMED: removing it is **+0 TP and
+  +3 FPs** on hand-written TS7-accepted code, because a constrained type
+  parameter's bound really is inlined into the parameter position
+  (`foo<U extends { length: number }>(x: U)` accepts
+  `{ length: 1, extra: 2 }`) and the earlier early returns do not catch
+  it. Corpus-wide the blunt removal is **+0 TP / +1 FP** — so the
+  call-argument position is worth zero conformance files and the
+  suppression is load-bearing.
+  What would make it shippable is a gate on the CALLEE being
+  non-generic: no type parameters means no bound can have been inlined,
+  so an `Object(_)` parameter target must be a written inline object
+  type. That is sound and loses only a generic function's inline-object
+  parameters. It is not built here because it buys no corpus file and
+  needs a fact threaded through `check_expr_against`, which has ~30
+  callers; the real-world diagnostic is the only argument for it, and it
+  is a good one.
+- [ ] **FILED: `arrayLiterals.ts`** — the last excess-property MISS of
+  the three needs an object literal checked against a target whose shape
+  is a NUMERIC INDEX SIGNATURE (`{ [n: number]: { a: string; b: number } }`),
+  where each element's value must be checked against the index value
+  type. The `@@computed:` arm of `check_object_lit_against_target`
+  already does exactly this lookup for one narrow case, so the machinery
+  is there; the third file, `symbolProperty21`, is a computed
+  `[Symbol.toPrimitive]` key, which that function skips by design.
+
 ### Tier 3 — DEFER (~93 files, real but expensive)
 
 `assignability-core` (48), `generic-inference` (11), `iterator-protocol`
