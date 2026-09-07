@@ -4590,19 +4590,454 @@ inside a function body:
 
 ### Tier 2 — SUPPORT (cheap, mechanical, ~25 files)
 
-- [ ] Remaining grammar / declaration rules: TS2371 (default parameter on
-  a bodiless overload), TS2394 (overload incompatible with its
-  implementation), TS2386, TS2448, TS1308, TS2842, TS2708, TS1166,
-  TS2300. `has_body_block` at `parser_class.mbt:2936` already separates a
-  signature from an implementation and that site's own comment states
-  the abstention. NOTE: `parserParameterList16`/`17` and
-  `parserClassDeclaration12` are filed under legacy/broken-syntax and are
-  really these rules — they belong here, not in Tier 4.
-- [ ] implicit-any / strict family (10): TS7009/7010/7018/7022/7023/7031/
-  7053, TS2564/2565/2729. Small corpus count, highest USER-facing value
-  in this tier — it is what a real codebase hits the day it turns
-  `strict` on.
-- [ ] strict-null / narrowing (8).
+- [x] **Batch DN: TS2371 + TS2394, +3 files at FP 0** (TP 2560 -> 2563,
+  in-scope MISS 157 -> 154) — `parserParameterList16`/`17` and
+  `parserClassDeclaration12`, the three files Tier 4 had mis-filed under
+  legacy/broken-syntax.
+  - TS2371 is the applied-in-some-places family in its strongest form:
+    the rule was not similar to an existing one, it WAS one. It lived as
+    a LOCAL function at the two bodiless exits of `parse_function_decl`,
+    and inline through a different channel for interface members, and the
+    CLASS path had nothing — `class C { foo(a = 4); foo(a, b) {} }` parsed
+    clean. Hoisted to one `Parser::record_bodiless_param_initializers`.
+    The rule is about the BODY and nothing else, so the test is
+    `has_body_block` rather than the modifiers; every bodiless position
+    was probed (overload signature, `abstract`, `declare class`,
+    `interface`, object type, function TYPE, `declare function`) and all
+    report. The legal neighbours are the two the message names plus an
+    ARROW, whose body follows the `=>` — which is what a class field
+    holding `(a = 1) => a` is.
+  - TS2394's arity half is ONE-directional and the message text does not
+    say which direction, so the table was probed cell by cell: an
+    implementation requiring MORE than a signature can supply is the
+    error, a SHORTER implementation is legal. Four of the eight silent
+    test cases are what a rule written from the message alone would
+    flag. A TYPE mismatch raises the same code and is abstained on.
+- [ ] Remaining grammar / declaration rules: TS2386, TS2448, TS1308,
+  TS2842, TS2708, TS1166, TS2300.
+- [x] **Batch DO: TS7009 and `&&=`, +4 files at FP 0** (TP 2563 -> 2565,
+  in-scope MISS 153 -> 150 after two accidental TPs moved to Tier 4).
+  Three findings, and two of them are about code that was already there.
+  - **TS7009** is TS2350's rule with its exclusion removed, and the FLAG
+    decides which of the two applies — probed both ways. With
+    `noImplicitAny` off, `new f()` errors iff `f`'s return is not `void`
+    (TS2350); with it on there is no exemption at all, and tsc reports
+    even `function Point(x) { this.x = x }; new Point(1)`. The old
+    `resolver.signatures` early return excluded every top-level function
+    DECLARATION by name, which was REDUNDANT for TS2350 (an old-style
+    constructor's return is `void`, which the return-type predicate
+    already abstains on) and was the only thing blocking TS7009. It also
+    lost the commoner spelling with the flag off — a declared function
+    with a non-void return annotation, excluded before any type was
+    consulted.
+    TS7009 needs POSITIVE evidence where TS2350 could lean on abstention,
+    and the unit suite proved it: the unrestricted version was +2 corpus
+    files and **5 false positives** (`localTypes2/3/5`,
+    `classExpression4`, `privateNameMethodAsync`), because the parser
+    lowers a class declared INSIDE a function to a function — so
+    `function outer() { class A { x = 1 } return new A() }` arrives as a
+    `Func` and is a legal `new`. Gated to a top-level function
+    declaration or a WRITTEN call-signature object type: +1 at FP 0. The
+    file it gave up was flagged for the unsound reason.
+  - **`a &&= b`** is `a && (a = b)`, so when `a` is falsy the result is
+    `a` and `b` never runs. `infer_expr`'s compound-assign arm returned
+    the RIGHT-HAND SIDE for all fifteen operators — right for the twelve
+    arithmetic and bitwise ones, wrong for this one — which is why
+    `(results &&= []).push(100)` was silent while tsc reports TS2532.
+    `||=` and `??=` do NOT widen: the operator has already removed the
+    nullish part of the target, so unioning it back in would report the
+    legal spellings (probed: `logicalAssignment6/7/8` error on their
+    `&&=` function and nothing else). Needed a second change, and the
+    abstention it relaxes states its own reason: the strictNullChecks
+    member-access checks are gated to a bare `Var` receiver because
+    those are the bindings the narrowing engine rewrites precisely. A
+    `&&=` receiver qualifies for the OPPOSITE reason — there is no
+    narrowing to get wrong, its type is computed from the operator's
+    semantics, and the target is inferred through the same `env`.
+    `nullish_checkable_receiver` is the one predicate both sites now ask.
+  - **A pre-existing false positive**, found by probing a legal
+    neighbour for the rule above rather than by any gate: `+=`'s
+    string-concatenation exemption tested for `String_` EXACTLY, so
+    `let t = ""` — whose type here is the literal `""`, since tsc widens
+    it and we do not — demanded a numeric target and reported ordinary
+    string building. Asking assignability widens the EXEMPTION, so it can
+    only lose a finding. Removing it cost **two TPs**, and that is the
+    batch's own lesson repeated from CS with the sign flipped:
+    `parserRealSource1`/`2` were flagged for `result += "\\t"` and
+    nothing else, while their real TS7 error is the TS6053 that already
+    puts `parserRealSource3` in Tier 4. They are declared there now, and
+    `--max-miss` — added one batch earlier — is what surfaced them.
+- [x] **Batch DP: every checker class rule now sees a class declared
+  inside a function** (+1 file, TP 2565 -> 2566, in-scope MISS 150 ->
+  149, FP 0). The count is not the point: the rules were silent at every
+  depth but zero.
+  - `TsModule.classes` is filled by the module-level statement
+    dispatcher, the only thing that took the parser's
+    `last_runtime_class_decl` stash, so a class one scope in was recorded
+    nowhere a rule could read. Probed before and after: TS2420
+    (implements), TS2415/TS2417 (extends compatibility) and TS2564
+    (definite assignment) all fired at top level and at no other depth,
+    while batch DN's TS2394 fired in both because it lives in the parser.
+    Now covered in a function body, a block, an `if` branch and an arrow
+    body.
+  - The parser collects them into `TsModule.local_classes` and the
+    checker merges the two at ONE entry point, which is what makes all
+    ~58 `module_.classes` loops see them without touching any of them.
+    `check_module` is deliberately excluded: its first act is a
+    duplicate-declaration scan across every top-level kind.
+  - **The merge cost four false positives before it was right, and every
+    one is the same mistake**: `module_.classes` does not mean "the
+    classes", it means "the classes with no enclosing scope", and three
+    rules depend on the second reading.
+    * `localTypes2`/`3` — the resolver's NAME table must not learn a
+      block-scoped name. A nested `class C` beside `let C = f(10)` made
+      `new C(20)` resolve to the class and fail its constructor arity.
+      `Resolver::ingest_module` skips `is_local`.
+    * `classConstructorAccessibility4` — `new A()` inside a class nested
+      in A's own method is legal. A's method body is already scanned with
+      `enclosing = "A"`; scanning the nested class's body as if it were
+      top level reported the same expression again.
+    * `privateNameComputedPropertyName3` — `check_private_member_access`
+      states its premise in its own doc comment ("nested class bodies are
+      skipped — their accesses may legally reach an outer class's
+      privates"), and the merge broke exactly that.
+    So `TsClassDecl` carries `is_local`, the three position-dependent
+    consumers test it, and the rest do not. Skipping a name already
+    declared at top level (or repeated among the local classes) is what
+    stops `function f() { class A {} } class A {}` reading as a duplicate.
+  - Measured linear: a hand ladder of N classes-inside-functions is
+    32/62/130/267 ms at 500/1000/2000/4000 (exponent 1.02), and the
+    scaling gate's seven axes are unchanged.
+  - Known remainder, deliberately not chased: a nested class whose BASE is
+    also nested does not resolve its base chain, because the base is not
+    in the resolver's name table either. That loses a finding rather than
+    inventing one.
+- [x] **Batch DQ: the same rules also see a class EXPRESSION** (+3 files,
+  TP 2566 -> 2569, in-scope MISS 149 -> 146, FP 0). Probed first, which
+  is what made the axis worth taking: TS2420 / TS2415 / TS2564 all fire
+  on a class DECLARATION, on `declare class` AND on a namespace-scoped
+  class, and on `const C = class …` not one of them did — while
+  `const C = class {}` is how a mixin, a HOC and a decorated factory
+  class are all written.
+  - `parse_class_stub` records into `local_classes` from **both** of its
+    exits, which is the whole finding: the native `NativeClassExpr` exit
+    is taken only when there is an `extends` clause, and a base-less
+    class expression falls through to the desugar below it. Recording at
+    the first alone bought exactly the one rule that needs a base —
+    TS2415 fired and the other two stayed silent — which is how the
+    split was found rather than assumed.
+  - An anonymous class expression gets a per-occurrence synthetic name.
+    Per-occurrence and not one shared `<class expression>`, because the
+    merge skips a repeated name and a file with several anonymous
+    classes is the normal case; pinned by a test that asserts BOTH of
+    two get checked.
+  - One false positive, and it is the DP lesson on a fifth axis:
+    TS2449 ("class used before its declaration") compares INDICES in
+    `module_.classes`, which encode top-level source order — and a local
+    class is APPENDED, so its index is not a position. Reading it as one
+    made every top-level class whose base shares a name with a class
+    expression look forward-referencing
+    (`accessorsOverrideProperty8`: `const Base = classWithProperties(…,
+    class Base {})` beside `class MyClass extends Base`). Exempting
+    local classes on both sides costs the mirror MISS —
+    `const D = class extends B {}; class B {}` IS TS2449 and stays
+    quiet — which is the affordable half.
+- [x] **Batch DR: the nullish operators, +3 files at FP 0** (TP 2569 ->
+  2572, in-scope MISS 146 -> 143). Three rules, each with a boundary that
+  had to be probed cell by cell because reasoning about it gives the
+  wrong answer.
+  - **TS2869** ("right operand of `??` is unreachable") is purely
+    SYNTACTIC in tsc, which is the finding: `false ?? true`, `0 ?? 1`,
+    `{} ?? y` and `(() => 1) ?? y` all report, while
+    `const m = false; m ?? true` and `declare const s: string; s ?? "b"`
+    are ACCEPTED — neither can be nullish either. A type-level version
+    would have reported two shapes tsc allows. Sibling of the TS2872 /
+    TS2873 literal-operand rules on `!` and `||`, and it reuses their
+    literal classification. `null` / `undefined` are excluded (tsc gives
+    them TS2871, a different code); `void 0` is a declared MISS — tsc
+    reports TS2869 there but the right operand really IS reached, so
+    following it would encode a compiler quirk as a rule.
+  - **TS18048 / TS18049**: the right operand of `??` runs only when the
+    left is nullish, so inside it the left BINDING is narrowed to its
+    nullish part and a member access on it is always an error
+    (`f ?? f.toFixed()`). It matches the right operand's SHAPE rather
+    than walking it, and that is the soundness argument: an assignment
+    anywhere inside the RHS makes the binding non-nullish again
+    (`s ?? ((s = "x"), s.length)` is ACCEPTED, measured), and a walk that
+    missed an assignment form would fail OPEN into a false positive.
+    When the access IS the whole right operand nothing can hide in it.
+  - **TS2790** ALREADY EXISTED for `delete o.b` and was blind to the two
+    other spellings of the same property reference. `delete o?.b` arrives
+    as `OptionalChain(PropAccess(…))` and the match saw the WRAPPER —
+    the fourth time in this repo that a wrapper node's default arm has
+    cost a silent miss, after `TypeArgs` and `PureCall` twice — and
+    `delete o["b"]` had no arm at all. Inside an optional chain the
+    receiver's nullish part is pruned, which is exactly what the `?.`
+    guarantees.
+- [ ] **REJECTED for now with the condition: TS7031 / TS7018** (a nullish
+  literal where a type must be inferred, under `noImplicitAny` with
+  `strictNullChecks` OFF — `var [a, b] = [undefined, null]` and
+  `const o = { value: null }`). The rule is sound and the family is one
+  rule with three codes (TS7005 for a plain `const v = null` too), but
+  the blocker is mechanical and exact: **`var [a, b]: any = [undefined,
+  null]` is ACCEPTED by tsc and the unannotated form is TS7031**, while
+  `TsStmt::Let` / `Const` / `Var` carries a `TsType` in which an ABSENT
+  annotation and an explicit `: any` are the same `Any`. The parser has
+  that fact at parse time — `parse_param` records it in
+  `written_any_params` via `had_annotation` — so the fix is a
+  declaration-level equivalent of that channel plus a `strict_null_checks`
+  field on the Parser (which has `no_implicit_any` and not this one).
+  Two channels for two corpus files, only one of which
+  (`{ value: null }` in a legacy migration) has real-world value.
+- [x] **Batch DS: TS2386 / TS2394 / TS2565, +3 files at FP 0** (TP 2572 ->
+  2575, in-scope MISS 143 -> 140). Three unrelated rules, and all three
+  read WRONG from their message text alone.
+  - **TS2386** ("overload signatures must all be optional or required")
+    is purely about the `?`, so it needs no type and lives in the parser.
+    It needed **four** sites — a runtime class body, an interface, an
+    object type literal and `declare class` each have their own member
+    parser — which is the applied-in-some-places family again, taken
+    completely on the first pass rather than discovered later. In a
+    runtime class the IMPLEMENTATION participates as REQUIRED: probing
+    `m?(x); m?(s); m(v) { }` reports on BOTH signatures, so recording
+    only the bodiless declarations would have accepted it. `declare
+    class`'s member parser DISCARDED the `?` (`let _ =
+    self.match_(Question)`), which is why that site was the one with
+    nothing. Only METHOD signatures participate: two same-named
+    PROPERTIES are a duplicate identifier (TS2300 / TS2717), a different
+    error that already fires, so putting properties in would report one
+    declaration twice. Accessors and `constructor` cannot carry `?` at
+    all. Keyed by static-ness as well as name, since `static m` and `m`
+    are two members and need not agree.
+  - **TS2394's parameter half** is where the batch-DN blocker finally
+    dissolved. `TsFunc.body` is not optional, so an overload SIGNATURE
+    and an implementation are indistinguishable downstream — and
+    `note_function_declaration` is called at every one of the four sites
+    that pushes a function declaration, with exactly the `bodiless` fact,
+    so a `<fn-impl:NAME>` marker makes "the last declaration is the
+    implementation" a FACT instead of the guess the neighbouring
+    `check_overload_void_return` had to make. The rule was added to that
+    same function rather than beside it. Probed cell by cell, because the
+    message ("not compatible with its implementation signature") does not
+    say which direction: an incompatible parameter TYPE is the error
+    (`f(x: "a"); f(x: number) { }`), an implementation with FEWER
+    parameters is LEGAL (a shorter function is assignable to a longer
+    one), and `any` accepts everything. Only a pair of
+    definitely-concrete primitives incompatible in BOTH directions is
+    judged; a type parameter, an object shape, a union or a missing
+    annotation abstains.
+  - **TS2565** ("property is used before being assigned") is expando
+    flow: `function d() { }` then `d.e = 12`, and reading a property
+    assigned only inside a conditional branch. One ordered pass per
+    statement list tracking DEFINITE / POSSIBLE per `HOLDER.PROP`, and
+    the `if` statement is the ONLY construct that produces `possible` —
+    a write in anything this pass does not model counts as definite, so
+    an unmodelled shape SILENCES the check instead of firing on it. That
+    is what `switch (1) { default: d.q = 1 }` needs: the default arm
+    always runs and tsc accepts the following read, so any
+    reachability-aware formulation would have false-positived there. It
+    costs the `while` case, which tsc DOES report, and that MISS is what
+    buys FP 0.
+    Three things had to be probed rather than reasoned. `d["q"] = 1` and
+    `d.q = 1` are NOT the same rule: inside an `if` arm the bracket
+    spelling makes the later `d.q` LEGAL and the dotted one does not, so
+    the two spellings are collected separately and only the dotted one
+    can be merely-possible. Passing the holder to a function does NOT
+    assign the property (nor does `Object.assign`), so the report still
+    stands there. And a read from ANOTHER scope is legal however the
+    property was assigned — the corpus file says so in its own comment
+    and `function later() { return d.q }` confirms it — so the read walk
+    stops at a nested function body and at a nested block, while the
+    WRITE walk descends into both (calling a write definite is the quiet
+    direction).
+    Two parser facts cost the first two drafts. `d.q = 1` at the top of a
+    list is a `PropAssign` STATEMENT while the identical line inside a
+    block is `Expr(PropAssignExpr(...))`, and reading only the first
+    found NOTHING at all — the same two-spellings-one-rule shape as
+    TS2386 above, in the AST instead of in the parsers. And a top-level
+    `function d() { }` is parsed by the module loop into `module_.funcs`
+    and is NOT pushed into `top_level_stmts`, so the outermost list has
+    to be told about those holders by name and each such body scanned
+    explicitly.
+- [x] **Batch DT: TS7010 at the member signatures, TS7022 / TS2448 at
+  both self-reference sites, +2 files at FP 0** (TP 2575 -> 2577,
+  in-scope MISS 140 -> 138). Both rules are the applied-in-some-places
+  family, and BOTH had a comment at the missing site stating an
+  abstention whose stated reason turned out to be FALSE — which is the
+  reusable finding: a recorded abstention is a lead, and its reason still
+  has to be probed.
+  - **TS7010** ("'X', which lacks return-type annotation, implicitly has
+    an 'any' return type") existed for a bodiless `function` declaration
+    and for `declare function` and for NOTHING else, so an interface
+    method, an object-type method, a class overload signature, an
+    `abstract` member and a `declare class` member were all silent. One
+    recorder, four member parsers. The class site carried a comment
+    declining it because "tsc does not flag an overload signature whose
+    implementation carries the return annotation" — probed, `m();
+    m(x: number); m(x?: number): void { }` reports on BOTH signatures,
+    while `m(): void; m(x: number): void; m(x?: number) { }` (annotated
+    signatures, unannotated implementation) is ACCEPTED. The exemption
+    belongs to the BODY, not to the overload set, so the stated reason
+    was the inverse of the truth. Accessors and bare properties are
+    excluded because tsc gives them TS7033 and TS7008, two different
+    rules. The test is on whether an annotation was WRITTEN, not on the
+    resolved type: `foo(n: string): any` is accepted and the parsers
+    default a missing annotation to `Void`/`Any`, so the two are
+    indistinguishable afterwards.
+  - **TS7022 / TS2448** (a binding whose own initializer evaluates a
+    reference to it) existed for a `for…of` head whose iterable is a bare
+    `Var` and was missing at the DECLARATION site, so `let x = x`,
+    `const x = [x]` and `let x = typeof x` were all silent. The head
+    rule's walk was two arms wide with a comment claiming that widening
+    past them "would claim a cycle that is not one" for a name reached
+    through a call or a property. Probed, the dividing line is not
+    call-versus-property but whether the reference is EVALUATED before
+    the binding initializes: `for (let v of [v])`, `[1, v]`, `g(v)` and
+    `[...xs, v]` all report, while `o.v` does not (a property NAME is a
+    `String` in this AST and can never be reached as a `Var`) and
+    `[() => v]` does not (the body runs later). One shared walk now
+    serves both sites. Two codes, one condition, each gated on the fact
+    it needs: TS2448 applies to `let`/`const` whatever the annotation
+    says (`let x: number = x` is still TS2448, the TDZ being about time),
+    while TS7022 needs the annotation ABSENT and is all a `var` gets.
+  - Threading `head_annotated` in from the parse site fixed a
+    **pre-existing false positive** the head rule's own comment had
+    promised not to have: it gated on `var_type is Any`, which cannot
+    tell an absent annotation from an explicit `: any`, so
+    `for (var v: any of v)` was reported. And the comment's claim that
+    the spelling is "legal" is also wrong — tsc gives it TS2483 + TS2502,
+    two codes this rule does not claim, so the old behaviour was the
+    right file for the wrong reason and abstaining costs a MISS.
+  - **Three pre-existing tests asserted the TS7010 gap by name** — the
+    eighth, ninth and tenth in this repo found doing that. The
+    TS2387/TS2388, TS2391 and class-expression tests all wrote
+    `class C { foo(x: number); foo(x: any) {} }` and asserted 0, and
+    `parse_module_or_empty` defaults `noImplicitAny` to TRUE, so every
+    one of those sources is a file tsc rejects. Annotating the
+    signatures makes each test measure the rule it is named for.
+- [ ] **MOVED TO TIER 3 with evidence: TS7023 (3 files) and TS7053 (2).**
+  The triage called the whole implicit-any family "cheap and
+  mechanical"; opening the files says otherwise, and that is the
+  label-for-objective substitution again. TS7023's three files
+  (`for-of33` / `-34` / `-35`) need an inference CYCLE detector through
+  a class method's un-annotated return type — the only cheap version
+  keys on the exact corpus shape ("the iterated class's `next()` returns
+  the loop variable"), which is fitting the corpus for three files
+  nobody's real code resembles. TS7053's two need
+  union-of-index-signature member resolution and assignment-target
+  widening of `(options || {}).a`; both files also carry TS2339 /
+  TS2322 for the same underlying reason, which is what says it is one
+  Tier 3 capability rather than a grammar rule.
+- [ ] **FILED: `for (let v of [() => v])` is a pre-existing false
+  positive** — "cannot find name `v`" from the undefined-name walk, on a
+  file tsc ACCEPTS. The for-of head binding is entered into `env` AFTER
+  the iterable is inferred (correct for the TDZ), so an arrow body
+  inside the iterable cannot see it, while the same arrow in the loop
+  BODY resolves fine. Invisible to the conformance gate (no corpus file
+  has the shape) and pre-existing, verified against the pre-batch
+  binary. The fix has to bind the name for the undefined-name channel
+  only, without giving `infer_expr` a type for it during the iterable's
+  own inference.
+- [x] **Batch DU: TS2729 for a field with NO initializer, +1 file at
+  FP 0** (TP 2577 -> 2578, in-scope MISS 138 -> 137). Third batch in a
+  row whose target was a recorded ABSTENTION, and the third whose stated
+  reason was false — which makes "open the comment that declines the
+  rule, then probe its reason" the highest-yield move left in this tier.
+  `check_class_property_init_order` restricted its candidate set to
+  init-bearing fields, saying a field declared without an initializer
+  "has no initialization to be 'used before'". It has:
+  `class C { b; d = this.b }` and `class C { b: number; d = this.b }`
+  are both TS2729 in either declaration order, because a slot only
+  written in the CONSTRUCTOR is still `undefined` while field
+  initializers run — so such a field never enters the `inited` set and
+  order does not matter for it.
+  The real exemption is a MODIFIER, and probing one cell at a time gives
+  exactly two: `!` and `?`. It is emphatically NOT "the declared type
+  admits undefined" — `b: number | undefined`, `b: any`, `b: unknown`
+  and `b: void` all report, and so does the whole thing under
+  `strictNullChecks: false`, so a rule written from the type would have
+  been wrong in four places. And since the parser wraps `x?: T` into
+  exactly `T | undefined`, the `?` CANNOT be read off the type: it rides
+  an `<optional-member:` sentinel through the class's duplicate-member
+  channel, recorded before the wrap, the same shape as
+  `<quoted-member:` (which exists because TS2564 needed a fact the type
+  could not carry either).
+  `scopeResolutionIdentifiers`, the false positive the old abstention
+  was protecting against, is the `s!: Date; n = this.s;` form — so it
+  was avoided for the wrong reason and is still avoided, for the right
+  one.
+  One declared MISS, stated at the site: `declare b: T` is TS2729 in
+  tsc, and the parser folds `has_declare` into `has_definite_assertion`
+  (correctly, for TS2564), so an ambient field reads as asserted here.
+  That loses a finding and cannot invent one.
+- [x] **Batch DV: TS7022's INDIRECT form through the iteration protocol,
+  +3 files at FP 0** (TP 2578 -> 2581, in-scope MISS 137 -> 134). A
+  `for (var v of new C)` head takes its element type from C's iteration
+  protocol, so an un-annotated `next()` / `[Symbol.iterator]()` that
+  RETURNS `v` is a genuine inference cycle.
+  Batch DT declined exactly these three files one batch earlier, saying
+  "the only cheap version would key on the exact corpus shape". That was
+  too pessimistic, and the thing that settles it was in the corpus the
+  whole time: **`for-of25` and `for-of26` are `for-of33` and `for-of34`
+  with the returned name changed** from the loop variable `v` to an
+  unrelated `var x: any`, and both are TS7-ACCEPTED. So the
+  discriminator is the NAME — the actual semantic distinction, not a
+  match on file contents — and the corpus supplies its own negative
+  controls, twelve of them counting `for-of19`-`23`, `27`, `28`, `30`,
+  `31` and `ES5For-ofTypeCheck10`. Fourth time in this series that a
+  stated abstention's reason turned out weaker than claimed, and the
+  first where the abstention was my own from the batch before.
+  Implemented entirely in the PARSER, which is what keeps it small: the
+  class body records the bare `Var` names its un-annotated protocol
+  methods return, keyed by class name, and
+  `record_for_head_binding_misuses` — where TS7022's DIRECT form already
+  lives — joins against `new C`. The mention test is
+  `collect_iterable_var_names`, the same walk the direct form uses,
+  because "does this expression evaluate a reference to NAME" is the same
+  question and a second walk would be the applied-in-some-places family
+  in its purest form.
+  Every gate was probed, and three of them are what keep it off legal
+  code. Only the two PROTOCOL methods count — a `helper()` returning the
+  loop variable is ACCEPTED, because nothing consults its return type.
+  An annotated return breaks the cycle, so this needs
+  `had_return_annotation` rather than `return_type is Any` (the AST
+  cannot tell an absent annotation from an explicit `: any` — the same
+  blocker recorded for TS7031 and TS2729). And a name the method itself
+  BINDS is its own local: `next() { let v = { value: 1, done: false };
+  return v }` beside `for (var v of new C)` is TS7-ACCEPTED, so firing
+  there would be a false positive on legal code that no corpus file
+  covers. The bound-name set is deliberately over-approximated (a
+  nested block's `let`, a nested function's parameter), which loses
+  findings rather than inventing them.
+  Three declared MISSes, each stated at the site: a `let`/`const` head
+  (the class body is outside the loop's block scope, so tsc gives
+  TS2304 there and a different check already reports it), an
+  annotation-typed iterable (`declare const c: C; for (var v of c)`,
+  which needs the annotation resolved), and an IIFE inside the return
+  (`return (() => v)()`, which tsc reports because the IIFE's return
+  type feeds back).
+  The other half of the indirect form — generic return-type inference
+  from a callback (`let x = arr.map(v => x)`) — is NOT covered and is
+  Tier 3: probing shows the reportable class needs the callee's
+  signature and generic inference, since `let x = g(() => x)` with `g`
+  declaring a return type is ACCEPTED while `arr.map` is not, and
+  `let x = function () { return x }`, `[() => x]` and `{ m: () => x }`
+  are all accepted too.
+- [ ] **FILED: TS2393 for duplicate top-level function implementations.**
+  Batch DS's `<fn-impl:NAME>` marker removes the blocker
+  `check_function_var_duplicates`' comment used to name, and it is pushed
+  once per implementation, so a COUNT is already available. What it does
+  NOT do is distinguish two implementations from two SCOPES: the marker
+  is restricted to the module / namespace body loop precisely because
+  `grammar_misuses` is flat and scope-blind, so `function f() { }` at top
+  level beside `function g() { function f() { } }` would otherwise read as
+  two implementations of one name and two legal scopes. With that
+  restriction in place the count is honest for the top level, and TS2393
+  is a small step from here — it was left out of batch DS only because
+  nothing in the corpus needed it. The class-member version already
+  exists and needs no scope model, a class body being one.
+- [x] strict-null / narrowing: 3 of 8 in batch DO (the `logicalAssignment`
+  files). Five left.
 
 ### Tier 3 — DEFER (~93 files, real but expensive)
 
@@ -4618,29 +5053,57 @@ a real bridge input or `mtsc` target demands it, and record which one did.
 measurement: this corpus samples no Angular / NestJS / TypeORM. Promote
 if a bridge target uses them.
 
-### Tier 4 — WON'T SUPPORT (~24 files, declared out of scope)
+### Tier 4 — WON'T SUPPORT (17 files, declared out of scope) — DONE
 
-- [ ] Record the reasons in a scope file so they are not re-litigated:
-  - **legacy / broken syntax, 12 of 15.** Deliberately malformed input
-    (`parserErrorRecovery_ParameterList6`) and removed language features
-    (`import x = module("m")`, `/// <reference>` resolution). CLAUDE.md
-    already records that taking this cluster for its size is fitting the
-    corpus.
-  - **`using` declarations, 6.** ZERO occurrences in 5,697 real files.
-    The strongest out-of-scope case here. Revisit if a real dependency
-    adopts explicit resource management.
+- [x] `scripts/checker_out_of_scope.txt`, one path per line with its kind
+  and reason. The estimate was ~24 and the answer is **17**, because the
+  estimate came from the family classifier and the 17 came from OPENING
+  every file. Both corrections are the label-standing-in-for-the-objective
+  substitution CLAUDE.md records five times, and the file itself is the
+  only defence:
+  - **legacy / broken syntax, 6 of 15 — not 12.** The classifier keyed on
+    the DIRECTORY, and `parser/ecmascript5/` holds ordinary current
+    TypeScript beside the error-recovery corpus. OUT: `x: break`,
+    `x: public`, `interface I { [public a] }`,
+    `import x = module("m")`, `///<reference>` path resolution (TS6053 is
+    program construction, and the checker has no notion of a program), and
+    the regex-versus-comment torture file. IN: `parserExportAssignment6`
+    is `declare module "M" { export = A }`, an undefined-name check;
+    `parserES5SymbolProperty4` is `[Symbol.isRegExp]`, a lib member
+    lookup; `parserCastVersusArrowFunction1` and
+    `parserConstructorAmbiguity3` have parse-ambiguity PURPOSES and
+    ordinary DIAGNOSTICS (TS2403 on nine conflicting `var v`, TS2558
+    type-argument arity), which is not the same thing. Plus the three
+    already known not to be legacy (`parserParameterList16`/`17`,
+    `parserClassDeclaration12` — the TS2371/TS2394 overload rules, Tier 2).
+  - **`using` declarations, 5 of 6.** ZERO occurrences in 5,697 real
+    files, the strongest out-of-scope case here; revisit if a real
+    dependency adopts explicit resource management. But a file NAMED for
+    `using` can carry an error `using` has nothing to do with:
+    `usingDeclarationsWithObjectLiterals2` is TS7018 on `value: null`,
+    which a plain `const` reproduces under the same two flags (probed), so
+    it is Tier 2's implicit-any family and stays in scope.
   - **locally accepted, 6.** TS7 errors and local tsc 6.0.3 accepts, so
     there is no oracle to develop against and no way to write the
-    legal-neighbour test this repo requires of every rule.
+    legal-neighbour test this repo requires of every rule. The only
+    out-of-scope reason here that is a HARNESS limit rather than a
+    judgement about the language — revisit when the local compiler moves.
+  - The one thing that keeps this from rotting into a suppression list:
+    the oracle reports **STALE** entries — a listed path that is no longer
+    a MISS, because a rule landed or the file left the corpus. Proven by
+    adding a bogus path and seeing it named.
 
-### The recommendation that is not a rule
+### The recommendation that is not a rule — DONE
 
-- [ ] **Stop reporting one MISS number.** Check the Tier 4 list in as
-  `scripts/checker_out_of_scope.txt` (one path per line + reason), have
-  `checker_conformance_oracle.sh` read it, and report TWO numbers:
-  `MISS (in scope)` ~152 — the real backlog, which can reach zero — and
-  `OUT OF SCOPE` ~24. Gate on the former.
-  The FP budget is explicitly UNCHANGED: out-of-scope means "we will not
-  add a rule for it", never "we may flag it wrongly". A false positive on
-  one of these files is still a soundness bug, and the scope file must not
-  become a place to hide files we flag incorrectly.
+- [x] **Two MISS numbers.** `MISS in scope 143` (the backlog, which can
+  reach zero) beside `OUT OF SCOPE 19` (declared). `--scope-file /dev/null`
+  reproduces the old single 174 — verified, not asserted.
+  Nothing but the MISS branch consults the scope file, so a listed file can
+  still be a TP, an FP or a PFLEGAL exactly as before: being out of scope
+  withholds a rule, it does not excuse a wrong answer. The FP budget is
+  untouched at 0.
+- [x] `just verify-checker-soundness` gains `--max-miss`, which closes
+  a direction NOTHING watched: a rule that stops firing moves a file from
+  TP to MISS, and every other number in the report absorbs that silently.
+  Lower the budget whenever a batch improves it, the way the FP budget only
+  ever tightened.

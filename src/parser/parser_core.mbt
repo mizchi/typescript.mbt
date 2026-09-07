@@ -215,6 +215,23 @@ pub struct Parser {
   // strict-property-initialization must exempt literal-named fields --
   // drained per class into `<quoted-member:...>` sentinels.
   quoted_member_names : Array[String]
+  // Instance field names that carried a `?` while parsing class bodies.
+  // TS2729 exempts an OPTIONAL field from the used-before-initialization
+  // check and does NOT exempt `x: T | undefined` — probed, those two
+  // differ — and the parser wraps `x?: T` to exactly `T | undefined`, so
+  // the type cannot answer and the modifier needs its own channel.
+  // Drained per class into `<optional-member:...>` sentinels.
+  optional_member_names : Array[String]
+  // TS7022, the INDIRECT form: bare `Var` names returned by an
+  // un-annotated `next()` / `[Symbol.iterator]()` of the class body being
+  // parsed. Accumulated here and drained per class into
+  // `protocol_returns_by_class`, which the `for…of` head rule joins
+  // against — see `record_for_head_binding_misuses`.
+  protocol_return_names : Array[String]
+  // Class name -> the names above. Filled at the end of each runtime
+  // class DECLARATION; a class expression is deliberately absent, since
+  // `for (var v of new (class { … }))` is not a shape anybody writes.
+  protocol_returns_by_class : Map[String, Array[String]]
   // Member names that carried an `override` modifier while parsing class
   // bodies ("i:"/"s:" prefixed for instance/static). Drained per class
   // into `<override-member:...>` sentinels for TS4112/4113/4114.
@@ -260,6 +277,16 @@ pub struct Parser {
   // `(field name, declared type)` for every runtime class parsed in
   // this module. See `TsModuleBlock.class_fields`.
   collected_class_fields : Array[(String, @ast.TsType)]
+  // Classes declared somewhere OTHER than module top level — a function
+  // body, a block, an `if` branch, a static block. `TsModule.classes` is
+  // filled by the module-level statement dispatcher, which is the only
+  // thing that takes `last_runtime_class_decl`, so a class in any of those
+  // positions was invisible to every checker-level class rule: TS2420,
+  // TS2415 and TS2564 all fire at top level and none of them fired one
+  // scope in. Recorded here rather than into `classes` because that list
+  // is the resolver's NAME table and the bridge's emit list, and neither
+  // should learn a block-scoped name. See `TsModule.local_classes`.
+  collected_local_classes : Array[@ast.TsClassDecl]
   // Set when the module block parses `export = <expr>`.
   // Names exported with `export type { X }` — no runtime value. See
   // `TsModuleBlock.type_only_exports`.
@@ -348,6 +375,9 @@ pub fn Parser::new_with_strict_and_jsx(
     interface_member_modifier_misuses: [],
     collected_class_dups: [],
     quoted_member_names: [],
+    optional_member_names: [],
+    protocol_return_names: [],
+    protocol_returns_by_class: {},
     private_decl_counts: {},
     override_member_names: [],
     pure_marker_positions: {},
@@ -358,6 +388,7 @@ pub fn Parser::new_with_strict_and_jsx(
     collected_pure_declarations: {},
     collected_type_aliases: [],
     collected_interfaces: [],
+    collected_local_classes: [],
     collected_class_fields: [],
     collected_type_only_exports: {},
     collected_export_equals: false,
@@ -602,6 +633,9 @@ pub fn Parser::from_source_with_jsx(src : String, allow_jsx : Bool) -> Parser {
     interface_member_modifier_misuses: [],
     collected_class_dups: [],
     quoted_member_names: [],
+    optional_member_names: [],
+    protocol_return_names: [],
+    protocol_returns_by_class: {},
     private_decl_counts: {},
     override_member_names: [],
     pure_marker_positions: lexer.pure_marker_positions,
@@ -612,6 +646,7 @@ pub fn Parser::from_source_with_jsx(src : String, allow_jsx : Bool) -> Parser {
     collected_pure_declarations: {},
     collected_type_aliases: [],
     collected_interfaces: [],
+    collected_local_classes: [],
     collected_class_fields: [],
     collected_type_only_exports: {},
     collected_export_equals: false,

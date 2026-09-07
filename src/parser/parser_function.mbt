@@ -164,6 +164,135 @@ fn wrap_optional_ts_type(type_ : @ast.TsType) -> @ast.TsType {
 }
 
 ///|
+/// TS2386: "Overload signatures must all be optional or required."
+///
+/// `seen` holds the `?`-ness of the FIRST method signature of each name in
+/// one type body; a later signature of that name that disagrees is the
+/// error. Probed against the real compiler: an object type literal, an
+/// interface and a class body all report, while both-optional,
+/// both-required and two different names are accepted. Only the `?`
+/// matters, so no type is consulted and this can live in the parser.
+///
+/// Restricted to METHOD signatures on purpose. Two same-named PROPERTIES
+/// (`{ m?: number; m: string }`) are a duplicate identifier — tsc gives
+/// that TS2300 / TS2717, a different error which already fires — so
+/// putting properties in here would report the same declaration twice.
+///
+/// One recorder called from every type-body parser, for the reason this
+/// repo keeps recording: a rule written at the interface is a rule missing
+/// from the object type literal.
+///
+/// `key` and `display` are separate because a class body's members are
+/// keyed by static-ness as well as name (`static m` and `m` are two
+/// members), while the message must name the member the way it was
+/// written.
+/// The map's value is `(first_optional, already_reported)`: three
+/// declarations of one name where the first disagrees with the other two
+/// are ONE error, so the flag keeps the message from being printed once
+/// per later declaration.
+fn Parser::record_overload_optionality(
+  self : Parser,
+  seen : Map[String, (Bool, Bool)],
+  key : String,
+  display : String,
+  is_optional : Bool,
+) -> Unit {
+  match seen.get(key) {
+    Some((first, reported)) =>
+      if first != is_optional && not(reported) {
+        seen[key] = (first, true)
+        self.grammar_misuses.push(
+          "overload signatures must all be optional or required: `" +
+          display +
+          "`",
+        )
+      }
+    None => seen[key] = (is_optional, false)
+  }
+}
+
+///|
+/// TS7010 (`noImplicitAny`): a BODILESS signature with no return-type
+/// annotation implicitly returns `any` — there is no body to infer from.
+///
+/// The rule already existed for a bodiless `function` declaration and for
+/// `declare function` (see `record_implicit_any_return` and
+/// `parse_declare_function`) and for nothing else, so an interface method,
+/// an object-type method, a class overload signature, an `abstract`
+/// member and a `declare class` member were all silent — the
+/// applied-in-some-places family again. One recorder, called from every
+/// member parser.
+///
+/// `name` is the member's own name, or the `<call>` / `<new>` sentinel,
+/// which tsc gives their own codes (TS7020 / TS7013) with the signature
+/// kind in place of a name. Accessors and properties are NOT here: a
+/// getter with no annotation is TS7033 and a bare `p;` member is TS7008,
+/// two different rules, the second of which already fires.
+///
+/// The test is on whether an annotation was WRITTEN, not on the resolved
+/// type: `foo(n: string): any` is accepted by tsc while `foo(n: string)`
+/// is the error, and the member parsers default a missing annotation to
+/// `Void` or `Any` so the two are indistinguishable afterwards.
+fn Parser::record_implicit_any_member_return(
+  self : Parser,
+  name : String,
+  had_return_annotation : Bool,
+) -> Unit {
+  if not(self.no_implicit_any) || had_return_annotation {
+    return
+  }
+  let what = if name == "<call>" {
+    "call signature"
+  } else if name == "<new>" {
+    "construct signature"
+  } else {
+    "`" + name + "`"
+  }
+  self.grammar_misuses.push(
+    "<noimplicitany>\{what}, which lacks a return-type annotation, implicitly has an `any` return type",
+  )
+}
+
+///|
+/// TS2371: "A parameter initializer is only allowed in a function or
+/// constructor implementation."
+///
+/// The rule is about the BODY and nothing else, which is what makes it
+/// decidable at parse time — every bodiless position was probed and all of
+/// them report: a class-method or constructor overload signature, an
+/// `abstract` member, a `declare class` member, an `interface` method, an
+/// object-type member, a function TYPE (`type F = (a = 1) => void`), and a
+/// bodiless `declare function` / overload signature. The legal spellings
+/// are the two the message names — a function, method or constructor
+/// IMPLEMENTATION — plus an arrow, whose body is the thing after the `=>`.
+///
+/// It lived at the two bodiless exits of `parse_function_decl` as a local
+/// function, so the CLASS member path had nothing: `class C { foo(a = 4);
+/// foo(a, b) {} }` parsed clean. Hoisted here so there is one recorder and
+/// no site left to forget. The `interface` path (`parse_interface_body`)
+/// deliberately still emits its own: it reports per PARAMETER through
+/// `interface_member_modifier_misuses` with a `<param-init>` sentinel, so
+/// its message can name the member and the parameter, and merging the two
+/// would trade that message for a shared channel it does not need.
+///
+/// One message per signature, not per parameter — `f(a = 1, b = 2);` is
+/// one mistake, and tsc reports each occurrence but the conformance
+/// verdict is per file either way.
+fn Parser::record_bodiless_param_initializers(
+  self : Parser,
+  params : Array[@ast.TsParam],
+) -> Unit {
+  for param in params {
+    if param.default is Some(_) {
+      self.grammar_misuses.push(
+        "a parameter initializer is only allowed in a function or constructor implementation",
+      )
+      break
+    }
+  }
+}
+
+///|
 // / parameter
 fn Parser::parse_param(self : Parser) -> @ast.TsParam raise ParseError {
   self.skip_param_decorators()
@@ -551,22 +680,6 @@ pub fn Parser::parse_function(self : Parser) -> @ast.TsFunc raise ParseError {
     }
   }
 
-  // TS2371: a parameter initializer on a *bodiless* signature (overload /
-  // stray declaration) -- initializers belong to implementations only.
-  fn record_signature_param_initializer(
-    p : Parser,
-    ps : Array[@ast.TsParam],
-  ) -> Unit {
-    for param in ps {
-      if param.default is Some(_) {
-        p.grammar_misuses.push(
-          "a parameter initializer is only allowed in a function or constructor implementation",
-        )
-        break
-      }
-    }
-  }
-
   // TS1221 / overload-signature rule: a bodiless `function*` is always an
   // error — generators are not allowed in ambient contexts, and an
   // overload signature cannot be declared as a generator. Only the
@@ -581,7 +694,7 @@ pub fn Parser::parse_function(self : Parser) -> @ast.TsFunc raise ParseError {
 
   if self.check(Semicolon) {
     record_implicit_any_return(self, name)
-    record_signature_param_initializer(self, params)
+    self.record_bodiless_param_initializers(params)
     record_bodiless_generator(self, name)
     // No body: an overload signature or an ambient declaration. Both
     // are type-only, and the caller drops the statement.
@@ -601,7 +714,7 @@ pub fn Parser::parse_function(self : Parser) -> @ast.TsFunc raise ParseError {
   }
   if !self.check(LBrace) {
     record_implicit_any_return(self, name)
-    record_signature_param_initializer(self, params)
+    self.record_bodiless_param_initializers(params)
     record_bodiless_generator(self, name)
     self.last_function_bodiless = true
     return {
@@ -1578,6 +1691,12 @@ pub fn Parser::parse_interface(
   let method_type_param_bounds : Array[(String, Array[(String, @ast.TsType)])] = []
   let internal_members : Array[String] = []
   let deprecated_members : Array[String] = []
+  // TS2386 support: the `?` of the first METHOD signature seen for each
+  // name in THIS body. A later signature of the same name that disagrees
+  // is the error — `m?(x: number): number; m(s: string): string`. Only
+  // methods participate: two same-named PROPERTIES are a duplicate
+  // identifier (TS2300 / TS2717), a different error that already fires.
+  let method_sig_optional : Map[String, (Bool, Bool)] = {}
   while !self.check(RBrace) && !self.check(Eof) {
     // A JSDoc block directly above the member attaches to its first
     // token (which may be a `readonly` / accessibility modifier, so the
@@ -1955,6 +2074,14 @@ pub fn Parser::parse_interface(
     // Method signature: name(...): T or name<T>(...): U
     if self.check(LParen) {
       let _ = self.advance()
+      // TS2386: "Overload signatures must all be optional or required."
+      // Probed — an object TYPE, an interface and a class all report when
+      // two same-named method signatures disagree on `?`, and both-optional
+      // / both-required / different-names are all accepted. Purely about
+      // the `?`, so no type is consulted.
+      self.record_overload_optionality(
+        method_sig_optional, field_name, field_name, is_optional,
+      )
       let method_params = self.parse_params()
       let _ = self.expect(RParen)
       // TS2371: a parameter initializer (`x = 1`) is only allowed in an
@@ -1969,11 +2096,19 @@ pub fn Parser::parse_interface(
         }
       }
       // Return type
-      let return_type = if self.check(Colon) {
+      let had_return_annotation = self.check(Colon)
+      let return_type = if had_return_annotation {
         let _ = self.advance()
         self.parse_type()
       } else {
         @ast.TsType::Void
+      }
+      // TS7010 / TS7013 / TS7020: an interface member signature with no
+      // return annotation. Accessors get TS7033, a different rule.
+      if accessor_kind is None {
+        self.record_implicit_any_member_return(
+          field_name, had_return_annotation,
+        )
       }
       let param_types : Array[@ast.TsType] = []
       for param in method_params {
@@ -3025,6 +3160,8 @@ fn Parser::parse_declare_class(
   let static_index_signatures : Array[(@ast.TsType, @ast.TsType)] = []
   let static_blocks : Array[@ast.TsBlock] = []
   let declare_override_names : Array[String] = []
+  // TS2386 support: `(first_optional, already_reported)` per member key.
+  let declare_method_sig_optional : Map[String, (Bool, Bool)] = {}
   let mut constructor_params : Array[(String, @ast.TsType)]? = None
   let mut saw_public_constructor = false
   let mut saw_nonpublic_constructor = false
@@ -3154,7 +3291,7 @@ fn Parser::parse_declare_class(
       }
       None => ()
     }
-    let _ = self.match_(Question)
+    let member_is_optional = self.match_(Question)
     // Definite-assignment assertion (`foo!: T`) on a class field. Also
     // tolerate a stray `!` after a method name even though that is not
     // standard syntax, mirroring how the runtime class parser handles it.
@@ -3171,8 +3308,32 @@ fn Parser::parse_declare_class(
       )
     }
     if self.check(LParen) {
+      // TS2386, fourth site. `declare class` has its own member parser, so
+      // the rule written for the runtime class body, the interface and the
+      // object type literal was missing from exactly the declaration kind
+      // a `.d.ts` is made of. Every member here is bodiless, so unlike the
+      // runtime class site there is no implementation to record as
+      // required.
+      match member_name {
+        Some(n) if accessor_kind is None && n != "constructor" =>
+          self.record_overload_optionality(
+            declare_method_sig_optional,
+            (if is_static { "s:" } else { "i:" }) + n,
+            n,
+            member_is_optional,
+          )
+        _ => ()
+      }
       let params = self.parse_declare_signature_params()
-      let return_type = if self.check(Colon) {
+      let had_return_annotation = self.check(Colon)
+      // TS7010, fourth site: every `declare class` member is bodiless, so
+      // a missing return annotation always means an implicit `any`.
+      match member_name {
+        Some(n) if accessor_kind is None && n != "constructor" =>
+          self.record_implicit_any_member_return(n, had_return_annotation)
+        _ => ()
+      }
+      let return_type = if had_return_annotation {
         let _ = self.advance()
         self.parse_type()
       } else {
@@ -3330,6 +3491,7 @@ fn Parser::parse_declare_class(
     static_index_signatures,
     is_abstract,
     is_constructible,
+    is_local: false,
     decorators: self.take_pending_decorators(),
     is_declare: true,
     private_members,

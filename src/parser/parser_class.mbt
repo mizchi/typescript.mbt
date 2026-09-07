@@ -5,6 +5,74 @@ priv enum ClassKey {
 }
 
 ///|
+/// TS2394 ("This overload signature is not compatible with its
+/// implementation signature") — the ARITY half, which needs no
+/// assignability and so is decidable in the parser.
+///
+/// The rule is one-directional, and the message text does not say which
+/// direction. Probed against the real compiler, cell by cell:
+///
+///   m(); m(a) {}                  TS2394   impl needs an argument the
+///                                          signature can never supply
+///   m(a); m() {}                  legal    a shorter implementation is
+///   m(a, b); m(a) {}              legal    assignable to a longer signature
+///   m(); m(a?) {}                 legal
+///   m(); m(a = 1) {}              legal
+///   m(); m(...a: any[]) {}        legal
+///   m(a, b); m(a, b?) {}          legal
+///   m(a: string); m(a: number) {} TS2394   (a TYPE mismatch — abstained
+///                                          on here, so a MISS)
+///
+/// So the only decidable error is `signature_max_args < impl_required_arity`.
+/// Reading the message as "the two must agree" would flag four of those
+/// legal rows.
+///
+/// The largest number of arguments a bodiless overload SIGNATURE can
+/// supply, or `-1` for unbounded (it has a rest parameter, so no
+/// implementation arity can be out of its reach). A `this` parameter is a
+/// type annotation, not an argument, and is excluded from both counts —
+/// `m(this: C): void; m(this: C, a: number) {}` is TS2394 for the `a`.
+fn signature_max_args(params : Array[@ast.TsParam]) -> Int {
+  let mut n = 0
+  for p in params {
+    if p.is_rest {
+      return -1
+    }
+    if p.name == "this" {
+      continue
+    }
+    n = n + 1
+  }
+  n
+}
+
+///|
+/// The number of arguments an IMPLEMENTATION cannot do without: the
+/// leading parameters that are neither optional (`x?`), defaulted
+/// (`x = e`) nor rest. A required parameter cannot legally follow an
+/// optional one (TS1016), so stopping at the first omittable one is
+/// equivalent to counting them all and is the conservative reading if
+/// that rule is ever violated — a LOWER required count only ever silences
+/// the check. A parameter property (`constructor(private a: number)`) is
+/// an ordinary required parameter and is counted.
+fn impl_required_arity(params : Array[@ast.TsParam]) -> Int {
+  let mut n = 0
+  for p in params {
+    if p.is_rest {
+      break
+    }
+    if p.name == "this" {
+      continue
+    }
+    if p.is_optional || p.default is Some(_) {
+      break
+    }
+    n = n + 1
+  }
+  n
+}
+
+///|
 priv enum ClassElement {
   Method(Bool, ClassKey, String?, @ast.TsFunc)
   // `Field(is_static, key, type, init, is_readonly, has_definite_assertion)`
@@ -1052,6 +1120,7 @@ fn build_runtime_class_decl(
     static_index_signatures,
     is_abstract,
     is_constructible: !is_abstract,
+    is_local: false,
     // Decorators on runtime classes are attached by the caller via
     // `Parser::take_pending_decorators` after build returns; the
     // builder is parser-agnostic so it leaves the slot empty.
@@ -1089,6 +1158,66 @@ fn Parser::take_last_runtime_class_decl(self : Parser) -> @ast.TsClassDecl? {
   let result = self.last_runtime_class_decl
   self.last_runtime_class_decl = None
   result
+}
+
+///|
+/// Collect the class just parsed as a LOCAL one — declared in a function
+/// body, a block or an `if` branch rather than at module top level.
+///
+/// The module-level dispatcher takes `last_runtime_class_decl` right after
+/// parsing, and nothing else did, so a class one scope in was recorded
+/// nowhere a checker rule could read: TS2420 ("class does not implement
+/// interface"), TS2415 / TS2417 (accessibility and static-side
+/// compatibility) and TS2564 (definite assignment) all fire at module top
+/// level and none of them fired inside a function. Batch DN's TS2394 does,
+/// because it lives in the parser and never needed the list.
+///
+/// Taking the stash here also clears it, which is a small fix of its own:
+/// it used to be left dirty after a nested class, where only the next
+/// module-level class parse happened to overwrite it.
+fn Parser::record_local_class(self : Parser) -> Unit {
+  match self.take_last_runtime_class_decl() {
+    Some(decl) => self.collected_local_classes.push({ ..decl, is_local: true })
+    None => ()
+  }
+}
+
+///|
+/// Collect a class EXPRESSION (`const C = class { … }`) as a local class.
+///
+/// A class expression is never a top-level declaration — the binding
+/// belongs to the surrounding `const C = …`, not to the class — so this is
+/// unconditionally local and needs nothing from the six callers of
+/// `parse_class_stub`. Without it the class-shape rules were blind to the
+/// expression form: measured, TS2420 (implements), TS2415 (extends
+/// accessibility) and TS2564 (definite assignment) all fire on a class
+/// DECLARATION, on `declare class` and on a namespace-scoped class, and
+/// on `const C = class …` not one of them did.
+///
+/// Called from BOTH of `parse_class_stub`'s exits, which is the point:
+/// the native path is taken only when there is an `extends` clause, and a
+/// base-less class expression falls through to the desugar below it.
+/// Recording at the first exit alone bought exactly the one rule that
+/// needs a base — TS2415 fired and the other two stayed silent, which is
+/// how the split was found.
+///
+/// An anonymous class expression gets a synthetic, per-occurrence name
+/// (the base-less path already calls it `<class>`). Per-occurrence rather
+/// than one shared spelling on purpose: the checker's merge skips a
+/// repeated name, so a shared one would check only the FIRST anonymous
+/// class in a file, and a file with several is the normal case (mixins).
+/// Angle brackets are not identifier characters, so a synthetic name can
+/// never collide with a declared one.
+fn Parser::record_local_class_expr(
+  self : Parser,
+  decl : @ast.TsClassDecl,
+) -> Unit {
+  let name = if decl.name == "" || decl.name == "<class>" {
+    "<class expression \{self.collected_local_classes.length() + 1}>"
+  } else {
+    decl.name
+  }
+  self.collected_local_classes.push({ ..decl, name, is_local: true })
 }
 
 ///|
@@ -2197,6 +2326,19 @@ fn Parser::parse_class_body(
   // the `TsFunc.body` blocker this repo records for TS2393 / TS2394.
   // The parser has `has_body_block` and does not need to guess.
   let bodied_method_keys : Map[String, Bool] = {}
+  // TS2394 support: for each member key, the largest argument count each
+  // BODILESS overload signature of it can supply (`-1` = unbounded, i.e.
+  // the signature has a rest parameter). Compared against the
+  // IMPLEMENTATION's required arity when that arrives — see
+  // `signature_max_args` / `impl_required_arity` for why only that one
+  // direction is an error.
+  let sig_max_args : Map[String, Array[Int]] = {}
+  // TS2386 support: the `?`-ness of the first declaration of each member
+  // key in this class body. Unlike the interface / object-type sites, the
+  // IMPLEMENTATION participates — a bodied method can never be optional,
+  // so probing `m?(x); m?(s); m(v) { }` reports on BOTH signatures, and
+  // recording only the bodiless ones would accept it.
+  let method_sig_optional : Map[String, (Bool, Bool)] = {}
   let mut ctor : @ast.TsFunc? = None
   // Count constructor *implementations* (a `constructor(...) { ... }` with a
   // real body). Two or more is TS2392 ("Multiple constructor implementations
@@ -2934,13 +3076,25 @@ fn Parser::parse_class_body(
       // overload signature). Used below to count constructor implementations
       // for TS2392.
       let has_body_block = not(consumed_semi) && self.check(LBrace)
+      // TS2371: a parameter initializer belongs to an IMPLEMENTATION, so a
+      // bodiless class member cannot carry one — an overload signature
+      // (`foo(a = 4);`), an `abstract` member, and a `declare class`
+      // member are all the same error, which is why the test is
+      // `has_body_block` and not the modifiers. The rule already existed
+      // for bodiless FUNCTION declarations and for interface members and
+      // had nothing here, so `class C { foo(a = 4); foo(a, b) {} }` parsed
+      // clean; `record_bodiless_param_initializers` is now the one
+      // recorder for both.
+      if not(has_body_block) {
+        self.record_bodiless_param_initializers(params)
+      }
       // TS2393 ("Duplicate function implementation"): two methods of one
       // name in one class body, both with a body
       // (parserMemberFunctionDeclarationAmbiguities1, whose `public()`
       // and `public public()` are the same member spelled twice).
       // Overloads legally repeat a name, which is exactly why the test is
       // on the BODY rather than the name.
-      if has_body_block && method_name != "<computed>" {
+      if method_name != "<computed>" {
         let mkey = (if is_static { "s:" } else { "i:" }) +
           (match accessor_kind {
             Some(k) => k
@@ -2948,12 +3102,54 @@ fn Parser::parse_class_body(
           }) +
           ":" +
           method_name
-        if bodied_method_keys.get(mkey) is Some(_) {
-          self.grammar_misuses.push(
-            "duplicate function implementation: `" + method_name + "`",
+        // TS2386: "Overload signatures must all be optional or required."
+        // An accessor and a `constructor` cannot carry `?` at all, so only
+        // plain methods participate. Unlike the interface / object-type
+        // sites, a bodied IMPLEMENTATION is recorded too, as REQUIRED —
+        // that is what makes `m?(x); m?(s); m(v) { }` the error tsc
+        // reports on both of its signatures.
+        if accessor_kind is None && method_name != "constructor" {
+          self.record_overload_optionality(
+            method_sig_optional,
+            mkey,
+            method_name,
+            is_optional && not(has_body_block),
           )
+        }
+        if has_body_block {
+          // TS2393 ("Duplicate function implementation").
+          if bodied_method_keys.get(mkey) is Some(_) {
+            self.grammar_misuses.push(
+              "duplicate function implementation: `" + method_name + "`",
+            )
+          } else {
+            bodied_method_keys[mkey] = true
+          }
+          // TS2394: an overload signature that cannot reach its own
+          // implementation. Signatures precede the implementation in
+          // every legal spelling, so by the time the body arrives every
+          // signature of this member has been recorded; an
+          // implementation written FIRST records nothing and costs a
+          // MISS rather than a wrong answer.
+          if sig_max_args.get(mkey) is Some(maxes) {
+            let need = impl_required_arity(params)
+            for m in maxes {
+              if m >= 0 && m < need {
+                self.grammar_misuses.push(
+                  "this overload signature is not compatible with its implementation signature: `" +
+                  method_name +
+                  "`",
+                )
+                break
+              }
+            }
+          }
         } else {
-          bodied_method_keys[mkey] = true
+          let m = signature_max_args(params)
+          match sig_max_args.get(mkey) {
+            Some(arr) => arr.push(m)
+            None => sig_max_args[mkey] = [m]
+          }
         }
       }
       // TS1249: a decorator can only decorate a method IMPLEMENTATION,
@@ -2973,11 +3169,31 @@ fn Parser::parse_class_body(
           "a decorator can only decorate a method implementation, not an overload",
         )
       }
-      // (Method-level TS7010 is intentionally not recorded: a bodiless
-      // method with no implementation at all already reports TS2391, and
-      // tsc does not flag an overload signature whose implementation
-      // carries the return annotation.)
-      let _ = had_return_annotation
+      // TS7010 (`noImplicitAny`): a BODILESS class member with no
+      // return-type annotation implicitly returns `any` — an overload
+      // signature, an `abstract` member and a `declare class` member
+      // alike. The IMPLEMENTATION is exempt because it infers from its
+      // body, which is the whole content of the test.
+      //
+      // The comment that used to sit here abstained and gave a reason
+      // that is the inverse of the truth: it said "tsc does not flag an
+      // overload signature whose implementation carries the return
+      // annotation", and probed, `m(); m(x: number); m(x?: number): void
+      // { }` reports on BOTH signatures while
+      // `m(): void; m(x: number): void; m(x?: number) { }` — annotated
+      // signatures, unannotated implementation — is ACCEPTED. The
+      // exemption belongs to the body, not to the set.
+      //
+      // Accessors are excluded (a getter with no annotation is TS7033, a
+      // different rule) and so is `constructor`, which has no return
+      // type to annotate.
+      if not(has_body_block) &&
+        accessor_kind is None &&
+        method_name != "constructor" {
+        self.record_implicit_any_member_return(
+          method_name, had_return_annotation,
+        )
+      }
       // TS1221 / overload-signature rule: a bodiless `*method()` is
       // always an error — generators are not allowed in ambient
       // contexts, and an overload signature cannot be a generator.
@@ -3101,6 +3317,43 @@ fn Parser::parse_class_body(
         is_generator,
         is_async: is_async_method,
       }
+      // TS7022, the INDIRECT form. A `for (var v of new C)` head takes
+      // its element type from C's iteration protocol, so an un-annotated
+      // `next()` / `[Symbol.iterator]()` that RETURNS `v` is a genuine
+      // inference cycle. Recorded here, where the body and the
+      // return-annotation fact are both in hand; joined against the loop
+      // head in `record_for_head_binding_misuses`.
+      //
+      // Only the two protocol methods, probed: a `helper()` returning the
+      // loop variable is ACCEPTED, because nothing consults its return
+      // type. An annotated return (`next(): any`) is ACCEPTED too, which
+      // is why this needs `had_return_annotation` rather than
+      // `return_type is Any` — the AST cannot tell an absent annotation
+      // from an explicit `: any`. A parameter of the same name shadows
+      // the loop variable, so those methods are skipped (tsc gives that
+      // shape TS2490 / TS2763, a different pair of codes).
+      if has_body_block &&
+        not(is_static) &&
+        accessor_kind is None &&
+        not(had_return_annotation) &&
+        (method_name == "next" || method_name == "@@iterator") {
+        let names : Array[String] = []
+        collect_method_return_var_names(func.body, names)
+        // A name the method itself BINDS — a parameter, or any local
+        // declared anywhere in the body — is the method's own, not the
+        // loop variable. `collect_declared_names_in_block` records why
+        // that set is deliberately over-approximated.
+        let bound : Array[String] = []
+        for p in func.params {
+          bound.push(p.name)
+        }
+        self.collect_declared_names_in_block(func.body, bound)
+        for n in names {
+          if not(bound.contains(n)) {
+            self.protocol_return_names.push(n)
+          }
+        }
+      }
       if accessor_kind is None && key is Name("constructor") && !is_static {
         if has_body_block {
           ctor_impl_count += 1
@@ -3177,6 +3430,16 @@ fn Parser::parse_class_body(
         self.parse_type()
       } else {
         @ast.TsType::Any
+      }
+      // TS2729 support, recorded BEFORE the type is wrapped, because
+      // wrapping is exactly what destroys the fact: `x?: T` becomes
+      // `T | undefined`, which is also what `x: T | undefined` is, and
+      // tsc treats those two differently — the optional field is exempt
+      // from the used-before-initialization check and the union-typed one
+      // is not. Instance fields only; a static field is read as `C.x`
+      // and goes through the separate static-use-before-def channel.
+      if is_optional && not(is_static) {
+        self.optional_member_names.push(class_key_name(key))
       }
       let field_type = if is_optional {
         wrap_optional_ts_type(field_type)
@@ -3420,6 +3683,8 @@ fn Parser::parse_class_stub(self : Parser) -> @ast.TsExpr raise ParseError {
   let prev_brand = self.current_class_brand
   self.current_class_brand = Some(brand)
   let quoted_names_start = self.quoted_member_names.length()
+  let optional_names_start = self.optional_member_names.length()
+  let protocol_returns_start = self.protocol_return_names.length()
   let override_names_start = self.override_member_names.length()
   let (
     ctor_opt,
@@ -3461,6 +3726,23 @@ fn Parser::parse_class_stub(self : Parser) -> @ast.TsExpr raise ParseError {
   }
   for qn in quoted_names {
     expr_class_sentinels.push("<quoted-member:" + qn + ">")
+  }
+  // TS2729 support: an OPTIONAL instance field is exempt from the
+  // used-before-initialization check while `x: T | undefined` is not,
+  // and the parser wraps `x?: T` to that exact type — so the modifier
+  // rides its own sentinel.
+  while self.optional_member_names.length() > optional_names_start {
+    match self.optional_member_names.pop() {
+      Some(n) => expr_class_sentinels.push("<optional-member:" + n + ">")
+      None => ()
+    }
+  }
+  // A class EXPRESSION contributes no protocol-return names — nobody
+  // writes `for (var v of new (class { … }))` — but the accumulator must
+  // still be drained here, or its entries would leak into whichever
+  // class DECLARATION drains next.
+  while self.protocol_return_names.length() > protocol_returns_start {
+    let _ = self.protocol_return_names.pop()
   }
   while self.override_member_names.length() > override_names_start {
     match self.override_member_names.pop() {
@@ -3669,6 +3951,7 @@ fn Parser::parse_class_stub(self : Parser) -> @ast.TsExpr raise ParseError {
         static_field_inits,
         instance_field_inits,
       }
+      self.record_local_class_expr(decorated_with_statics)
       return NativeClassExpr(decorated_with_statics, ctor_func)
     }
     None => ()
@@ -3722,6 +4005,7 @@ fn Parser::parse_class_stub(self : Parser) -> @ast.TsExpr raise ParseError {
     static_index_signatures: runtime_decl.static_index_signatures,
     is_abstract: runtime_decl.is_abstract,
     is_constructible: runtime_decl.is_constructible,
+    is_local: false,
     decorators: {
       let _ = self.take_pending_decorators()
       class_decorators
@@ -3733,6 +4017,7 @@ fn Parser::parse_class_stub(self : Parser) -> @ast.TsExpr raise ParseError {
     duplicate_member_names: runtime_decl.duplicate_member_names,
   }
   self.record_runtime_class_decl(decorated)
+  self.record_local_class_expr(decorated)
   let instance_assigns : Array[@ast.TsStmt] = []
   let has_instance_private = has_instance_private_elements(elements)
   let has_static_private = has_static_private_elements(elements)
@@ -4232,6 +4517,8 @@ fn Parser::parse_class_decl_with_abstract(
   let prev_brand = self.current_class_brand
   self.current_class_brand = Some(brand)
   let quoted_names_start = self.quoted_member_names.length()
+  let optional_names_start = self.optional_member_names.length()
+  let protocol_returns_start = self.protocol_return_names.length()
   let override_names_start = self.override_member_names.length()
   let (
     ctor_opt,
@@ -4267,6 +4554,37 @@ fn Parser::parse_class_decl_with_abstract(
       Some(n) =>
         runtime_decl.duplicate_member_names.push("<quoted-member:" + n + ">")
       None => ()
+    }
+  }
+  // TS2729 support: an OPTIONAL instance field is exempt from the
+  // used-before-initialization check while `x: T | undefined` is not,
+  // and the parser wraps `x?: T` to that exact type — so the modifier
+  // rides its own sentinel.
+  while self.optional_member_names.length() > optional_names_start {
+    match self.optional_member_names.pop() {
+      Some(n) =>
+        runtime_decl.duplicate_member_names.push("<optional-member:" + n + ">")
+      None => ()
+    }
+  }
+  // TS7022 (indirect): key this class's protocol-return names by the
+  // class name so the `for…of` head rule can join against `new C`.
+  {
+    let pr : Array[String] = []
+    while self.protocol_return_names.length() > protocol_returns_start {
+      match self.protocol_return_names.pop() {
+        Some(n) => pr.push(n)
+        None => ()
+      }
+    }
+    if pr.length() > 0 && name != "" {
+      match self.protocol_returns_by_class.get(name) {
+        Some(existing) =>
+          for n in pr {
+            existing.push(n)
+          }
+        None => self.protocol_returns_by_class[name] = pr
+      }
     }
   }
   while self.override_member_names.length() > override_names_start {

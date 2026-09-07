@@ -326,19 +326,255 @@ fn Parser::record_pattern_duplicate_bindings(
 }
 
 ///|
+/// Every name BOUND anywhere inside one method body, for TS7022's
+/// indirect form. A returned name that is also declared here is the
+/// method's own local, not the loop variable, so the cycle does not
+/// exist.
+///
+/// This over-approximates on purpose: a `let v` in a nested block, or a
+/// nested function's parameter, shadows only within its own scope, and
+/// counting it anyway skips a method that might genuinely have been
+/// reportable. That loses a finding; the opposite direction is a false
+/// positive on legal code, which is what `class C { next() { let v = {
+/// value: 1, done: false }; return v } }` beside `for (var v of new C)`
+/// would be — TS7-ACCEPTED, and invisible to the conformance gate
+/// because no corpus file has the shape.
+fn Parser::collect_declared_names_in_block(
+  self : Parser,
+  block : @ast.TsBlock,
+  out : Array[String],
+) -> Unit {
+  fn func(f : @ast.TsFunc) -> Unit {
+    for p in f.params {
+      out.push(p.name)
+    }
+    self.collect_declared_names_in_block(f.body, out)
+  }
+
+  fn expr(e : @ast.TsExpr) -> Unit {
+    match e {
+      @ast.TsExpr::FuncExpr(f) => func(f)
+      @ast.TsExpr::ArrowFunc(params, _, body, _) => {
+        for p in params {
+          out.push(p.name)
+        }
+        match body {
+          @ast.TsArrowBody::ArrowBlock(b) =>
+            self.collect_declared_names_in_block(b, out)
+          @ast.TsArrowBody::ArrowExpr(inner) => expr(inner)
+        }
+      }
+      _ => ()
+    }
+  }
+
+  fn stmt(st : @ast.TsStmt) -> Unit {
+    match st {
+      @ast.TsStmt::Let(b, _, init)
+      | @ast.TsStmt::Const(b, _, init)
+      | @ast.TsStmt::Var(b, _, init) => {
+        self.collect_binding_names(b, out)
+        expr(init)
+      }
+      @ast.TsStmt::Expr(e) | @ast.TsStmt::Return(Some(e)) => expr(e)
+      @ast.TsStmt::Block(b) => self.collect_declared_names_in_block(b, out)
+      @ast.TsStmt::If(_, t, e) => {
+        self.collect_declared_names_in_block(t, out)
+        match e {
+          Some(b) => self.collect_declared_names_in_block(b, out)
+          None => ()
+        }
+      }
+      @ast.TsStmt::While(_, b)
+      | @ast.TsStmt::DoWhile(_, b)
+      | @ast.TsStmt::With(_, b) => self.collect_declared_names_in_block(b, out)
+      @ast.TsStmt::For(init, _, _, b) => {
+        match init {
+          Some(inner) => stmt(inner)
+          None => ()
+        }
+        self.collect_declared_names_in_block(b, out)
+      }
+      @ast.TsStmt::ForOf(_, hb, _, _, b)
+      | @ast.TsStmt::ForAwaitOf(_, hb, _, _, b)
+      | @ast.TsStmt::ForIn(_, hb, _, _, b) => {
+        self.collect_binding_names(hb, out)
+        self.collect_declared_names_in_block(b, out)
+      }
+      @ast.TsStmt::Try(t, cb, c, f) => {
+        self.collect_declared_names_in_block(t, out)
+        match cb {
+          Some(b) => self.collect_binding_names(b, out)
+          None => ()
+        }
+        match c {
+          Some(b) => self.collect_declared_names_in_block(b, out)
+          None => ()
+        }
+        match f {
+          Some(b) => self.collect_declared_names_in_block(b, out)
+          None => ()
+        }
+      }
+      @ast.TsStmt::Switch(_, cases) =>
+        for c in cases {
+          self.collect_declared_names_in_block(c.body, out)
+        }
+      @ast.TsStmt::Label(_, inner) => stmt(inner)
+      _ => ()
+    }
+  }
+
+  for st in block.stmts {
+    stmt(st)
+  }
+}
+
+///|
+/// Bare `Var` names mentioned by the `return` expressions of one method
+/// body, for TS7022's INDIRECT form. Descends into blocks, branches and
+/// loops — a `return` there is still this method's — and stops at a
+/// nested function body, whose `return` belongs to that function.
+///
+/// The mention test itself is `collect_iterable_var_names`, deliberately:
+/// this is the same question ("does this expression evaluate a reference
+/// to NAME") that the direct form asks, and a second walk would be the
+/// applied-in-some-places family in its purest form. It does mean
+/// `return (() => v)()` is a MISS — tsc reports that one, because the
+/// IIFE's return type feeds back — which loses a finding rather than
+/// inventing one.
+fn collect_method_return_var_names(
+  block : @ast.TsBlock,
+  out : Array[String],
+) -> Unit {
+  fn stmt(st : @ast.TsStmt) -> Unit {
+    match st {
+      @ast.TsStmt::Return(Some(e)) => collect_iterable_var_names(e, out)
+      @ast.TsStmt::Block(b) => collect_method_return_var_names(b, out)
+      @ast.TsStmt::If(_, t, e) => {
+        collect_method_return_var_names(t, out)
+        match e {
+          Some(b) => collect_method_return_var_names(b, out)
+          None => ()
+        }
+      }
+      @ast.TsStmt::While(_, b)
+      | @ast.TsStmt::DoWhile(_, b)
+      | @ast.TsStmt::With(_, b)
+      | @ast.TsStmt::For(_, _, _, b)
+      | @ast.TsStmt::ForOf(_, _, _, _, b)
+      | @ast.TsStmt::ForAwaitOf(_, _, _, _, b)
+      | @ast.TsStmt::ForIn(_, _, _, _, b) =>
+        collect_method_return_var_names(b, out)
+      @ast.TsStmt::Try(t, _, c, f) => {
+        collect_method_return_var_names(t, out)
+        match c {
+          Some(b) => collect_method_return_var_names(b, out)
+          None => ()
+        }
+        match f {
+          Some(b) => collect_method_return_var_names(b, out)
+          None => ()
+        }
+      }
+      @ast.TsStmt::Switch(_, cases) =>
+        for c in cases {
+          collect_method_return_var_names(c.body, out)
+        }
+      @ast.TsStmt::Label(_, inner) => stmt(inner)
+      _ => ()
+    }
+  }
+
+  for st in block.stmts {
+    stmt(st)
+  }
+}
+
+///|
+/// TS7022 / TS2448 at the DECLARATION site — the sibling of the `for…of`
+/// head rule below, which had the shape and not this spelling, so
+/// `let x = x` was silent while `for (let x of x)` was reported.
+///
+/// `let x = x`, `const x = [x]`, `let x = typeof x` and
+/// `let x = x ? 1 : 2` are all reads inside the binding's own temporal
+/// dead zone. Two codes, one condition, and each is gated on the fact it
+/// actually needs:
+///
+///   - TS2448 ("block-scoped variable 'x' used before its declaration")
+///     applies to `let` / `const` whatever the annotation says —
+///     `let x: number = x` is still TS2448 — because the TDZ is about
+///     time and not about types.
+///   - TS7022 ("implicitly has type 'any' … referenced … in its own
+///     initializer") needs the annotation to be ABSENT, since an
+///     annotation breaks the inference cycle. That is the only thing
+///     `var x = x` gets (a `var` has no TDZ), so the `var` arm reports
+///     only when unannotated and under `noImplicitAny`.
+///
+/// Only a flat `Ident` binding is read. A destructuring pattern is the
+/// same error in principle (`const [a] = [a]`) but its names come from a
+/// walk, and skipping it loses a finding rather than inventing one.
+fn Parser::record_self_referential_initializer(
+  self : Parser,
+  binding : @ast.TsBinding,
+  init : @ast.TsExpr,
+  kind : VarKind,
+  annotated : Bool,
+) -> Unit {
+  let name = match binding {
+    @ast.TsBinding::Ident(n) => n
+    _ => return
+  }
+  // `let x;` / `var x;` with no `=` at all: the parser substitutes this
+  // sentinel, and there is no initializer to be self-referential.
+  if init is Var("__ts_no_init__") {
+    return
+  }
+  let mentioned : Array[String] = []
+  collect_iterable_var_names(init, mentioned)
+  if not(mentioned.contains(name)) {
+    return
+  }
+  match kind {
+    VarKind::Let | VarKind::Const =>
+      self.grammar_misuses.push(
+        "block-scoped variable `\{name}` used before its declaration",
+      )
+    VarKind::Var =>
+      if self.no_implicit_any && not(annotated) {
+        self.grammar_misuses.push(
+          "<noimplicitany>`\{name}` implicitly has type `any` because it does not have a type annotation and is referenced in its own initializer",
+        )
+      }
+  }
+}
+
+///|
 /// Two rules about a `for…of` / `for…in` HEAD binding, both keyed on the
 /// loop variable's own name and needing no type inference:
 ///
 ///   - TS7022 ("'X' implicitly has type 'any' because it does not have a
 ///     type annotation and is referenced directly or indirectly in its own
-///     initializer"): `for (var v of v)`, `let v = [1]; for (let v of v)`.
-///     Only the DIRECT form is claimed — the head binds `v` and the
-///     iterable expression mentions `v`, so the type of `v` is inferred
-///     from `v`. The INDIRECT cases in the corpus (`for-of33` / `-34` /
-///     `-35`, where a class's un-annotated `next()` returns the loop
-///     variable) need an inference-cycle detector and abstain here.
-///     Requires no annotation on the head: `for (var v: any of v)` is
-///     legal, which is what `var_type` is read for.
+///     initializer"): `for (var v of v)`, `for (let v of [v])`,
+///     `for (let v of g(v))`. Only the DIRECT form is claimed — the head
+///     binds `v` and the iterable expression evaluates a reference to `v`,
+///     so the type of `v` is inferred from `v`. The INDIRECT cases in the
+///     corpus (`for-of33` / `-34` / `-35`, where a class's un-annotated
+///     `next()` returns the loop variable) need an inference-cycle
+///     detector and abstain here. Requires no annotation on the head:
+///     the annotation breaks the inference cycle, so an annotated head is
+///     not TS7022 — and `var_type` alone CANNOT decide that, because an
+///     absent annotation and an explicit `: any` are the same
+///     `TsType::Any`. `head_annotated` is therefore threaded in from the
+///     parse site. The comment that used to sit here called
+///     `for (var v: any of v)` "legal", and probing it shows it is not:
+///     tsc gives it TS2483 ("the left-hand side of a for...of statement
+///     cannot use a type annotation") plus TS2502, two codes this rule
+///     does not claim. So the old behaviour was reporting the right file
+///     for the wrong reason, and abstaining costs a MISS rather than
+///     keeping a false positive.
+///     What counts as a reference is `collect_iterable_var_names`'
+///     business, and its own header records the probe that widened it.
 ///
 ///   - TS2481 ("Cannot initialize outer scoped variable 'X' in the same
 ///     scope as block scoped declaration 'X'"): `for (let v of []) { var v }`.
@@ -352,6 +588,7 @@ fn Parser::record_for_head_binding_misuses(
   kind : @ast.TsForOfKind,
   binding : @ast.TsBinding,
   var_type : @ast.TsType,
+  head_annotated : Bool,
   iterable : @ast.TsExpr,
   body : @ast.TsBlock,
 ) -> Unit {
@@ -373,7 +610,7 @@ fn Parser::record_for_head_binding_misuses(
   // it here made this the twentieth instance in the repo of a rule applied
   // at some of its sites, and the first one written by the same pass that
   // was cataloguing them.
-  if self.no_implicit_any && var_type is Any {
+  if self.no_implicit_any && var_type is Any && not(head_annotated) {
     let mentioned : Array[String] = []
     collect_iterable_var_names(iterable, mentioned)
     for n in names {
@@ -383,6 +620,50 @@ fn Parser::record_for_head_binding_misuses(
         )
         break
       }
+    }
+  }
+  // TS7022, the INDIRECT form: the loop's element type comes from the
+  // iterated class's iteration protocol, so an un-annotated `next()` /
+  // `[Symbol.iterator]()` of that class RETURNING the loop variable is a
+  // genuine inference cycle (`for-of33` / `-34` / `-35`).
+  //
+  // The corpus supplies its own negative controls, which is what makes
+  // this testable rather than a shape match on the target files:
+  // `for-of25` and `for-of26` are `-33` and `-34` with the returned name
+  // changed from the loop variable `v` to an unrelated `var x: any`, and
+  // both are TS7-ACCEPTED. The discriminator is the NAME.
+  //
+  // Restricted to a `var` head, an UNANNOTATED head, and a `new C`
+  // iterable. A `let` / `const` head puts the class body outside the
+  // loop's scope, so the method's `v` is undeclared and tsc gives TS2304
+  // instead; an annotated head breaks the inference cycle and gets
+  // TS2483 + TS2502 for the annotation itself; and a `C`-annotated
+  // BINDING as the iterable (`declare const c: C; for (var v of c)`) is
+  // the same error in tsc but needs the annotation resolved, which this
+  // site cannot do. Each loses a finding rather than inventing one.
+  if self.no_implicit_any &&
+    kind is @ast.TsForOfKind::Var &&
+    not(head_annotated) {
+    let iter_class = match iterable {
+      New(c, _) => Some(c)
+      NewExpr(Var(c), _) => Some(c)
+      _ => None
+    }
+    match iter_class {
+      Some(c) =>
+        match self.protocol_returns_by_class.get(c) {
+          Some(returned) =>
+            for n in names {
+              if returned.contains(n) {
+                self.grammar_misuses.push(
+                  "<noimplicitany>`\{n}` implicitly has type `any` because it does not have a type annotation and is referenced indirectly in its own initializer",
+                )
+                break
+              }
+            }
+          None => ()
+        }
+      None => ()
     }
   }
   // TS2481: a body-level `var` of the head's name.
@@ -403,16 +684,94 @@ fn Parser::record_for_head_binding_misuses(
 }
 
 ///|
-/// Bare `Var` names read by a `for…of` / `for…in` iterable expression, for
-/// the TS7022 self-reference test above. Deliberately shallow: only the
-/// spellings in which the loop variable's own name can be the thing being
-/// iterated. A name reached through a call or a property is not the
-/// iterable itself, so widening this would claim a cycle that is not one.
+/// Bare `Var` names an initializer expression READS, for the TS7022 /
+/// TS2448 self-reference test: a binding whose own initializer mentions
+/// the name being bound is read inside its own temporal dead zone.
+///
+/// This used to be a two-arm walk over `Var` and the type-cast wrappers,
+/// with a comment claiming that "a name reached through a call or a
+/// property is not the iterable itself, so widening this would claim a
+/// cycle that is not one". Probed, that is wrong in one direction and
+/// right in another, and the difference is not call-versus-property:
+///
+///   for (let v of [v])       TS7022 + TS2448
+///   for (let v of [1, v])    TS7022 + TS2448
+///   for (let v of g(v))      TS7022 + TS2448   (a call ARGUMENT counts)
+///   for (let v of [...xs, v]) TS7022 + TS2448
+///   for (let v of o.v)       legal   (a property NAME is not a reference)
+///   for (let v of [o2.v])    legal
+///   for (let v of [() => v]) legal   (the body runs later)
+///
+/// So ANY evaluated reference to the name counts, and the two exemptions
+/// are a property name — which the AST stores as a `String`, so it can
+/// never be reached as a `Var` — and a nested function / arrow / class
+/// BODY, where the read happens after the binding is initialized. That
+/// is why this walk descends everywhere EXCEPT those bodies. Same rule
+/// and same walk for a plain `let x = x`, which is the sibling site.
+///
+/// An expression form with no arm here loses a finding and cannot invent
+/// one.
 fn collect_iterable_var_names(e : @ast.TsExpr, out : Array[String]) -> Unit {
   match e {
     Var(n) => out.push(n)
-    As(inner, _) | Satisfies(inner, _) | NonNull(inner) | PureCall(inner) =>
-      collect_iterable_var_names(inner, out)
+    As(inner, _)
+    | Satisfies(inner, _)
+    | NonNull(inner)
+    | PureCall(inner)
+    | Spread(inner)
+    | UnaryOp(_, inner)
+    | Await(inner)
+    | YieldStar(inner)
+    | TypeArgs(_, inner)
+    | OptionalChain(inner)
+    | PropAccess(inner, _) => collect_iterable_var_names(inner, out)
+    BinOp(_, l, r) | Seq(l, r) | IndexAccess(l, r) => {
+      collect_iterable_var_names(l, out)
+      collect_iterable_var_names(r, out)
+    }
+    Cond(c, t, f) => {
+      collect_iterable_var_names(c, out)
+      collect_iterable_var_names(t, out)
+      collect_iterable_var_names(f, out)
+    }
+    Call(n, args) => {
+      out.push(n)
+      for a in args {
+        collect_iterable_var_names(a, out)
+      }
+    }
+    New(_, args) =>
+      for a in args {
+        collect_iterable_var_names(a, out)
+      }
+    CallExpr(callee, args) | NewExpr(callee, args) => {
+      collect_iterable_var_names(callee, out)
+      for a in args {
+        collect_iterable_var_names(a, out)
+      }
+    }
+    MethodCall(recv, _, args) => {
+      collect_iterable_var_names(recv, out)
+      for a in args {
+        collect_iterable_var_names(a, out)
+      }
+    }
+    ArrayLit(elems) =>
+      for el in elems {
+        collect_iterable_var_names(el, out)
+      }
+    // An object literal's KEY is a `String` in this AST, so only the
+    // value can be a reference — which is also exactly right, since
+    // `{ x: 1 }` is legal and the shorthand `{ x }` arrives as
+    // `("x", Var("x"))` and is not.
+    ObjectLit(entries) =>
+      for kv in entries {
+        collect_iterable_var_names(kv.1, out)
+      }
+    Yield(Some(inner)) => collect_iterable_var_names(inner, out)
+    // Stop: a nested function / arrow / class body reads the binding
+    // AFTER it is initialized, so `let x = function () { return x }` and
+    // `for (let v of [() => v])` are both legal.
     _ => ()
   }
 }

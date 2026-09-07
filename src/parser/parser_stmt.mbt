@@ -279,7 +279,30 @@ fn Parser::note_function_declaration(
   self : Parser,
   name : String,
   bodiless : Bool,
+  module_level : Bool,
 ) -> Unit {
+  // TS2394 support: `<fn-impl:NAME>` says this module declares a function
+  // IMPLEMENTATION of that name. `TsFunc.body` is not optional, so an
+  // overload SIGNATURE and an implementation are indistinguishable
+  // downstream — the blocker this repo records for TS2393 / TS2394 — and
+  // `bodiless` is exactly the missing fact, available here, at every one
+  // of the four sites that pushes a function declaration.
+  //
+  // `module_level` is true only at the two sites the module / namespace
+  // body loop owns, and the marker is pushed nowhere else. That matters
+  // because `grammar_misuses` is a FLAT, scope-blind channel: a nested
+  // `function f() { }` would otherwise record an implementation for a
+  // name that only exists inside another function's body, and the only
+  // consumer reads it against `module_.funcs`, which holds this body's
+  // OWN declarations. A nested overload set never reaches `funcs` at all,
+  // so the restriction gives up nothing.
+  //
+  // Ambient bodiless declarations are excluded for the same reason as
+  // below: in a `declare module` body a bodiless declaration asserts an
+  // implementation elsewhere and no local one exists to compare against.
+  if module_level && not(bodiless) && not(self.in_ambient_module) {
+    self.grammar_misuses.push("<fn-impl:\{name}>")
+  }
   if not(bodiless) || self.in_ambient_module {
     return
   }
@@ -414,10 +437,21 @@ pub fn Parser::parse_stmt(self : Parser) -> @ast.TsStmt raise ParseError {
       }
     Return => self.parse_return()
     Throw => self.parse_throw()
-    Class => self.parse_class_decl()
+    // A class declared as a STATEMENT — in a function body, a block, an
+    // `if` branch. The module-level dispatcher has its own `Class` branch
+    // and never reaches here, so this arm sees exactly the positions
+    // `TsModule.classes` cannot: `record_local_class` collects them for
+    // the checker's class rules, which were silent one scope in.
+    Class => {
+      let stmt = self.parse_class_decl()
+      self.record_local_class()
+      stmt
+    }
     Ident("abstract") if self.peek_at(1).kind == Class => {
       let _ = self.advance()
-      self.parse_class_decl_with_abstract(true)
+      let stmt = self.parse_class_decl_with_abstract(true)
+      self.record_local_class()
+      stmt
     }
     Interface => {
       // Erased at runtime, collected for the same reason type aliases
@@ -478,7 +512,11 @@ pub fn Parser::parse_stmt(self : Parser) -> @ast.TsStmt raise ParseError {
       self.in_async = true
       let func = self.parse_function()
       self.in_async = prev_async
-      self.note_function_declaration(func.name, self.last_function_bodiless)
+      self.note_function_declaration(
+        func.name,
+        self.last_function_bodiless,
+        false,
+      )
       if self.last_function_bodiless {
         Empty
       } else {
@@ -489,7 +527,11 @@ pub fn Parser::parse_stmt(self : Parser) -> @ast.TsStmt raise ParseError {
       // internalfunctiondefine: function name() { ... }
       // Let(name, Any, FuncExpr(func))
       let func = self.parse_function()
-      self.note_function_declaration(func.name, self.last_function_bodiless)
+      self.note_function_declaration(
+        func.name,
+        self.last_function_bodiless,
+        false,
+      )
       // A bodyless declaration is an overload signature or an ambient
       // `declare function`: type-only, and there can be several of them
       // above the one real implementation. Emitting each as
@@ -1329,6 +1371,13 @@ fn Parser::parse_for(self : Parser) -> @ast.TsStmt raise ParseError {
       _ => ()
     }
     let var_type = self.parse_var_decl_type()
+    // Read HERE, not at the recorder call below: the iterable expression
+    // and the loop body are parsed in between and either can contain a
+    // declaration whose own `parse_var_decl_type` overwrites the flag —
+    // the same hazard `parse_var_decl_item` records for the declaration
+    // site. `var_type is Any` cannot answer this on its own, because an
+    // ABSENT annotation and an explicit `: any` are the same `Any`.
+    let head_annotated = self.last_var_decl_annotated
     if self.check(Of) || self.check(In) {
       let is_in = self.check(In)
       if is_await && is_in {
@@ -1355,7 +1404,7 @@ fn Parser::parse_for(self : Parser) -> @ast.TsStmt raise ParseError {
       let body = self.parse_block_or_stmt_no_lexical()
       self.in_iteration = prev_iteration
       self.record_for_head_binding_misuses(
-        kind, binding, var_type, iterable, body,
+        kind, binding, var_type, head_annotated, iterable, body,
       )
       // Preserve the explicit type annotation on the loop binding when
       // present; `parse_var_decl_type` returns `Any` otherwise.
@@ -2190,6 +2239,7 @@ fn Parser::parse_var_decl_item(
   if not(annotated) {
     self.record_tuple_index_out_of_range(binding, init)
   }
+  self.record_self_referential_initializer(binding, init, kind, annotated)
   match kind {
     Var => @ast.TsStmt::Var(binding, type_, init)
     Let => @ast.TsStmt::Let(binding, type_, init)

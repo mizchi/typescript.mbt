@@ -221,6 +221,7 @@ fn empty_ts_module() -> @ast.TsModule {
     imports: [],
     values: [],
     classes: [],
+    local_classes: [],
     namespaces: [],
     enums: [],
     module_augmentations: [],
@@ -3714,7 +3715,11 @@ fn Parser::parse_module_with_seeded_const_values_internal(
       // is why `function data(): string; function next(): string;`
       // (parserModuleDeclaration10) stayed silent while the same pair
       // without return annotations was reported: two arms, one rule.
-      self.note_function_declaration(func.name, self.last_function_bodiless)
+      self.note_function_declaration(
+        func.name,
+        self.last_function_bodiless,
+        true,
+      )
       funcs.push(func)
     } else if (match self.peek().kind {
         Ident("async") =>
@@ -3738,7 +3743,11 @@ fn Parser::parse_module_with_seeded_const_values_internal(
       self.in_async = true
       let func = self.parse_function()
       self.in_async = prev_async
-      self.note_function_declaration(func.name, self.last_function_bodiless)
+      self.note_function_declaration(
+        func.name,
+        self.last_function_bodiless,
+        true,
+      )
       funcs.push(func)
     } else if self.check(Interface) {
       interfaces.push(self.parse_interface())
@@ -3992,6 +4001,7 @@ fn Parser::parse_module_with_seeded_const_values_internal(
     imports,
     values,
     classes,
+    local_classes: self.collected_local_classes,
     namespaces,
     enums,
     module_augmentations,

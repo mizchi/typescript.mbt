@@ -812,6 +812,17 @@ fn Parser::try_parse_object_type_with_members(self : Parser) -> @ast.TsType? {
   // on the same line. Recorded only on the success path so a speculative parse
   // that later falls back leaves no spurious diagnostic.
   let mut missing_separator = false
+  // TS2386 support: the `?`-ness of the first METHOD signature of each
+  // name in this object type. Accumulated into a list rather than pushed
+  // as it is found, for the same reason `missing_separator` is a flag —
+  // this parser is SPECULATIVE, and a diagnostic pushed during a parse
+  // that later falls back is a diagnostic on a shape that was never
+  // there.
+  let method_sig_optional : Map[String, (Bool, Bool)] = {}
+  let overload_optionality_misuses : Array[String] = []
+  // TS7010 support, collected rather than pushed for the same
+  // speculative-parse reason.
+  let implicit_any_return_members : Array[String] = []
   try {
     let _ = self.expect(LBrace)
     while !self.check(Eof) && !self.check(RBrace) {
@@ -954,13 +965,33 @@ fn Parser::try_parse_object_type_with_members(self : Parser) -> @ast.TsType? {
       if self.check(LParen) {
         // Method / call / construct signature.
         let _ = self.advance()
+        // A `<call>` / `<new>` sentinel is not a member NAME, so two of
+        // them are not two declarations of one name.
+        if field_name != "<call>" && field_name != "<new>" {
+          match method_sig_optional.get(field_name) {
+            Some((first, reported)) =>
+              if first != is_optional && not(reported) {
+                method_sig_optional[field_name] = (first, true)
+                overload_optionality_misuses.push(field_name)
+              }
+            None => method_sig_optional[field_name] = (is_optional, false)
+          }
+        }
         let method_params = self.parse_params()
         let _ = self.expect(RParen)
-        let return_type = if self.check(Colon) {
+        let had_return_annotation = self.check(Colon)
+        let return_type = if had_return_annotation {
           let _ = self.advance()
           self.parse_type()
         } else {
           @ast.TsType::Void
+        }
+        // TS7010 / TS7013 / TS7020, collected rather than pushed for the
+        // same reason as `missing_separator` above: this parser is
+        // SPECULATIVE, and a diagnostic pushed during a parse that later
+        // falls back is a diagnostic on a shape that was never there.
+        if not(had_return_annotation) {
+          implicit_any_return_members.push(field_name)
         }
         let field_type = callable_func_type_from_params(
           method_params, return_type,
@@ -1022,6 +1053,14 @@ fn Parser::try_parse_object_type_with_members(self : Parser) -> @ast.TsType? {
       self.interface_member_modifier_misuses.push(
         "<object-member-no-separator>",
       )
+    }
+    for name in overload_optionality_misuses {
+      self.grammar_misuses.push(
+        "overload signatures must all be optional or required: `" + name + "`",
+      )
+    }
+    for name in implicit_any_return_members {
+      self.record_implicit_any_member_return(name, false)
     }
     Some(Object(fields))
   } catch {
