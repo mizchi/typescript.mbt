@@ -171,7 +171,7 @@ verify-checker-scaling *ARGS:
     node scripts/verify_checker_scaling.mjs {{ ARGS }}
 
 # Full CI check
-ci: fmt check test verify-mbti-dts verify-scaffolds verify-generated-fixtures verify-examples verify-mangle-safety verify-dce-coverage verify-rule-equivalence verify-graph-walk verify-checker-soundness verify-checker-scaling
+ci: fmt check test verify-mbti-dts verify-scaffolds verify-generated-fixtures verify-examples verify-bridge-runtime verify-mangle-safety verify-dce-coverage verify-rule-equivalence verify-graph-walk verify-checker-soundness verify-checker-scaling
 
 # Update dependencies
 update:
@@ -180,6 +180,28 @@ update:
 # Clean build artifacts
 clean:
     rm -rf _build target
+
+# Run the generated `bridge.js` converters under Node.
+#
+# verify-scaffolds / verify-generated-fixtures / verify-examples ask whether
+# a generated package COMPILES, and bridge_quality_report.sh asks whether a
+# REJECTED export is budgeted. Neither asks whether the code emitted for an
+# ACCEPTED export runs. It did not: a tagged-union case whose payload is
+# `Named(N)` was discriminated with `N instanceof` whether or not `N` exists
+# at runtime, so 411 sites across the corpus carried a ReferenceError.
+#
+# Two checks. Static: every `instanceof X` must have `X` a JS global or a
+# binding of that module — complete, since it sees a site whichever arm a
+# probe value reaches. Runtime: import each bridge.js and call every
+# exported `_from_js` over a value battery — this is what proves the static
+# list is real rather than a grep artifact.
+#
+# Assumes the three generation harnesses above have populated `_build`.
+#
+#   just verify-bridge-runtime
+#   just verify-bridge-runtime --verbose
+verify-bridge-runtime *ARGS:
+    node scripts/verify_bridge_runtime.mjs {{ ARGS }}
 
 # Validate `--mangle-properties` against the mangle-safety corpus
 verify-mangle-safety *ARGS:

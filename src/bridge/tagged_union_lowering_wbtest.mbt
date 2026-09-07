@@ -449,6 +449,88 @@ test "tagged union: from-JS snippet uses instanceof for Named" {
 }
 
 ///|
+test "tagged union: an erased Named payload gets no instanceof predicate" {
+  // `PathOrFileDescriptor = PathLike | number`, where `PathLike` is a TYPE
+  // ALIAS. `tagged_union_named_constructor_name` accepts it — it is
+  // PascalCase and MoonBit-spellable — and the discriminator used to read
+  // that as licence to emit `value instanceof PathLike`, which is a
+  // ReferenceError the first time it runs. 411 such sites were emitted
+  // across the generated corpus and 2,126 converter calls threw.
+  let decl : BridgeTaggedUnionDecl = {
+    name: "PathOrFileDescriptor",
+    cases: [
+      ("PathLikeValue", @ast.TsType::Named("PathLike")),
+      ("NumberValue", @ast.TsType::Number),
+    ],
+  }
+  // The SHAPE answer is unchanged: the enum renderer and the `$tag`
+  // dispatch still need to know the payload is one named type.
+  match tagged_union_case_discriminator(@ast.TsType::Named("PathLike")) {
+    Some(InstanceOfNamed("PathLike")) => ()
+    _ => fail("shape discriminator should still name the payload")
+  }
+  // The RUNTIME answer declines.
+  assert_true(
+    tagged_union_case_runtime_discriminator(@ast.TsType::Named("PathLike"))
+    is None,
+  )
+  assert_true(tagged_union_from_js_expression(decl, "v") is None)
+  // ...and the sound `_to_js` half survives, so parameter positions keep
+  // their type. Before the two directions were split, a declined `_from_js`
+  // took the whole converter pair down with it.
+  match tagged_union_bridge_js_converter_decls(decl) {
+    Some(snippet) => {
+      assert_true(
+        snippet.contains(
+          "export function __ts_mbt_tagged_union_path_or_file_descriptor_to_js",
+        ),
+      )
+      assert_false(
+        snippet.contains(
+          "export function __ts_mbt_tagged_union_path_or_file_descriptor_from_js",
+        ),
+      )
+      assert_false(snippet.contains("instanceof PathLike"))
+      // The note names the case and the reason.
+      assert_true(snippet.contains("PathLikeValue carries PathLike"))
+    }
+    None => fail("the to_js half is always available")
+  }
+}
+
+///|
+test "tagged union: a global-constructor Named payload keeps its predicate" {
+  // The legal neighbour of the case above, and the reason this is a
+  // narrowing rather than a removal: `Buffer`, `URL` and `Date` DO resolve
+  // in the generated module, so `PathLike = string | Buffer | URL` keeps a
+  // working `_from_js`.
+  let decl : BridgeTaggedUnionDecl = {
+    name: "PathLike",
+    cases: [
+      ("StringValue", @ast.TsType::String_),
+      ("BufferValue", @ast.TsType::Named("Buffer")),
+      ("URLValue", @ast.TsType::Named("URL")),
+    ],
+  }
+  match tagged_union_from_js_expression(decl, "v") {
+    Some(snippet) => {
+      assert_true(snippet.contains("v instanceof Buffer"))
+      assert_true(snippet.contains("v instanceof URL"))
+    }
+    None => fail("global constructors are discriminable")
+  }
+  match tagged_union_bridge_js_converter_decls(decl) {
+    Some(snippet) =>
+      assert_true(
+        snippet.contains(
+          "export function __ts_mbt_tagged_union_path_like_from_js",
+        ),
+      )
+    None => fail("expected both halves")
+  }
+}
+
+///|
 test "tagged union: from-JS snippet uses Array.isArray for arrays" {
   let decl : BridgeTaggedUnionDecl = {
     name: "Path",

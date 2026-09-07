@@ -1243,12 +1243,19 @@ fn ffi_synthesize_inline_union(
       }
     }
   }
-  // A function-armed union only synthesizes when every Named sibling
-  // is a well-known JS global whose `instanceof` discriminator works at
-  // runtime. A bare type parameter or interface member
-  // (`useState(initialState: S | (() => S))`) has no runtime binding —
-  // the from_js converter would test `value instanceof S` against a
-  // name that does not exist in the bridge module.
+  // A function-armed union only synthesizes when every Named sibling is a
+  // well-known JS global whose `instanceof` discriminator works at runtime.
+  //
+  // The soundness this used to carry now lives in
+  // `tagged_union_case_runtime_discriminator`, which withholds the
+  // `_from_js` half for an erased name whatever the union's shape — this
+  // check had been the rule's ONLY site, and `func_members > 0` is right
+  // for the collision test above it and unrelated to whether a sibling's
+  // `instanceof` resolves. What is left here is conservative rather than
+  // load-bearing: it declines to synthesize an enum whose `_from_js` would
+  // be withheld, where the same union without a function member is
+  // synthesized and keeps its `_to_js`. Dropping it would type more
+  // parameter positions; that is a separate, measurable change.
   if func_members > 0 {
     for part in parts {
       match part {
@@ -3689,13 +3696,22 @@ fn ffi_returned_func_needs_arg_wrap(
 
 ///|
 /// Decide whether the auto-emitted return-side `__ts_mbt_<alias>_from_js`
-/// wrapper would actually run cleanly in `bridge.js`. The discriminator
-/// `instanceof <Name>` requires the named JS class to be in scope; for
-/// alias surfaces synthesised from ambient `node:*` exports those classes
-/// are not reachable from the generated bridge module, so we skip the
-/// auto-wrap and let the raw JS value flow through unchanged. Tagged
-/// unions whose cases all use primitive `typeof` / `Array.isArray` /
-/// strict-equality predicates are always safe to wrap.
+/// wrapper exists and would run cleanly in `bridge.js`.
+///
+/// This must agree with `tagged_union_bridge_js_converter_decls_with_nested`,
+/// which is what decides whether the `_from_js` half is emitted at all: a
+/// case with no RUNTIME discriminator withholds it, so wrapping a return in
+/// a call to it would reference a function that is not there. Hence `None`
+/// from the runtime discriminator is unsafe — it used to fall through the
+/// catch-all arm and read as safe, which was only harmless because the
+/// `InstanceOfNamed` arm below caught the same cases by shape.
+///
+/// `instanceof <Name>` for a global constructor (`Buffer`, `URL`, `Date`)
+/// resolves and is kept; the old comment's "those classes are not reachable
+/// from the generated bridge module" was true of an erased TypeScript name
+/// and wrong about a global, which is why `PathLike = string | Buffer | URL`
+/// gets a working wrapper while `PathOrFileDescriptor = PathLike | number`
+/// does not.
 fn ffi_tagged_union_return_is_safe_to_wrap(
   state : MoonBitJsFfiState,
   name : String,
@@ -3704,12 +3720,14 @@ fn ffi_tagged_union_return_is_safe_to_wrap(
     Some(decl) => {
       for entry in decl.cases {
         let (_, inner) = entry
-        match tagged_union_case_discriminator(inner) {
+        match tagged_union_case_runtime_discriminator(inner) {
           Some(InstanceOfNamed(_)) => return false
           // Function payloads stay on the raw passthrough: the generic
           // wrapper would need closure conversion in both directions,
           // which the auto-wrap doesn't model.
           Some(TypeofFunction) => return false
+          // No executable predicate: the `_from_js` half was not emitted.
+          None => return false
           _ => ()
         }
       }

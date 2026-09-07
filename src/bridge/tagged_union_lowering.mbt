@@ -387,6 +387,11 @@ pub fn tagged_union_widen_reason_for_alias(
 /// Discrimination strategy for one heterogeneous-union case at the JS
 /// boundary. The detector restricts inner types to runtime-discriminable
 /// shapes; this enum names the JS predicate the converter should use.
+///
+/// `InstanceOfNamed` is a SHAPE answer, not a runtime one: it says the
+/// payload is a single named type, which is what the enum renderer and the
+/// `$tag` dispatch need. Whether `value instanceof <Name>` can actually run
+/// is a different question — see `tagged_union_case_runtime_discriminator`.
 pub(all) enum TaggedUnionCaseDiscriminator {
   TypeofString
   TypeofNumber
@@ -420,6 +425,76 @@ pub fn tagged_union_case_discriminator(
     @ast.TsType::BooleanLiteral(value) => Some(StrictEqualsBool(value))
     _ => None
   }
+}
+
+///|
+/// The runtime half of `tagged_union_case_discriminator`: the same answer,
+/// except that a `Named` payload only keeps its `instanceof` predicate when
+/// the name denotes a JS global constructor that exists at the bridge
+/// boundary.
+///
+/// This distinction is the whole point. `tagged_union_named_constructor_name`
+/// asks whether a name is PascalCase and MoonBit-spellable — a NAMING test —
+/// and the discriminator took that as licence to emit `value instanceof
+/// <Name>`. A TypeScript interface, type alias, enum or type parameter is
+/// erased, so that predicate is a `ReferenceError` the first time it runs:
+/// `_from_js` converters carrying `instanceof PathLike` (an alias),
+/// `instanceof Expression` (an interface), `instanceof ScriptTarget` (an
+/// enum) and `instanceof T` (a type parameter) were emitted 411 times across
+/// the generated corpus, and 2,126 converter calls threw.
+///
+/// `moonbit_inline_union_runtime_named_ok` already knew this, and states it
+/// in its own doc comment; it was consulted at exactly one site
+/// (`ffi_synthesize_inline_union`) and there only for a union that has a
+/// FUNCTION member, because the check was written inside the
+/// `func_members > 0` branch. That condition is right for the thing next to
+/// it — a second function case collides on `typeof === "function"` — and has
+/// nothing to do with whether a sibling's `instanceof` resolves. Routing the
+/// predicate through one place is what keeps the two from disagreeing again.
+///
+/// Declining costs a MISS, never a false positive: the alias still lowers to
+/// an enum and its `_to_js` direction (a `$tag` dispatch that needs no
+/// runtime predicate at all) is unaffected, so parameters keep their types.
+/// Only the return-side `_from_js` wrapper is withheld — which is exactly
+/// what `ffi_tagged_union_return_is_safe_to_wrap` already refused to call
+/// for these cases, so the JS being dropped was never reachable.
+pub fn tagged_union_case_runtime_discriminator(
+  inner : @ast.TsType,
+) -> TaggedUnionCaseDiscriminator? {
+  match tagged_union_case_discriminator(inner) {
+    Some(InstanceOfNamed(name)) =>
+      if @parser.moonbit_inline_union_runtime_named_ok(name) {
+        Some(InstanceOfNamed(name))
+      } else {
+        None
+      }
+    other => other
+  }
+}
+
+///|
+/// The first case whose payload has no RUNTIME discriminator, as
+/// `(case name, payload name)`. Drives the generated-source note that
+/// replaces a `_from_js` converter we decline to emit, so the reason is
+/// legible in `bridge.js` instead of only in this file.
+fn tagged_union_first_undiscriminable_case(
+  decl : BridgeTaggedUnionDecl,
+) -> (String, String)? {
+  for entry in decl.cases {
+    let (case_name, inner) = entry
+    if tagged_union_case_runtime_discriminator(inner) is None {
+      let payload = match inner {
+        @ast.TsType::Named(name) => name
+        _ =>
+          match tagged_union_inner_moonbit_text(inner) {
+            Some(text) => text
+            None => "<unsupported payload>"
+          }
+      }
+      return Some((case_name, payload))
+    }
+  }
+  None
 }
 
 ///|
@@ -578,7 +653,11 @@ pub fn tagged_union_from_js_expression(
   let mut body = "(() => { "
   for i, entry in decl.cases {
     let (_, inner) = entry
-    let predicate = match tagged_union_case_discriminator(inner) {
+    // The RUNTIME discriminator, not the shape one: a case whose payload is
+    // an erased TypeScript name has no predicate that can execute, and
+    // emitting `value instanceof <erased name>` here is a `ReferenceError`
+    // at the boundary rather than a type we failed to narrow.
+    let predicate = match tagged_union_case_runtime_discriminator(inner) {
       Some(d) => tagged_union_case_predicate_text(d, expr)
       None => return None
     }
@@ -743,9 +822,19 @@ fn tagged_union_to_snake_case(name : String) -> String {
 }
 
 ///|
-/// Render the bridge.js converter pair for one tagged-union alias.
-/// Returns `None` when any case payload lacks a discriminator (the alias
-/// then falls back to existing JSValue widening).
+/// Render the bridge.js converters for one tagged-union alias.
+///
+/// The two directions are emitted independently, because only one of them
+/// needs a runtime predicate. `_to_js` reads `$tag` off the MoonBit value
+/// and can always be written; `_from_js` has to TEST an incoming JS value,
+/// so it is withheld when a case payload has no executable discriminator
+/// (`tagged_union_case_runtime_discriminator`). The withheld half is
+/// replaced by a note naming the case, and the surviving `_to_js` keeps
+/// parameter positions typed — before this split a declined `_from_js`
+/// took the sound `_to_js` down with it.
+///
+/// Never returns `None` today; the option is kept for callers that already
+/// handle a fully-undecidable alias.
 pub fn tagged_union_bridge_js_converter_decls(
   decl : BridgeTaggedUnionDecl,
 ) -> String? {
@@ -764,10 +853,6 @@ pub fn tagged_union_bridge_js_converter_decls_with_nested(
     nested,
     struct_converter_names~,
   )
-  let from_js_body = match tagged_union_from_js_expression(decl, "value") {
-    Some(body) => body
-    None => return None
-  }
   let to_name = tagged_union_to_js_function_name(decl.name)
   let from_name = tagged_union_from_js_function_name(decl.name)
   // `export function` so MoonBit `extern "js" fn ... = "<name>"` ESM
@@ -777,12 +862,33 @@ pub fn tagged_union_bridge_js_converter_decls_with_nested(
     "(value) { return " +
     to_js_body +
     "; }"
-  let from_decl = "export function " +
-    from_name +
-    "(value) { return " +
-    from_js_body +
-    "; }"
-  Some(to_decl + "\n" + from_decl)
+  match tagged_union_from_js_expression(decl, "value") {
+    Some(from_js_body) => {
+      let from_decl = "export function " +
+        from_name +
+        "(value) { return " +
+        from_js_body +
+        "; }"
+      Some(to_decl + "\n" + from_decl)
+    }
+    None => {
+      // Say which case and why, because the two reasons need different
+      // fixes: an interface / alias / enum / type parameter has no runtime
+      // value at all and never will, while a class the module exports could
+      // be bound in `bridge.js` and then discriminated (see TODO.md).
+      let reason = match tagged_union_first_undiscriminable_case(decl) {
+        Some((case_name, payload)) =>
+          "case " +
+          case_name +
+          " carries " +
+          payload +
+          ", which is not a JS global constructor, so no `instanceof` " +
+          "predicate resolves in this module"
+        None => "a case payload has no runtime discriminator"
+      }
+      Some(to_decl + "\n// No " + from_name + ": " + reason + ".")
+    }
+  }
 }
 
 ///|
