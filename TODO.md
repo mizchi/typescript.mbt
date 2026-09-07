@@ -5064,8 +5064,35 @@ inside a function body:
   stays vacuous for `Record` by construction, since
   `collect_declared_fields` has no `Record` arm — which is right, as
   `Record<string, V>` requires no particular key.
-- [ ] **MEASURED AND REJECTED: the excess-property check at CALL
-  ARGUMENTS.** A position matrix says the check covers the annotated
+- [x] **Batch DX: the excess-property check runs at a CALL argument when
+  the callee is provably non-generic.** Corpus yield is **ZERO** by
+  design and measured (TP 2582 -> 2582, FP 0) — the call position is
+  where real code hits TS2353 and the conformance corpus does not test
+  it, so the position matrix and the unit test ARE the measurement.
+  The fact that lifts the suppression is `callee_non_generic`: a callee
+  with no type parameters has no bound to inline, so an `Object(_)`
+  parameter target must be a written inline object type. It defaults to
+  `false` ("the caller cannot answer"), so every call site that does not
+  thread it keeps the suppression and loses a finding rather than
+  inventing one — and only two sites can prove it, a direct call to a
+  resolved function declaration and `new` on a resolved class. An ABSENT
+  entry in `func_type_params` is explicitly NOT proof (a
+  call-signature-typed variable or a lib method has no entry either), so
+  the direct-call site requires a resolver signature AND an empty
+  type-parameter list.
+  Recovered: a `declare function` argument, a `function` declaration
+  argument, `new` on a non-generic class, and BOTH nested shapes under an
+  argument (`f({ a: { x: 1, y: 2 } })` and `f({ a: { x: 1 }, b: 2 })`) —
+  the nested target came from a `lookup_field` on a written parameter
+  type, so the fact holds at depth. Still MISSes by design: a method call
+  and a call through a function-typed binding, neither of which can prove
+  the callee's genericity from its site.
+  The four false positives the gate exists to avoid are in the test:
+  `foo<U extends { length: number }>(x: U)`, its `function` form, a bare
+  `foo<U>(x: U)`, and `bar<U extends { a: number }>(x: U[])` — all
+  TS7-ACCEPTED.
+- [ ] **SUPERSEDED by batch DX — kept for the measurement: the
+  excess-property check at CALL ARGUMENTS.** A position matrix says the check covers the annotated
   declaration, `return`, an array element, `satisfies`, assignment and a
   nested property, and is missing at every CALL position — a
   `declare function` argument, a method call, an arrow-typed binding's

@@ -9056,12 +9056,19 @@ fn symbol_member_shape_blocks(
 }
 
 ///|
+/// `arg_callee_non_generic` is the one fact that lets the excess-property
+/// check run at a CALL argument. See `check_object_lit_against_target`'s
+/// `suppress_excess` for why the position is suppressed by default and why
+/// this is the exact fact that lifts it. It defaults to `false` — "the
+/// caller cannot answer" — which keeps the suppression, so a call site that
+/// does not thread it loses a finding rather than inventing one.
 fn check_expr_against(
   env : ExprEnv,
   expr : @ast.TsExpr,
   expected : @ast.TsType,
   ctx : CheckCtx,
   sub_path : String,
+  arg_callee_non_generic? : Bool = false,
 ) -> Unit {
   // Always walk for nested call-site argument errors, even when the outer
   // expected type is `Any` (e.g. an unannotated return where we still want
@@ -9741,6 +9748,7 @@ fn check_expr_against(
         ctx.resolver,
         ctx,
         sub_path,
+        arg_callee_non_generic~,
       )
       return
     }
@@ -9754,6 +9762,7 @@ fn check_expr_against(
             ctx.resolver,
             ctx,
             sub_path,
+            arg_callee_non_generic~,
           )
           return
         }
@@ -9779,6 +9788,7 @@ fn check_expr_against(
           ctx.resolver,
           ctx,
           sub_path,
+          arg_callee_non_generic~,
         )
         return
       }
@@ -12652,6 +12662,7 @@ fn check_object_lit_against_target(
   resolver : Resolver,
   ctx : CheckCtx,
   sub_path : String,
+  arg_callee_non_generic? : Bool = false,
 ) -> Unit {
   // When the target is a bare in-scope type parameter (`T extends Foo`),
   // we don't know the concrete shape — TS allows objects with additional
@@ -12721,8 +12732,31 @@ fn check_object_lit_against_target(
   // variable/property assignments to an explicit object type (`var x: { a:
   // string } = { a, b }`) keep their excess-property diagnostic. Field-type
   // and missing-required checks below still run regardless.
+  // Probed, and this is the ONE recorded abstention in this series whose
+  // stated reason turned out to be right: removing the suppression
+  // outright is +0 conformance files and +3 false positives on
+  // hand-written TS7-accepted code, because a constrained type
+  // parameter's bound really IS inlined into the parameter position —
+  // `foo<U extends { length: number }>(x: U)` accepts
+  // `{ length: 1, extra: 2 }`, and the earlier early returns do not catch
+  // it. Corpus-wide the blunt removal measures +0 TP / +1 FP.
+  //
+  // `arg_callee_non_generic` is what makes the position decidable without
+  // that hazard: a callee with NO type parameters has no bound to inline,
+  // so an `Object(_)` parameter target must be a written inline object
+  // type. Only the call sites that can prove it set the flag (a direct
+  // call to a resolved function declaration, and `new` on a resolved
+  // class); everything else keeps the suppression, which loses a finding
+  // rather than inventing one. The cost of the gate is a generic
+  // function's genuinely-inline object parameter, also a MISS.
+  //
+  // The conformance corpus scores this at ZERO — the call position is
+  // where real code hits TS2353, and the corpus does not test it, so the
+  // measurement that justifies the rule is the position matrix and the
+  // unit test, not the gate.
   let suppress_excess = sub_path.contains("arg[") &&
-    resolver.unwrap(target) is Object(_)
+    resolver.unwrap(target) is Object(_) &&
+    not(arg_callee_non_generic)
   // Per-field type checks for each provided key.
   for entry in entries {
     let key = entry.0
@@ -12774,7 +12808,14 @@ fn check_object_lit_against_target(
     }
     match resolver.lookup_field(target, key) {
       Some(declared) =>
-        check_expr_against(env, value, declared, ctx, "\{sub_path}.\{key}")
+        check_expr_against(
+          env,
+          value,
+          declared,
+          ctx,
+          "\{sub_path}.\{key}",
+          arg_callee_non_generic~,
+        )
       None =>
         // Unknown key on the target — TS calls this an excess-property
         // error. Skip class/struct opaque shapes by relying on lookup_field
@@ -13636,6 +13677,11 @@ fn check_arguments_with_sig(
   call_path : String,
   arity_reliable? : Bool = false,
   check_spread? : Bool = false,
+  // True only when the caller has PROVEN the callee declares no type
+  // parameters. That is what lets the excess-property check run at an
+  // argument position — see `check_object_lit_against_target`. Default
+  // `false` means "cannot answer", which keeps the suppression.
+  callee_non_generic? : Bool = false,
 ) -> Unit {
   // TS2556 ("A spread argument must either have a tuple type or be passed
   // to a rest parameter"): tsc's arity rule for the first non-tuple spread
@@ -13979,7 +14025,14 @@ fn check_arguments_with_sig(
       check_expr_against(env, args[i], rest_elem_type, ctx, sub_path)
     } else if i < params.length() {
       check_generator_arg_treturn(ctx, args[i], params[i], sub_path)
-      check_expr_against(env, args[i], params[i], ctx, sub_path)
+      check_expr_against(
+        env,
+        args[i],
+        params[i],
+        ctx,
+        sub_path,
+        arg_callee_non_generic=callee_non_generic,
+      )
       // TS2345: an unannotated array-destructuring parameter is tuple-like
       // (`function fun([a, b]) {}` types as `[any, any]`), so an iterable
       // that is not array-like never satisfies it (`fun(new FooIterator)`).
@@ -18113,6 +18166,18 @@ fn check_call_args_in_expr(
             // type is a `Union`), so the signature is exact and the TS2556
             // spread-argument arity rule can run.
             check_spread=true,
+            // A callee with NO type parameters cannot have had a bound
+            // inlined into a parameter position, which is what makes the
+            // excess-property check decidable at an argument. An ABSENT
+            // entry in `func_type_params` is not proof — a call-signature
+            // -typed variable or a lib method has no entry either — so the
+            // fact is only claimed when the resolver has a signature for
+            // this name AND its type-parameter list is empty.
+            callee_non_generic=(match ctx.resolver.func_type_params.get(name) {
+                Some(tps) => tps.length() == 0
+                None => false
+              }) &&
+              sig is Some(_),
           )
         }
         other =>
@@ -18605,6 +18670,13 @@ fn check_call_args_in_expr(
             ctx,
             "new `\{class_name}`",
             arity_reliable=true,
+            // Same fact as the direct-call site: a non-generic class's
+            // constructor parameters are written types, so an object
+            // literal argument's excess keys are decidable.
+            callee_non_generic=match ctx.resolver.classes.get(class_name) {
+              Some(c) => c.type_params.length() == 0
+              None => false
+            },
           )
           for a in args {
             check_call_args_in_expr(env, a, ctx)

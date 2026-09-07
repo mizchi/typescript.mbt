@@ -18801,3 +18801,75 @@ test "checker: excess properties through Record<string, V> (batch DW)" {
     @test.assert_eq(issues(color + src), 0)
   }
 }
+
+///|
+/// Batch DX: the excess-property check runs at a CALL argument when the
+/// callee is provably non-generic.
+///
+/// A position matrix says the check covered the annotated declaration,
+/// `return`, an array element, `satisfies`, assignment and a nested
+/// property, and was missing at every CALL position — which is where real
+/// code hits TS2353. Batch DW measured the blunt fix: removing the
+/// suppression outright is +0 conformance files and +3 false positives on
+/// TS7-accepted code, because a constrained type parameter's bound IS
+/// inlined into the parameter position.
+///
+/// The fact that lifts it is `callee_non_generic`: no type parameters
+/// means no bound can have been inlined, so an `Object(_)` parameter
+/// target must be a written inline object type. Only two call sites can
+/// prove it — a direct call to a resolved function declaration, and `new`
+/// on a resolved class — and everything else keeps the suppression.
+///
+/// The conformance corpus scores this rule at ZERO, so this test IS the
+/// measurement.
+test "checker: excess properties at a call argument (batch DX)" {
+  let issues = fn(src : String) -> Int {
+    let mut n = 0
+    for i in check_module_function_bodies_permissive(parse_module_or_empty(src)) {
+      if i.message.contains("does not exist on target type") {
+        n = n + 1
+      }
+    }
+    n
+  }
+  let t = "type T = { a: number };\n"
+  for
+    src in [
+      // A direct call to a non-generic declaration — the commonest real
+      // TS2353 site, and the whole point of the batch.
+      "declare function f(o: T): void;\nf({ a: 1, b: 2 });", "declare function n(o: T): void;\nn({ a: 1, b: 2, c: 3 });",
+      "function g(o: T) {}\ng({ a: 1, b: 2 });",
+      // `new` on a non-generic class.
+       "class C { constructor(o: T) {} }\nnew C({ a: 1, b: 2 });",
+      // Nested under an argument: the target there came from a
+      // `lookup_field` on a written parameter type, so the fact holds at
+      // depth.
+       "declare function f(o: { a: { x: number } }): void;\nf({ a: { x: 1, y: 2 } });",
+      "declare function f(o: { a: { x: number } }): void;\nf({ a: { x: 1 }, b: 2 });",
+    ] {
+    assert_true(issues(t + src) > 0)
+  }
+  // Silent, and the first four are the false positives the gate exists to
+  // avoid — all TS7-ACCEPTED, because a type parameter's bound is inlined
+  // into the parameter position and excess properties are legal against a
+  // type parameter:
+  for
+    src in [
+      "declare function foo<U extends { length: number }>(x: U): void;\nfoo({ length: 1, extra: 2 });",
+      "function foo<U extends { length: number }>(x: U) {}\nfoo({ length: 1, extra: 2 });",
+      "declare function foo<U>(x: U): void;\nfoo({ a: 1, b: 2 });", "declare function bar<U extends { a: number }>(x: U[]): void;\nbar([{ a: 1, b: 2 }]);",
+      "class C<U extends T> { constructor(o: U) {} }\nnew C({ a: 1, b: 2 });",
+      // A type ASSERTION suppresses the check in tsc, and did here
+      // already — the gate must not turn that on.
+       "declare function f(o: T): void;\nf({ a: 1, b: 2 } as T);",
+      // A well-formed argument.
+       "declare function f(o: T): void;\nf({ a: 1 });",
+      // Positions the gate deliberately does NOT reach, because neither
+      // call site can prove the callee's genericity: a method call and a
+      // call through a function-typed binding. Both are MISSes, which is
+      // the affordable direction.
+       "class C { m(o: T) {} }\nnew C().m({ a: 1, b: 2 });", "const f: (o: T) => void = (o) => {};\nf({ a: 1, b: 2 });",
+    ] {
+    @test.assert_eq(issues(t + src), 0)
+  }
+}
