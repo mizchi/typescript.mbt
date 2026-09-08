@@ -18920,3 +18920,63 @@ test "checker: assignment-form for-of target, all three spellings (batch DY)" {
     @test.assert_eq(issues(src), 0)
   }
 }
+
+///|
+/// Batch DZ: TS18030, an optional chain containing a private identifier.
+///
+/// Taken from the "strict-null / narrowing" bucket, whose label is wrong
+/// about every file in it. Five files carry a strict-null code and the
+/// cheapest lever in each is something else entirely: this one is pure
+/// GRAMMAR (the position of the `?.` relative to the `#name` is the whole
+/// rule), `typeofThis` needs a `this`-rebinding context, another needs
+/// name resolution in a type-argument position, another declaration-merge
+/// inference, and the last one aliased control flow. Eighth instance of a
+/// label standing in for the objective.
+///
+/// Every row below was probed against the real compiler, and the one that
+/// mattered is the LAST silent case: `(this?.c).#b` is TS2532 and NOT
+/// TS18030, so parenthesizing ends the chain. This parser gets that right
+/// by construction rather than by a rule — the inner expression is parsed
+/// by its own invocation of the postfix loop, so the outer `.#b` never sees
+/// the flag — and the same mechanism is why a private access inside a call
+/// ARGUMENT within the chain stays legal.
+test "expr_check: an optional chain cannot contain private identifiers (batch DZ)" {
+  let issues = fn(src : String) -> Int {
+    check_module_function_bodies_permissive(parse_module_or_empty(src)).length()
+  }
+  let cls = "class A { #b?: A; c?: A; getA(x?: any): A { return new A(); }\n"
+  // --- fires: the `#private` sits after a `?.` in the same chain
+  for
+    src in [
+      // Directly after the `?.` that opens the chain.
+      cls + "  m() { this?.#b; } }",
+      // Later in the chain, through a plain `.` step.
+      cls + "  m() { this?.c.#b; } }",
+      // Later in the chain, through a call.
+      cls + "  m() { this?.getA().#b; } }",
+      // The receiver need not be `this`.
+      cls + "  m(o: A) { o?.c.#b; } }",
+    ] {
+    assert_true(issues(src) > 0)
+  }
+  // --- stays silent (the legal neighbours, all probed)
+  for
+    src in [
+      // No optional chain at all.
+      cls + "  m() { this.#b; } }",
+      // The `?.` comes AFTER the private name — this is the spelling real
+      // code writes, and the flag is still false when `.#b` is read.
+      cls + "  m() { this.#b?.c; } }",
+      // An optional chain with no private access.
+      cls + "  m() { this?.c; } }",
+      cls + "  m(k: any) { this?.getA()?.c; } }",
+      // Parenthesizing ends the chain: tsc reports TS2532 here and not
+      // TS18030, and the nested postfix loop is what makes that automatic.
+      cls + "  m() { (this?.c).#b; } }",
+      // A private access inside a call argument within the chain belongs
+      // to its own chain, for the same reason.
+      cls + "  m(o: A) { this?.getA(o.#b); } }",
+    ] {
+    @test.assert_eq(issues(src), 0)
+  }
+}

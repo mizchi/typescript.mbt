@@ -3,6 +3,38 @@
 The wasm interpreter / codegen / AOT compiler that originally lived in this
 repo has been removed. Items below are scoped to the bridge generator only.
 
+### Batch DZ (2026-09-08): the strict-null bucket, and what it really holds
+
+- [x] **TS18030** — an optional chain cannot contain private identifiers.
+  +1 file (TP 2582 -> 2583, MISS in scope 133 -> 132, FP 0, PFLEGAL 0).
+  Purely syntactic, so it lives in `parse_postfix`'s chain loop: one
+  chain-local `saw_optional_in_chain` flag, set where `?.` is consumed and
+  tested at BOTH sites that read a chain property, so `this?.#b` and
+  `this?.a.#b` are one condition rather than two. Chain-local (not a Parser
+  field) is what makes the two subtle legal neighbours automatic —
+  `this?.getA(o.#b)` and `(this?.c).#b` each parse their inner expression
+  in a nested invocation of the same loop, so neither inherits the flag.
+  - The probe earned itself back on `(this?.c).#b`: tsc reports TS2532
+    there and NOT TS18030, so parenthesizing ends the chain. Both answers
+    were plausible from the message text. All seven spellings now agree
+    with tsc exactly (3 fire, 4 silent).
+- [x] **The bucket label was wrong about every file in it.** "strict-null /
+  narrowing" is 5 files and 5 unrelated kinds of work — see
+  `docs/checker-triage.md` for each. Not one is fixed by a strict-null or
+  narrowing rule. Eighth instance of a label standing in for the
+  objective, and the first where the bucket was small enough that the
+  count looked trustworthy.
+- [ ] **TS2331** (`this` in a namespace body). Deferred on a measured
+  cost, not on difficulty. The boundary is exact and probed: an arrow
+  inside a namespace body fires at any nesting depth, a `function`
+  declaration or expression inside one does not, a class method does not,
+  script top level does not, and module top level does not. `in_function`
+  cannot express it (true inside arrows), so it needs a new
+  `this`-rebinding field with the save / clear / restore discipline
+  `self.labels` needs at fifteen function-body sites — the shape that
+  produces the applied-in-some-places bug, for +1 file. Take it together
+  with a refactor that centralizes those fifteen sites.
+
 ## Bridge runtime: the generated JS was never executed (2026-09-07) — DONE
 
 - [x] **`instanceof` against an erased TypeScript name.** A tagged-union

@@ -214,7 +214,40 @@ bridge's primary input.
   series that a stated abstention's reason turned out weaker than
   claimed, and the first where the abstention was one of my own from the
   batch before.
-- **strict-null / narrowing** (8 files).
+- **strict-null / narrowing** (8 files then, 5 now — and the label is
+  wrong about every one of them). Opening all five: the cheapest lever in
+  each file is not a strict-null rule, and no two of them are the same
+  kind of work. Eighth instance of a label standing in for the objective,
+  this time in a bucket small enough that a count looked trustworthy.
+  - `privateIdentifierChain.1` is **pure GRAMMAR** — TS18030, "an
+    optional chain cannot contain private identifiers", where the
+    position of the `?.` relative to the `#name` is the whole rule. TAKEN
+    (batch DZ, +1 at FP 0). Its TS2532 is incidental.
+  - `typeofThis` is TS2331, "`this` cannot be referenced in a module or
+    namespace body" — also grammar, and DEFERRED on a measured cost
+    rather than on difficulty. Probed cell by cell: an arrow inside a
+    namespace body fires at any nesting depth, a `function` declaration
+    OR expression inside one does not (it rebinds `this`), a class method
+    does not, and neither script nor module top level does — so the fact
+    needed is "inside a namespace body and not inside a `this`-rebinding
+    function". `in_function` cannot serve: it is true inside arrows too.
+    A new field means the save / clear / restore discipline `self.labels`
+    already needs at fifteen function-body sites, which is exactly how
+    the applied-in-some-places bug gets written. Worth +1 file; take it
+    with the label refactor, not before.
+  - `parserAmbiguityWithBinaryOperator4` is `if (a<b, b>(c + 1))`, which
+    parses as a generic call whose type ARGUMENT is a `var`. The lever is
+    TS2749 ("refers to a value, but is being used as a type here") — name
+    resolution, not narrowing.
+  - `ES5For-of7` needs `[]` to infer `never[]` so that two `var x`
+    declarations conflict (TS2403), plus flow analysis for TS2454.
+  - `controlFlowAliasingCatchVariables` is the only one that is really
+    about narrowing, and it is the most expensive: batch CS's TS18046
+    correctly withdraws on a `typeof e === 'string'` narrowing, and this
+    file's second block ALIASES the narrowing (`const isString = typeof e
+    === 'string'`) and then invalidates it with `e = 1`. Deciding that
+    needs aliased control flow, and the fail direction is a false
+    positive — claiming un-narrowed where it is narrowed.
 
 ### Tier 3 — DEFER (~93 files, real but expensive)
 
@@ -283,8 +316,8 @@ produced a retired strategy document.
 That is now what the gate does:
 
 ```
-TP  err+flag  : 2582   (of which via parse rejection: 390)
-MISS in scope : 133   (the backlog — this one can reach zero)
+TP  err+flag  : 2583   (of which via parse rejection: 390)
+MISS in scope : 132   (the backlog — this one can reach zero)
 OUT OF SCOPE  : 19     (declared in scripts/checker_out_of_scope.txt)
 FP  ok +flag  : 0     (soundness bugs — TS7 accepts these)
 PFLEGAL       : 0     (parser rejects TS7-legal files — parser bugs)

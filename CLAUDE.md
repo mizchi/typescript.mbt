@@ -1378,6 +1378,42 @@ product surfaces now.
   work a second time, and what remains worth taking is what the corpus
   cannot score: 83 of the 134 misses carry exactly one error code and 25
   of the 39 solo codes have exactly one file.
+  Batch DZ is +1 and its value is what it says about the TRIAGE's own
+  family table rather than about the rule. The
+  "strict-null / narrowing" bucket is five files, and the label is wrong
+  about **all five**: opening each one, the cheapest lever is pure grammar
+  (TS18030), a `this`-rebinding context (TS2331), name resolution in a
+  type-argument position (TS2749), `[]`-to-`never[]` inference plus flow
+  analysis (TS2403 / TS2454), and aliased control flow (TS18046) — five
+  unrelated kinds of work, not one. Eighth instance of a label standing in
+  for the objective, and the first in a bucket small enough that the count
+  looked trustworthy; a bucket of five is not safer than a bucket of
+  forty-eight, it is just faster to disprove.
+  The rule that shipped is TS18030, an optional chain containing a
+  private identifier, and it lives in the parser because the POSITION of
+  the `?.` relative to the `#name` is the whole rule. One chain-local
+  flag set where `?.` is consumed and tested at both sites that read a
+  chain property, rather than a condition at each — `this?.#b` (directly
+  after the `?.` that opens the chain) and `this?.a.#b` (later, through a
+  plain `.`) are one fact. Chain-LOCAL is what makes two legal
+  neighbours automatic instead of needing rules: a private access inside
+  a call argument within the chain (`this?.getA(o.#b)`) is parsed by its
+  own invocation of the postfix loop, and so is the inner expression of
+  `(this?.c).#b` — and that second one is the case worth probing, because
+  `(this?.c).#b` is TS2532 and NOT TS18030, so parenthesizing really does
+  end the chain. Reasoning would have got it wrong either way; the probe
+  settled it, and tscheck now agrees with tsc on all seven spellings.
+  TS2331 is DEFERRED on a measured cost rather than on difficulty, which
+  is worth recording because the rule looks free. Probed cell by cell: an
+  arrow inside a namespace body fires at any depth, a `function`
+  declaration OR expression inside one does not (it rebinds `this`), a
+  class method does not, and neither script top level nor module top
+  level does — so the fact needed is "inside a namespace body and not
+  inside a `this`-rebinding function". `in_function` cannot serve,
+  because it is true inside arrows too, and a new field needs the same
+  save / clear / restore discipline `self.labels` already needs at
+  fifteen function-body sites. That is precisely how the
+  applied-in-some-places bug gets written, for +1 file.
 - `src/transform` is the JS-side pipeline behind `mtsc`: bundling, folding,
   tree-shaking, and the property mangler. Its safety story is type-driven and
   has two halves — `export_surface.mbt` (names reachable from the entry's
