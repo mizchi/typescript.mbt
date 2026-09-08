@@ -151,8 +151,47 @@ function staticCheck(file, src) {
   return { file, unbound: [...unbound.entries()].map(([n, c]) => ({ name: n, count: c })) };
 }
 
+// Which exports are safe to call with an arbitrary probe value.
+//
+// Every `_to_js` / `_from_js` export is a pure data transform between the
+// MoonBit and JS shapes of one type: it reads its argument and builds a
+// value. Everything else — `__ts_mbt_write_file_sync`, `new_hono`,
+// `get_runtime_version`, `promise_then` — is a wrapper around the vendored
+// package's real behaviour, so calling it would run the library (and, in
+// node:fs's case, touch the filesystem). Those are excluded, which is why
+// the static half of this harness matters: it covers them.
+function isPureConverterExport(name) {
+  return /_(?:to|from)_js(?:_optional)?$/.test(name);
+}
+
+// A failure is a reference to something the module does not have. The
+// converters legitimately throw on a value they were not given
+// (`unexpected <Alias> value`, a missing field, a bad shape), and since the
+// probe battery is deliberately ill-typed most calls SHOULD throw — so
+// asking "did it throw" would be useless, while asking "did it name
+// something undefined" is exactly the emitted-code bug this harness exists
+// to find, and needs no well-formed input at all. That asymmetry is what
+// lets the harness call all 536 converters rather than only the 33 whose
+// input shape it could construct.
+function referenceFailure(e) {
+  if (e instanceof ReferenceError) {
+    return `ReferenceError: ${e.message}`;
+  }
+  // `const X = mod.X` for an export the runtime does not have leaves `X`
+  // undefined rather than unbound, so the call site fails as a TypeError.
+  if (
+    e instanceof TypeError &&
+    /is not a function|is not a constructor|of undefined|of null|undefined is not/.test(
+      e.message ?? "",
+    )
+  ) {
+    return `TypeError: ${e.message}`;
+  }
+  return null;
+}
+
 async function runtimeCheck(file, opts) {
-  const result = { file, loaded: false, loadError: null, calls: 0, failures: [] };
+  const result = { file, loaded: false, loadError: null, calls: 0, fns: 0, failures: [] };
   let mod;
   try {
     mod = await import(pathToFileURL(file).href);
@@ -163,23 +202,22 @@ async function runtimeCheck(file, opts) {
   result.loaded = true;
   for (const [name, fn] of Object.entries(mod)) {
     if (typeof fn !== "function") continue;
-    if (!/^__ts_mbt_tagged_union_.*_from_js$/.test(name)) continue;
+    if (!isPureConverterExport(name)) continue;
+    result.fns += 1;
     for (const [label, value] of probeValues()) {
       result.calls += 1;
       try {
         fn(value);
       } catch (e) {
-        // The converter's own "no case matched" throw is correct behaviour.
-        if (e instanceof ReferenceError) {
-          result.failures.push({ fn: name, probe: label, error: `ReferenceError: ${e.message}` });
-        } else if (!/^unexpected /.test(e.message ?? "")) {
-          result.failures.push({ fn: name, probe: label, error: `${e.constructor?.name ?? "Error"}: ${e.message}` });
+        const failure = referenceFailure(e);
+        if (failure !== null) {
+          result.failures.push({ fn: name, probe: label, error: failure });
         }
       }
     }
   }
-  if (opts.verbose && result.calls === 0) {
-    console.log(`  (no tagged-union converters) ${file}`);
+  if (opts.verbose && result.fns === 0) {
+    console.log(`  (no converter exports) ${file}`);
   }
   return result;
 }
@@ -221,8 +259,10 @@ async function main() {
     r.failures.map((f) => ({ file: r.file, ...f })),
   );
 
+  const fns = runtimeResults.reduce((n, r) => n + r.fns, 0);
   console.log(`bridge modules found:            ${files.length}`);
   console.log(`bridge modules imported:         ${loaded}`);
+  console.log(`converters called:               ${fns}`);
   console.log(`converter calls exercised:       ${calls}`);
   console.log(`unbound \`instanceof\` sites:      ${unboundSites} (${unboundNames.size} distinct names)`);
   console.log(`converter runtime failures:      ${failures.length}`);
