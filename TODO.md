@@ -52,6 +52,37 @@ repo has been removed. Items below are scoped to the bridge generator only.
     (`scaffold_ts_to_moonbit_heterogeneous_union`) is `boolean | "boundary"`
     — no `Named` member at all. That is why the bug survived: not one
     fixture in the corpus put a named type in a return position.
+- [ ] **A tagged-union RETURN type the wrapper never builds** (4 sites,
+  `scripts/bridge_enum_return_probe.mjs`). `@hono/node-server` declares
+  `serve(...) -> ServerType` and `create_adaptor_server(...) -> ServerType`
+  (plus the two `get_*` forms that return a function returning it) while the
+  JS wrapper is `return __ts_mbt_module.serve(...)` — the raw Node server
+  object. `ServerType` is payload-bearing, and the representation is not a
+  guess: the alias's own constructor emits
+  `__ts_mbt_server_type_from_server(value) { return { "$tag": 0, "_0": value
+  }; }`, so a MoonBit `match` on the returned value reads `$tag` off an
+  object that has none. The declared type and the wrapper are decided in
+  different places and are free to disagree; when
+  `ffi_tagged_union_return_is_safe_to_wrap` says no, the declared return
+  should widen to `JSValue`.
+  - Attempted and REVERTED rather than left as a no-op: routing all eleven
+    return-type renderers through one `ffi_output_type_name` that widens
+    `Named(n)` (and a returned `Func`'s own return, recursively) when
+    `tagged_union_decls_by_name` has `n` and the wrap predicate refuses.
+    `moon check` clean, the example regenerated with the new binary
+    (timestamps confirm it), and all four sites still said `ServerType` — so
+    the predicate answers `false` and the reason is not yet known. The map is
+    keyed by `ffi_type_identifier(name, "OpaqueType")`, which is identity for
+    `ServerType`, so the obvious key-mismatch explanation is ruled out; the
+    next step is to find which renderer actually emits `pub extern "js" fn
+    serve` (the binding name `__ts_mbt_serve` points at
+    `ffi_func_decl_to_moonbit`, which WAS one of the eleven).
+  - The probe is worth keeping either way, and it corrected itself once: its
+    first version counted payload-FREE enums (`enum Mode { Read Write }`,
+    from a TS numeric enum, which is an integer tag where a raw numeric
+    passthrough is correct) and reported 11 sites. Its own comment claimed a
+    payload filter the code never implemented — the same substitution this
+    file keeps recording, in the measuring instrument. 4 of 73, not 11.
 - [ ] **Bind a module-exported class so its `instanceof` resolves.** The
   ceiling is measured and small: of the 197 declined names, the runtime
   classes are node_fs's `Stats` / `StatsFs` / `BigIntStats` /
