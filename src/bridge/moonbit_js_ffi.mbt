@@ -1528,20 +1528,35 @@ fn ffi_inline_js_arg_expr_with_state(
 /// evaluated three times is three reads of a member that may be an accessor,
 /// where the named `bridge.js` helper reads its parameter.
 ///
-/// Returns `expr` unchanged for an OPTIONAL tagged-union type: the MoonBit
-/// side of an optional return is decided separately by
-/// `ffi_option_return_needs_wrap` / `ffi_converted_return_extern_pair`, and
-/// converting here as well could box a value that path already boxed. No
-/// generated accessor in the corpus has that shape; when one appears it keeps
-/// today's raw passthrough rather than a double conversion.
+/// The OPTIONAL form converts too, and the reason this once declined it was
+/// wrong. That note said the MoonBit side "could box a value that path already
+/// boxed" — but `ffi_option_return_inner_is_boxed` returns FALSE for a
+/// tagged-union alias, so `ffi_option_return_needs_wrap` never fires for one
+/// and no MoonBit-side wrap exists to collide with: `Some(v)` IS `v` and
+/// `None` IS `undefined` at the boundary. The two machineries cannot overlap
+/// here, which was checkable and was not checked. The same note also claimed
+/// no corpus declaration had the shape, and `TypeChecker::getConstantValue`
+/// returns `Auto_NumberValue_or_StringValue?` — `String | Double`, both
+/// primitives, so `typeof` discriminates and the converter is fully buildable.
+///
+/// Resolves BOTH spellings a tagged union arrives in, because the optional
+/// inner is a raw `Union(parts)`: an alias the module declared comes through as
+/// `Named`, while an inline `A | B` keeps its `Union` shape in the AST and only
+/// the signature reads `Auto_X_or_Y`. `ffi_inline_js_tagged_union_to_js` needs
+/// the same pair and says so in its own comment.
 fn ffi_inline_js_return_expr_with_state(
   state : MoonBitJsFfiState,
   type_ : @ast.TsType,
   expr : String,
 ) -> String {
-  let name = match type_ {
-    @ast.TsType::Named(n) => n
-    _ => return expr
+  let (inner, is_optional) = match
+    @checker.classify_optional_like_union(type_) {
+    Some((collapsed, true)) => (collapsed, true)
+    _ => (type_, false)
+  }
+  let name = match ffi_output_union_alias_name(state, inner) {
+    Some(n) => n
+    None => return expr
   }
   // The same gate the function return paths consult, so the accessor and the
   // function form cannot disagree about whether `_from_js` exists.
@@ -1551,10 +1566,52 @@ fn ffi_inline_js_return_expr_with_state(
   match state.tagged_union_decls_by_name.get(name) {
     Some(decl) =>
       match tagged_union_from_js_expression(decl, "__ts_mbt_raw") {
-        Some(body) => "((__ts_mbt_raw) => \{body})(\{expr})"
+        Some(body) =>
+          if is_optional {
+            "((__ts_mbt_raw) => __ts_mbt_raw == null ? undefined : \{body})(\{expr})"
+          } else {
+            "((__ts_mbt_raw) => \{body})(\{expr})"
+          }
         None => expr
       }
     None => expr
+  }
+}
+
+///|
+/// The alias name a type will RENDER as, for BOTH spellings a tagged union
+/// arrives in: a `Named` alias the module declared, and a raw `Union(parts)`
+/// that lowers to a synthesized `Auto_X_or_Y`.
+///
+/// The second is the one that gets forgotten, and
+/// `ffi_inline_js_tagged_union_to_js` says why in its own comment: the
+/// signature already reads `Auto_ViewValue_or_TableValue` while the AST keeps
+/// the original `Union(parts)` shape. A walk that decides on the `Named`
+/// spelling alone decides about a type that is not the one being printed.
+fn ffi_output_union_alias_name(
+  state : MoonBitJsFfiState,
+  type_ : @ast.TsType,
+) -> String? {
+  match type_ {
+    @ast.TsType::Named(name) =>
+      if state.tagged_union_decls_by_name.contains(name) {
+        Some(name)
+      } else {
+        None
+      }
+    @ast.TsType::Union(parts) =>
+      match ffi_inline_union_shaped_cases(parts) {
+        Some(cases) => {
+          let name = ffi_inline_union_synthesized_name(cases)
+          if state.tagged_union_decls_by_name.contains(name) {
+            Some(name)
+          } else {
+            None
+          }
+        }
+        None => None
+      }
+    _ => None
   }
 }
 
@@ -1775,10 +1832,26 @@ fn ffi_function_field_method_decl(
           js_params.push(arg)
         }
         let js_params_src = js_params.join(", ")
-        let js_call = if field_name == "_call_" {
+        let js_call_raw = if field_name == "_call_" {
           "self(\{js_args_src})"
         } else {
           ffi_js_access("self", js_field_name) + "(" + js_args_src + ")"
+        }
+        // An INTERFACE method is a third renderer, and it needed the same
+        // return conversion the class-method and accessor paths did.
+        // `TypeChecker` is an interface, so `getConstantValue` never reached
+        // the class path: patching that one and measuring is what found this.
+        // `ffi_function_type_parts` hands back the RENDERED return type and not
+        // the node, so the AST return is taken off `generic_inner` here, with
+        // the same promise normalization that function applies.
+        let js_call = match generic_inner {
+          Func(_, ret) =>
+            ffi_inline_js_return_expr_with_state(
+              state,
+              @checker.normalize_promise_like_union_return(ret),
+              js_call_raw,
+            )
+          _ => js_call_raw
         }
         let forward_args : Array[String] = ["self"]
         for arg_expr in arg_exprs {
@@ -4950,10 +5023,16 @@ fn ffi_class_method_decl_to_moonbit(
         js_params.push(arg)
       }
       let js_param_list = js_params.join(", ")
-      let js_call = ffi_js_access("self", event_js_member) +
+      // Same conversion on the generic-preserved path; its wrapper returns
+      // `JSValue` and casts, so the JS body is the only place to do it.
+      let js_call = ffi_inline_js_return_expr_with_state(
+        state,
+        class_method.return_type,
+        ffi_js_access("self", event_js_member) +
         "(" +
         ffi_event_js_args_src(event_literal, js_args) +
-        ")"
+        ")",
+      )
       let extern_name = "_\{fn_name}_extern_js"
       let extern_decl = "extern \"js\" fn \{extern_name}(\{extern_params_src}) -> JSValue =\n  #| (\{js_param_list}) => \{js_call}"
       let instance_params = if method_params == "" {
@@ -4992,10 +5071,20 @@ fn ffi_class_method_decl_to_moonbit(
       js_params.push(arg)
     }
     let js_param_list = js_params.join(", ")
-    let js_call = ffi_js_access("self", event_js_member) +
+    // A method's RETURN needs the tagged-union conversion for the same reason
+    // its arguments do (`js_args` above), and for the same reason the accessor
+    // paths do: `ffi_converted_return_extern_pair` below asks
+    // `ffi_rendered_generated_enum_info`, which knows only the literal-union
+    // enum family. `TypeChecker::getConstantValue` declared
+    // `Auto_NumberValue_or_StringValue?` and returned tsc's raw string.
+    let js_call = ffi_inline_js_return_expr_with_state(
+      state,
+      class_method.return_type,
+      ffi_js_access("self", event_js_member) +
       "(" +
       ffi_event_js_args_src(event_literal, js_args) +
-      ")"
+      ")",
+    )
     let instance_params = if method_params == "" {
       "self : \{class_type_name}"
     } else {

@@ -35,9 +35,12 @@
 # kinds
 #   erased-payload   a case payload is a TS interface / alias / type parameter,
 #                    so no `instanceof` can ever resolve. WIDEN.
-#   optional-gate    the `_from_js` is buildable and the OPTIONAL form declines
-#                    it, because MoonBit's `Option` repr is decided separately.
-#                    CONVERTIBLE — the cheapest real fix on this list.
+#   optional-gate    RETIRED: the `_from_js` is buildable and the optional
+#                    form declined it. The stated reason ("the MoonBit side
+#                    could box a value that path already boxed") was checkable
+#                    and false — `ffi_option_return_inner_is_boxed` returns
+#                    FALSE for a tagged-union alias, so no MoonBit-side wrap
+#                    exists to collide with. Both occurrences are converted.
 #   module-class     every payload is a class the module exports at runtime, so
 #                    binding `const N = __ts_mbt_module.N` would make the
 #                    `instanceof` resolve. CONVERTIBLE.
@@ -48,14 +51,12 @@ typescript_ast | walkUpBindingElementsAndPatterns | ret | erased-payload | Varia
 typescript_ast | getNameOfJSDocTypedef | ret | erased-payload | Identifier and PrivateIdentifier are TypeScript interfaces
 typescript_ast | CompilerOptions::index_get | ret | erased-payload | TsConfigSourceFile and CompilerOptionsValue are erased, and the position is optional as well
 typescript_ast | CompilerOptions::index_set | param | erased-payload | mirror of index_get; the write direction needs no runtime predicate but is declined by the same optional handling
-typescript_ast | TypeChecker::getConstantValue | ret | optional-gate | `String | Double` — BOTH primitives, so `typeof` discriminates and the `_from_js` is fully buildable. Declined only because the return is optional and `ffi_inline_js_return_expr_with_state` leaves the optional form alone
 typescript_ast | LanguageService::prepareCallHierarchy | ret | erased-payload | CallHierarchyItem is an interface; its array sibling would discriminate on its own
 
 typescript | walkUpBindingElementsAndPatterns | ret | erased-payload | same declaration as the typescript_ast package
 typescript | getNameOfJSDocTypedef | ret | erased-payload | same declaration as the typescript_ast package
 typescript | CompilerOptions::index_get | ret | erased-payload | same declaration as the typescript_ast package
 typescript | CompilerOptions::index_set | param | erased-payload | same declaration as the typescript_ast package
-typescript | TypeChecker::getConstantValue | ret | optional-gate | same declaration as the typescript_ast package
 typescript | LanguageService::prepareCallHierarchy | ret | erased-payload | same declaration as the typescript_ast package
 
 node_fs | fstatSync_number_stat_options_optional | ret | erased-payload | `Stats` IS a runtime class on node:fs but `BigIntStats` is type-only, and a union needs EVERY case discriminable — which is why binding module classes buys nothing here, against the estimate that named the stat() family as its main prize

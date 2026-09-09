@@ -288,24 +288,56 @@ repo has been removed. Items below are scoped to the bridge generator only.
   its own comment sixty lines away. Sixth fail-open shape arm here, and the
   first one written INSIDE the fix for the previous one.
   Implemented (`ffi_output_union_alias_name`, resolving both spellings) and
-  **REVERTED on a measured blocker**: the widening lives in the FFI layer
-  and the public wrapper — `pub fn getNameOfJSDocTypedef(...) ->
-  Auto_IdentifierValue_or_PrivateIdentifierValue?` — is rendered by the
-  DECL layer, which holds no `MoonBitJsFfiState`. Widening one side gives
-  `[4014] Expr Type Mismatch: has type JSValue?, wanted Auto_...?`, the two
-  layers disagreeing, which is the same split that produced the duplicate
-  `.mbti` declarations. Take it with the channel, not with a second copy of
-  the widening in the decl layer.
-- [ ] **Convert an OPTIONAL tagged-union crossing.** The cheapest real fix
-  on the declared list, and the previous note's claim that "no generated
-  accessor in the corpus has that shape" was wrong — there are 2:
-  `TypeChecker::getConstantValue` returns `Auto_NumberValue_or_StringValue?`,
-  whose cases are `String | Double`, so `typeof` discriminates and the
-  `_from_js` is fully buildable. `ffi_inline_js_return_expr_with_state`
-  leaves the optional form alone because MoonBit's `Option` repr is decided
-  separately by `ffi_option_return_needs_wrap` /
-  `ffi_converted_return_extern_pair`, and converting in both places would
-  box twice. Needs those two to agree on who wraps.
+  **REVERTED**. What is MEASURED is the failure: widening makes the private
+  extern `JSValue?` while `pub fn getNameOfJSDocTypedef(...) ->
+  Auto_IdentifierValue_or_PrivateIdentifierValue?` in `bridge.mbt` still
+  declares the enum, giving `[4014] Expr Type Mismatch: has type JSValue?,
+  wanted Auto_...?` — the same two-renderings-of-one-export split that
+  produced the duplicate `.mbti` declarations.
+  What is NOT established is the cause, and the first diagnosis here said
+  "the decl layer holds no `MoonBitJsFfiState`, so this needs a cross-layer
+  channel" — which the code partly contradicts:
+  `parse_bridge_pub_extern_fn_decl_line` shows the decl layer DERIVING its
+  `return_type` from the FFI layer's emitted `pub extern "js" fn` text, so
+  widening the FFI side should have carried. Either that wrapper's type
+  comes from somewhere else, or one of the renderers the widening routes
+  through is not the line the decl layer parses — the
+  applied-in-some-places family again rather than a missing channel, and
+  much cheaper if so.
+  The experiment is one command: re-apply the arm, regenerate, and read
+  `bridge.mbt` beside `externs.mbt` for `getNameOfJSDocTypedef` to see which
+  of the two moved. Do that before building any channel; the note that
+  asserted the blocker was written from the error message alone.
+  `ffi_output_union_alias_name` is now in the tree for the optional-gate fix
+  below, so the arm itself is two lines.
+- [x] **Convert an OPTIONAL tagged-union crossing — DONE**, and both of the
+  reasons the previous note gave for declining it were false, which is the
+  part worth keeping.
+  - "The MoonBit side could box a value that path already boxed" was
+    CHECKABLE and unchecked: `ffi_option_return_inner_is_boxed` returns
+    FALSE for a tagged-union alias, so `ffi_option_return_needs_wrap` never
+    fires for one and there is no MoonBit-side wrap to collide with —
+    `Some(v)` IS `v` and `None` IS `undefined` at the boundary. Confirmed
+    against the emitted code, not the source: no `wrap_option_return`
+    appears anywhere near `getConstantValue`.
+  - "No generated accessor in the corpus has that shape" was also false;
+    there are 2, both `TypeChecker::getConstantValue` returning
+    `Auto_NumberValue_or_StringValue?` — `String | Double`, both
+    primitives, so `typeof` discriminates.
+  - The optional inner is a raw `Union(parts)`, so the fix needed
+    `ffi_output_union_alias_name` back to resolve BOTH spellings (a `Named`
+    alias, and an inline `A | B` whose signature reads `Auto_X_or_Y` while
+    the AST keeps `Union`).
+  - **And the site was a THIRD renderer.** `TypeChecker` is an INTERFACE, so
+    `getConstantValue` never reached the class-method path; patching the
+    class path, regenerating and finding the count unchanged is what found
+    `ffi_function_field_method_decl`. Interface methods, class methods and
+    the four accessor paths are three separate renderers of one decision, and
+    the arguments were routed through the conversion at all of them while the
+    RETURN was routed at none. Same family, one axis further out.
+  - Both entries retired from the declared list, and the STALE report is
+    what said so — the mechanism earning itself back on its first use.
+    Declared backlog 18 -> 16.
 - [ ] **Drop `ffi_synthesize_inline_union`'s `func_members > 0` gate.** Now
   that soundness lives centrally the gate is conservative rather than
   load-bearing: it refuses to synthesize an enum whose `_from_js` would be
