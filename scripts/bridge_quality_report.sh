@@ -251,6 +251,45 @@ collect_unsupported_export_counts() {
     "$unbudgeted"
 }
 
+# A top-level `declare pub fn` name declared more than once in one package.
+#
+# MoonBit has no overloading, so two `pub fn` of one name cannot both exist —
+# a second declaration is therefore always wrong, and the `.mbti` is supposed
+# to describe the `.mbt`. Nothing checked the two against each other, and the
+# decl layer and the ffi layer render the same value export independently, so
+# a disagreement showed up as an extra declaration rather than as an error.
+# Four of them were in the corpus (`get_serve`, `get_get_request_listener`,
+# `get_create_adaptor_server`, `mkdir`), invisible for as long as the two
+# renderings happened to match.
+#
+# The name is taken up to the `(` that must follow it immediately, which is
+# what excludes a `Type::method` form — those are methods on one receiver, not
+# duplicates. Getting that wrong is how the first measurement of this reported
+# 52 duplicates in one package when the real answer was zero: a pattern that
+# stopped at `::` collapsed `BuilderProgram::getProgram` and six siblings onto
+# `BuilderProgram`.
+duplicate_declared_fn_names() {
+  local details_file="$1"
+  local total=0
+  local file
+  local name
+
+  : > "$details_file"
+
+  while IFS= read -r file; do
+    while IFS= read -r name; do
+      [ -n "$name" ] || continue
+      printf '%s\t%s\n' "$file" "$name" >> "$details_file"
+      total=$((total + 1))
+    done < <(
+      sed -n 's/^declare pub fn \([A-Za-z_][A-Za-z0-9_]*\)(.*/\1/p' "$file" \
+        | sort | uniq -d
+    )
+  done < <(find_metric_files 'bridge.mbti')
+
+  printf '%s\n' "$total"
+}
+
 jsvalue_cause_counts() {
   local surface_total=0
   local unknown_any=0
@@ -356,6 +395,8 @@ typescript_exported_declarations="$(count_matching_files '*.d.ts' '^export (decl
 jsvalue_refs="$(count_matching_files 'bridge.mbti' 'JSValue')"
 jsvalue_functions="$(count_matching_files 'bridge.mbti' '^declare pub fn .*JSValue')"
 moon_build_smokes="$(find_metric_dirs '__tsmbt_build_smoke__' | wc -l | tr -d ' ')"
+duplicate_decl_details_file="$report_root/duplicate-declarations.tsv"
+duplicate_declared_fns="$(duplicate_declared_fn_names "$duplicate_decl_details_file")"
 IFS='|' read -r \
   jsvalue_surface_lines \
   jsvalue_unknown_any \
@@ -384,6 +425,9 @@ if [ "$namespace_widened_unsupported_exports" -gt "$namespace_widened_unsupporte
   overall="fail"
 fi
 if [ "$heterogeneous_union_undeclared_exports" -gt 0 ]; then
+  overall="fail"
+fi
+if [ "$duplicate_declared_fns" -gt 0 ]; then
   overall="fail"
 fi
 if [ "${#stale_widened_unions[@]}" -gt 0 ]; then
@@ -429,6 +473,7 @@ fi
   printf '| JSValue surface lines | %s |\n' "$jsvalue_surface_lines"
   printf '| JSValue functions | %s |\n' "$jsvalue_functions"
   printf '| generated build-smoke packages | %s |\n' "$moon_build_smokes"
+  printf '| duplicate declared fn names | %s |\n' "$duplicate_declared_fns"
   printf '\n'
   printf '## JSValue Cause Breakdown\n\n'
   printf 'This is a heuristic classification over generated `bridge.mbti` surface lines that contain `JSValue`, excluding the shared banner and type declaration.\n\n'
@@ -453,6 +498,16 @@ fi
     done < "$unsupported_details_file"
   else
     printf '| none |  |  |\n'
+  fi
+  printf '\n'
+  printf '### Duplicate declared function names\n\n'
+  if [ "$duplicate_declared_fns" -gt 0 ]; then
+    printf 'MoonBit has no overloading, so a name declared twice in one `bridge.mbti` cannot both exist in the `.mbt`. The `.mbti` describes the `.mbt`; a duplicate means two emitters rendered one export and disagreed.\n\n'
+    while IFS=$'\t' read -r location name; do
+      printf -- '- `%s` in `%s`\n' "$name" "${location#"$repo_root"/}"
+    done < "$duplicate_decl_details_file"
+  else
+    printf 'none\n'
   fi
   printf '\n'
   printf '### Stale heterogeneous-union declarations\n\n'

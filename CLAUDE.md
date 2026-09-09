@@ -2783,12 +2783,41 @@ product surfaces now.
   information — is still answered yes by the typed PARAMETERS.
   It also surfaced a pre-existing defect nothing could see while the two
   renderings agreed: the `.mbti` carries declarations the `.mbt` does
-  not. `get_create_adaptor_server` appears twice, once with no impl
-  counterpart at all, and corpus-wide there are 52 duplicated declaration
-  names of 2,161 in the `typescript` package, 13 in vitest, 9 in node_fs.
-  A second emitter renders the same value exports independently of the
-  ffi layer and the two matched only by coincidence — which is also why
-  the enum-return probe still reports one residual.
+  not, because the decl layer and the ffi layer render the same value
+  export independently and `add_bridge_ergonomic_helper_decls` guarded on
+  `contains(helper_decl)` — a substring test using the full SIGNATURE,
+  asking "is this exact line present" where the question is "is this
+  FUNCTION declared". MoonBit has no overloading, so a second
+  `declare pub fn` of one name is always wrong; while the two layers
+  happened to render identical text the duplicate was skipped and the
+  disagreement was invisible.
+  **The first measurement of it was wrong, and the way it was wrong is
+  this file's own recurring mistake in the instrument**: a pattern
+  `^declare pub fn [A-Za-z_][A-Za-z0-9_]*` stops at `::`, so
+  `BuilderProgram::getProgram` and six sibling METHODS collapsed onto
+  `BuilderProgram` and read as a duplicated name — reported as "52
+  duplicated names of 2,161 in the `typescript` package, 13 in vitest, 9
+  in node_fs", which is an artifact of the regex and not a defect.
+  Taking the name up to the `(` that must follow it immediately gives the
+  real answer: **4 duplicated names in 2 packages**, all four with no
+  impl counterpart at all — three `get_*` value getters in
+  hono__node_server and node_fs's `mkdir` (one `pub extern "js" fn
+  mkdir`, so not overloading either). In every case the stale line is the
+  LESS precise one (`get_serve() -> JSValue` against the impl's
+  `() -> (Options, cb?) -> JSValue`; `mkdir`'s `callback : JSValue`
+  against its real callback type), except `get_create_adaptor_server`,
+  whose stale line was more precise and simply untrue.
+  The fix makes the `.mbti` AGREE with the `.mbt` by construction rather
+  than accumulate beside it: the derived declaration REPLACES a
+  same-named line in place, keyed by name through one map lookup per line
+  (a scan per name over the `typescript` package's 2,161 declarations is
+  the quadratic this file keeps paying for). Proven to touch nothing
+  else — regenerating the whole corpus before and after and diffing every
+  declaration line order-independently leaves **85 of 87 packages
+  byte-identical**, with the 2 changed losing exactly those 4 lines. The
+  report gains a `duplicate declared fn names` metric that FAILS on any
+  occurrence, mutation-tested in both directions and verified not to fire
+  on the `Type::method` forms that fooled the first measurement.
 
 ## Project Structure
 

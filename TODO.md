@@ -130,19 +130,46 @@ repo has been removed. Items below are scoped to the bridge generator only.
     different path, and they DO build `{ "$tag": 0, "_0": value }`.
     Pinned by a unit test that fails under mutation of the `CallableMeta`
     arm with `"(Options) -> ServerType" != "(Options) -> JSValue"`.
-- [ ] **The `.mbti` carries declarations the `.mbt` does not** —
-  pre-existing, corpus-wide, and only VISIBLE because the fix above made
-  two renderings of one declaration disagree. `hono__node_server`'s
-  `.mbti` has `get_create_adaptor_server` twice, once `-> (Options) ->
-  ServerType` with no `.mbt` counterpart at all and once `-> (Options) ->
-  JSValue` matching the impl; before the widening both printed
-  identically and the duplication was invisible. Corpus-wide: 52
-  duplicated declaration names of 2,161 in the `typescript` package, 13
-  of 253 in vitest, 9 of 320 in node_fs, 5 in drizzle, 3 in
-  hono__node_server, 2 in react-types. So a second emitter renders the
-  same value exports independently of the ffi layer, and the two agreed
-  only by coincidence. This is the residual `1` the enum-return probe
-  still reports.
+- [x] **The `.mbti` carries declarations the `.mbt` does not** — DONE.
+  Pre-existing, and only VISIBLE because the return-type widening above
+  made two renderings of one declaration disagree.
+  `add_bridge_ergonomic_helper_decls` derives a `declare pub fn` from
+  every emitted extern and guarded on
+  `if !next_bridge_mbti.contains(helper_decl)` — a substring test over
+  the whole file using the full SIGNATURE, which asks "is this exact line
+  present" where the question is "is this FUNCTION declared". MoonBit has
+  no overloading, so a second `declare pub fn` of one name is always
+  wrong; while the two layers rendered identical text the append was
+  skipped and nothing was visible.
+  - **The first measurement was WRONG, in the instrument**, and the
+    correction is the finding worth keeping. The scan
+    `^declare pub fn [A-Za-z_][A-Za-z0-9_]*` stops at `::`, so
+    `BuilderProgram::getProgram` and six sibling METHODS collapsed onto
+    `BuilderProgram`; the "52 duplicated names of 2,161 in the
+    `typescript` package, 13 in vitest, 9 in node_fs" recorded one commit
+    earlier is an artifact of that regex. Taking the name up to the `(`
+    that must follow it immediately gives **4 duplicated names in 2
+    packages** — and all 2,161 declare-lines in that package match the
+    full-line form, so the refined scan is not under-counting either.
+  - All four have NO impl counterpart: `get_serve`,
+    `get_get_request_listener`, `get_create_adaptor_server` in
+    hono__node_server, and `mkdir` in node_fs (one `pub extern "js" fn
+    mkdir`, so not overloading). The stale line is the less precise one
+    in three cases and precise-but-untrue in the fourth.
+  - The derived declaration now REPLACES a same-named line in place, so
+    the `.mbti` agrees with the `.mbt` by construction and the next
+    disagreement cannot hide the same way. Keyed by name through one map
+    lookup per line rather than a scan per name — 2,161 names over a
+    10k-line file is the quadratic this repo keeps paying for.
+  - Proven to change nothing else: regenerating the whole corpus before
+    and after and diffing every declaration line order-independently
+    leaves **85 of 87 packages byte-identical**, the 2 changed losing
+    exactly those 4 lines. `MoonBit declared functions` 5410 -> 5406, so
+    the report had been over-counting by exactly the redundant lines.
+  - `bridge_quality_report.sh` gains `duplicate declared fn names`, which
+    FAILS on any occurrence. Mutation-tested both directions, and
+    verified NOT to fire on the `Type::method` forms that fooled the
+    first measurement.
 - [ ] **`_from_js` exists but the return wrapper still declines it.**
   The other half of the same defect, now that the predicate distinction
   above is written down: for a union whose cases are a primitive plus a

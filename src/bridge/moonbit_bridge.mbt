@@ -1106,21 +1106,105 @@ fn prune_mismatched_upcast_helpers(
 }
 
 ///|
+/// The top-level function name a `declare pub fn NAME(...)` line declares.
+/// `None` for any other line, and for a `Type::method` form — those are not
+/// what `parse_bridge_pub_extern_fn_decl_line` produces, so they can never
+/// collide with a derived declaration.
+fn bridge_mbti_declared_fn_name(line : String) -> String? {
+  let prefix = "declare pub fn "
+  if !line.has_prefix(prefix) {
+    return None
+  }
+  let rest = line[prefix.length():].to_owned()
+  match rest.find("(") {
+    Some(open) => {
+      let name = rest[:open].to_owned()
+      if name == "" || name.contains("::") {
+        None
+      } else {
+        Some(name)
+      }
+    }
+    None => None
+  }
+}
+
+///|
+/// Derive a `declare pub fn` for every emitted extern, and make the `.mbti`
+/// AGREE with the `.mbt` rather than merely accumulate beside it.
+///
+/// The guard here used to be `if !next_bridge_mbti.contains(helper_decl)` — a
+/// substring test on the whole file using the full SIGNATURE, which asks "is
+/// this exact line already present" where the question is "is this FUNCTION
+/// already declared". MoonBit has no overloading, so two `pub fn` of one name
+/// cannot both exist in a package; a second `declare pub fn` of that name is
+/// therefore always wrong, and the `.mbt` is the one that says what the
+/// package really is.
+///
+/// While the two layers happened to render the same text the duplication was
+/// invisible, which is why it survived: the decl layer describes an exported
+/// value independently of the ffi layer, and widening a tagged-union RETURN
+/// made two renderings of `get_create_adaptor_server` differ for the first
+/// time. Four cases in the corpus, all the same shape — the stale line is the
+/// less precise one (`get_serve() -> JSValue` against the impl's
+/// `() -> (Options, cb?) -> JSValue`, `mkdir`'s `callback : JSValue` against
+/// its real callback type), except `get_create_adaptor_server`, whose stale
+/// line was MORE precise and simply untrue.
+///
+/// Replacing in place rather than appending is what makes the agreement hold
+/// by construction, so the next disagreement cannot hide the same way. Keyed
+/// on the name via one map lookup per line, not a scan per name: the
+/// `typescript` package has 2,161 of these, and a nested scan there is the
+/// quadratic this repo keeps paying for.
 fn add_bridge_ergonomic_helper_decls(
   bridge_mbti : String,
   bridge_mbt : String,
 ) -> String {
-  let mut next_bridge_mbti = bridge_mbti
+  let derived_names : Array[String] = []
+  let derived_decl : Map[String, String] = {}
   for line_view in bridge_mbt.split("\n") {
     let line = line_view.to_owned().trim().to_owned()
     match parse_bridge_pub_extern_fn_decl_line(line) {
       Some(fn_decl) => {
         let helper_decl = "declare pub fn \{fn_decl.public_name}(\{fn_decl.params_src}) -> \{fn_decl.return_type}"
-        if !next_bridge_mbti.contains(helper_decl) {
-          next_bridge_mbti += "\n\n///|\n" + helper_decl
+        if !derived_decl.contains(fn_decl.public_name) {
+          derived_names.push(fn_decl.public_name)
+          derived_decl[fn_decl.public_name] = helper_decl
         }
       }
       None => ()
+    }
+  }
+  let consumed : Array[String] = []
+  let kept : Array[String] = []
+  for line_view in bridge_mbti.split("\n") {
+    let line = line_view.to_owned()
+    let mut rewritten = false
+    match bridge_mbti_declared_fn_name(line) {
+      Some(name) =>
+        match derived_decl.get(name) {
+          Some(decl) => {
+            // First occurrence becomes the impl's own signature; a further
+            // declaration of the same name is dropped, since only one can
+            // exist.
+            if !consumed.contains(name) {
+              consumed.push(name)
+              kept.push(decl)
+            }
+            rewritten = true
+          }
+          None => ()
+        }
+      None => ()
+    }
+    if !rewritten {
+      kept.push(line)
+    }
+  }
+  let mut next_bridge_mbti = kept.join("\n")
+  for name in derived_names {
+    if !consumed.contains(name) {
+      next_bridge_mbti += "\n\n///|\n" + derived_decl.get(name).unwrap()
     }
   }
   for helper in collect_bridge_type_guard_helpers(bridge_mbti, bridge_mbt) {
