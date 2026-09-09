@@ -1515,6 +1515,50 @@ fn ffi_inline_js_arg_expr_with_state(
 }
 
 ///|
+/// The return-direction mirror of `ffi_inline_js_arg_expr_with_state`: wrap a
+/// JS expression flowing OUT of JS in the tagged-union alias's `_from_js`
+/// construction, so an `extern "js" fn` whose declared MoonBit return type is
+/// the generated enum hands back `{$tag, _0}` instead of the raw JS value.
+///
+/// Inlined for the same reason the `_to_js` direction is (see
+/// `ffi_inline_js_tagged_union_to_js`): an extern's inline lambda body cannot
+/// import the named `bridge.js` helper. The value is bound to a local first,
+/// because `tagged_union_from_js_expression` substitutes its argument once per
+/// case predicate and the expression here is a PROPERTY READ — `self.path`
+/// evaluated three times is three reads of a member that may be an accessor,
+/// where the named `bridge.js` helper reads its parameter.
+///
+/// Returns `expr` unchanged for an OPTIONAL tagged-union type: the MoonBit
+/// side of an optional return is decided separately by
+/// `ffi_option_return_needs_wrap` / `ffi_converted_return_extern_pair`, and
+/// converting here as well could box a value that path already boxed. No
+/// generated accessor in the corpus has that shape; when one appears it keeps
+/// today's raw passthrough rather than a double conversion.
+fn ffi_inline_js_return_expr_with_state(
+  state : MoonBitJsFfiState,
+  type_ : @ast.TsType,
+  expr : String,
+) -> String {
+  let name = match type_ {
+    @ast.TsType::Named(n) => n
+    _ => return expr
+  }
+  // The same gate the function return paths consult, so the accessor and the
+  // function form cannot disagree about whether `_from_js` exists.
+  if !ffi_tagged_union_return_is_safe_to_wrap(state, name) {
+    return expr
+  }
+  match state.tagged_union_decls_by_name.get(name) {
+    Some(decl) =>
+      match tagged_union_from_js_expression(decl, "__ts_mbt_raw") {
+        Some(body) => "((__ts_mbt_raw) => \{body})(\{expr})"
+        None => expr
+      }
+    None => expr
+  }
+}
+
+///|
 fn ffi_inline_js_tagged_union_to_js(
   state : MoonBitJsFfiState?,
   type_ : @ast.TsType,
@@ -3712,6 +3756,16 @@ fn ffi_returned_func_needs_arg_wrap(
 /// and wrong about a global, which is why `PathLike = string | Buffer | URL`
 /// gets a working wrapper while `PathOrFileDescriptor = PathLike | number`
 /// does not.
+///
+/// That paragraph described the intended behaviour and the code below did the
+/// opposite for a full commit: `Some(InstanceOfNamed(_)) => return false`
+/// refused every named payload, globals included, so `PathLike`'s `_from_js`
+/// was emitted, exercised by `verify-bridge-runtime`, and never CALLED — the
+/// declared enum came back holding the raw JS string. Refusing an erased name
+/// is `tagged_union_case_runtime_discriminator`'s job and it already does it
+/// (returning `None`, the arm below), so an `InstanceOfNamed` that reaches
+/// here is resolvable by construction and a second, blunter copy of the same
+/// judgement could only disagree with the first.
 fn ffi_tagged_union_return_is_safe_to_wrap(
   state : MoonBitJsFfiState,
   name : String,
@@ -3721,7 +3775,6 @@ fn ffi_tagged_union_return_is_safe_to_wrap(
       for entry in decl.cases {
         let (_, inner) = entry
         match tagged_union_case_runtime_discriminator(inner) {
-          Some(InstanceOfNamed(_)) => return false
           // Function payloads stay on the raw passthrough: the generic
           // wrapper would need closure conversion in both directions,
           // which the auto-wrap doesn't model.
@@ -5095,6 +5148,13 @@ fn ffi_class_property_getter_decl_to_moonbit(
   // body / converted pair below.
   let return_type = ffi_struct_field_type_name(state, class_property.type_)
   let getter_params = params.join(", ")
+  // A TAGGED-UNION-typed property is a second enum family, and neither
+  // `ffi_converted_return_extern_pair` nor `ffi_wrapper_return_body_expr`
+  // knows it: both ask `ffi_rendered_generated_enum_info`, which walks
+  // `state.enums` — the literal-union enums, whose converters are MoonBit
+  // functions in `converters.mbt`. A tagged union's converters live in
+  // `bridge.js`, so the conversion has to go in the JS body, which is where
+  // the class METHOD path already puts the argument direction.
   let result = if preserve {
     state.needs_js_any = true
     let fn_prefix = ffi_function_type_param_prefix(class_type_params)
@@ -5109,7 +5169,11 @@ fn ffi_class_property_getter_decl_to_moonbit(
       let wrapper_decl = "pub \{fn_prefix} \{fn_name}(\{getter_params}) -> \{return_type} {\n  \{body_expr}\n}"
       "\{extern_decl}\n\n\{wrapper_decl}"
     } else {
-      let js_get = ffi_js_access("self", class_property.name)
+      let js_get = ffi_inline_js_return_expr_with_state(
+        state,
+        class_property.type_,
+        ffi_js_access("self", class_property.name),
+      )
       // First param can't be named `self` — MoonBit parses
       // `extern "js" fn foo(self : T, ...)` as a deprecated method.
       let extern_decl = "extern \"js\" fn \{extern_name}(this_ : JSValue) -> JSValue =\n  #| (self) => \{js_get}"
@@ -5138,7 +5202,11 @@ fn ffi_class_property_getter_decl_to_moonbit(
         "pub extern \"js\" fn \{fn_name}(\{getter_params}) -> \{return_type} = \"\{binding_name}\""
     }
   } else {
-    let js_get = ffi_js_access("self", class_property.name)
+    let js_get = ffi_inline_js_return_expr_with_state(
+      state,
+      class_property.type_,
+      ffi_js_access("self", class_property.name),
+    )
     let extern_params = "this_ : " +
       getter_params["self : ".length():].to_owned()
     match
@@ -5191,6 +5259,16 @@ fn ffi_class_property_setter_decl_to_moonbit(
   params.push("value : \{value_type}")
   let value_expr = ffi_enum_arg_expr(state, value_type, "value")
   let value_raw_type = ffi_enum_param_raw_type(state, value_type)
+  // Mirror of the getter's tagged-union note: `ffi_enum_arg_expr` covers the
+  // literal-union enum family only, so a tagged-union-typed property assigned
+  // `{$tag, _0}` straight into the JS field is the same defect in the write
+  // direction. The class METHOD path already routes its arguments through
+  // this helper; the accessor path is where it was missing.
+  let js_value = ffi_inline_js_arg_expr_with_state(
+    Some(state),
+    class_property.type_,
+    "value",
+  )
   let fn_name = "set_" +
     ffi_to_snake_case(class_.name) +
     "_" +
@@ -5212,7 +5290,7 @@ fn ffi_class_property_setter_decl_to_moonbit(
       let js_set = ffi_js_access("self", class_property.name)
       // First param can't be named `self` — MoonBit parses
       // `extern "js" fn foo(self : T, ...)` as a deprecated method.
-      let extern_decl = "extern \"js\" fn \{extern_name}(this_ : JSValue, value : JSValue) -> Unit =\n  #| (self, value) => (\{js_set} = value)"
+      let extern_decl = "extern \"js\" fn \{extern_name}(this_ : JSValue, value : JSValue) -> Unit =\n  #| (self, value) => (\{js_set} = \{js_value})"
       let wrapper_decl = "pub \{fn_prefix} \{class_type_name}::\{fn_name}(\{setter_params}) -> Unit {\n  \{extern_name}(unsafeCast(self), unsafeCast(\{value_expr}))\n}"
       Some("\{extern_decl}\n\n\{wrapper_decl}")
     }
@@ -5231,12 +5309,12 @@ fn ffi_class_property_setter_decl_to_moonbit(
     let js_set = ffi_js_access("self", class_property.name)
     if value_expr != "value" {
       let extern_name = "_\{fn_name}_ret_conv_js"
-      let extern_decl = "extern \"js\" fn \{extern_name}(this_ : \{class_type_name}, value : \{value_raw_type}) -> Unit =\n  #| (self, value) => (\{js_set} = value)"
+      let extern_decl = "extern \"js\" fn \{extern_name}(this_ : \{class_type_name}, value : \{value_raw_type}) -> Unit =\n  #| (self, value) => (\{js_set} = \{js_value})"
       let wrapper_decl = "pub fn \{class_type_name}::\{fn_name}(\{setter_params}) -> Unit {\n  \{extern_name}(self, \{value_expr})\n}"
       Some("\{extern_decl}\n\n\{wrapper_decl}")
     } else {
       Some(
-        "pub extern \"js\" fn \{class_type_name}::\{fn_name}(\{setter_params}) -> Unit =\n  #| (self, value) => (\{js_set} = value)",
+        "pub extern \"js\" fn \{class_type_name}::\{fn_name}(\{setter_params}) -> Unit =\n  #| (self, value) => (\{js_set} = \{js_value})",
       )
     }
   }
@@ -6582,7 +6660,15 @@ pub async fn emit_moonbit_js_ffi_bundle_from_entry_path(
       let class_access = ensure_bridge_runtime_access(
         seen_bridge_import_keys, bridge_imports, namespace_import_roots, class_runtime_export_name,
       )
-      let getter_access = ffi_js_access(class_access, class_property.name)
+      // A static accessor's binding is a named `bridge.js` function rather
+      // than an inline extern lambda, so it can call the `_from_js` / `_to_js`
+      // helpers by name — but it was passing the raw value through in both
+      // directions, the same omission as the instance forms above.
+      let getter_access = ffi_type_js_return_expr(
+        state,
+        class_property.type_,
+        ffi_js_access(class_access, class_property.name),
+      )
       push_unique_bridge_binding(
         seen_bridge_binding_names,
         bridge_lines,
@@ -6595,6 +6681,11 @@ pub async fn emit_moonbit_js_ffi_bundle_from_entry_path(
           class_property.name,
         )
         let setter_target = ffi_js_access(class_access, class_property.name)
+        let setter_value = ffi_type_js_converter_expr(
+          state,
+          class_property.type_,
+          "value",
+        )
         push_unique_bridge_binding(
           seen_bridge_binding_names,
           bridge_lines,
@@ -6602,7 +6693,7 @@ pub async fn emit_moonbit_js_ffi_bundle_from_entry_path(
           ffi_bridge_function_line(
             setter_binding,
             ["value"],
-            "(\{setter_target} = value)",
+            "(\{setter_target} = \{setter_value})",
           ),
         )
       }

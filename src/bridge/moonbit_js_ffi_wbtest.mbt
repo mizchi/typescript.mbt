@@ -393,6 +393,106 @@ async test "bridge: emit MoonBit JS FFI bundle for exported class properties" {
 }
 
 ///|
+/// A class property typed by a TAGGED UNION has to route through the alias's
+/// converters at all four accessor paths — instance get / set and static
+/// get / set. None of them did: they asked `ffi_rendered_generated_enum_info`
+/// and `ffi_enum_arg_expr`, which walk `state.enums` (the literal-union enums,
+/// whose converters are MoonBit functions), so the second enum family fell
+/// through and node_fs's `ReadStream.path: PathLike` declared the enum in both
+/// directions while moving the raw JS value.
+///
+/// The declared type is unchanged either way, which is why no compile gate
+/// could see it: a MoonBit `match` on the getter's result read `$tag` off a
+/// string, and the setter stored `{ "$tag": 0, "_0": … }` into a Node field.
+///
+/// `Key = string | URL` is the shape that has a working `_from_js`: `URL` is a
+/// JS global, so `tagged_union_case_runtime_discriminator` keeps its
+/// `instanceof` — the case `ffi_tagged_union_return_is_safe_to_wrap` used to
+/// refuse outright while its own doc comment said it was kept.
+async test "bridge: a tagged-union class property converts at all four accessor paths" {
+  let bundle = emit_moonbit_js_ffi_bundle_from_entry_path(
+    "fixtures/resolver/project/types/class-property-tagged-union-entry.d.ts", "./runtime/class-property.js",
+  ) catch {
+    e => {
+      match e {
+        ReadError(msg) | ParseError(msg) | ResolveError(msg) =>
+          fail("Emit error: \{msg}")
+      }
+      return
+    }
+  }
+  // Instance getter: the raw JS value is bound once and built into `{$tag,
+  // _0}`. Bound rather than substituted, because the from_js body repeats its
+  // argument per case predicate and `self.key` is a property READ.
+  assert_true(
+    bundle.ffi_mbt.contains(
+      "pub extern \"js\" fn Holder::get_holder_key(self : Holder) -> Key =\n" +
+      "  #| (self) => ((__ts_mbt_raw) => (() => { if (typeof __ts_mbt_raw === \"string\") return { \"$tag\": 0, \"_0\": __ts_mbt_raw }; else if (__ts_mbt_raw instanceof URL) return { \"$tag\": 1, \"_0\": __ts_mbt_raw }; throw new Error(\"unexpected Key value\"); })())(self.key)",
+    ),
+  )
+  // Instance setter: the `$tag` dispatch back to the bare JS value.
+  assert_true(
+    bundle.ffi_mbt.contains(
+      "pub extern \"js\" fn Holder::set_holder_key(self : Holder, value : Key) -> Unit =\n" +
+      "  #| (self, value) => (self.key = (() => { if (value === null || typeof value !== \"object\" || !(\"$tag\" in value)) return value; if (value.$tag === 0) return value._0; else if (value.$tag === 1) return value._0; throw new Error(\"unexpected Key tag: \" + value.$tag); })())",
+    ),
+  )
+  // The static pair binds a NAMED `bridge.js` function rather than an inline
+  // extern lambda, so there it can call the helper by name.
+  assert_true(
+    bundle.bridge_js.contains(
+      "export function __ts_mbt_get_holder_static_key() { return __ts_mbt_tagged_union_key_from_js(Holder.staticKey); }",
+    ),
+  )
+  assert_true(
+    bundle.bridge_js.contains(
+      "export function __ts_mbt_set_holder_static_key(value) { return (Holder.staticKey = (() => { if (value === null || typeof value !== \"object\" || !(\"$tag\" in value)) return value; if (value.$tag === 0) return value._0; else if (value.$tag === 1) return value._0; throw new Error(\"unexpected Key tag: \" + value.$tag); })()); }",
+    ),
+  )
+  // The raw passthrough each of the four used to emit.
+  assert_false(bundle.ffi_mbt.contains("#| (self) => self.key"))
+  assert_false(bundle.ffi_mbt.contains("(self.key = value)"))
+  assert_false(
+    bundle.bridge_js.contains(
+      "export function __ts_mbt_get_holder_static_key() { return Holder.staticKey; }",
+    ),
+  )
+  assert_false(bundle.bridge_js.contains("(Holder.staticKey = value)"))
+  // The negative control, and the reason it matters: `Level` is the LITERAL-
+  // union family, converted on the MoonBit side by `converters.mbt`
+  // functions. Its JS body has to stay a bare read, or a property could come
+  // out converted TWICE — which is the way this change could have been wrong.
+  assert_true(
+    bundle.ffi_mbt.contains(
+      "extern \"js\" fn _get_holder_level_ret_conv_js(this_ : Holder) -> String =\n" +
+      "  #| (self) => self.level",
+    ),
+  )
+  assert_true(
+    bundle.ffi_mbt.contains(
+      "pub fn Holder::get_holder_level(self : Holder) -> Level {\n" +
+      "  __ts_mbt_level_from_js(_get_holder_level_ret_conv_js(self))\n}",
+    ),
+  )
+  assert_true(
+    bundle.ffi_mbt.contains(
+      "extern \"js\" fn _set_holder_level_ret_conv_js(this_ : Holder, value : String) -> Unit =\n" +
+      "  #| (self, value) => (self.level = value)",
+    ),
+  )
+  assert_true(
+    bundle.bridge_js.contains(
+      "export function __ts_mbt_get_holder_static_level() { return Holder.staticLevel; }",
+    ),
+  )
+  assert_true(
+    bundle.bridge_js.contains(
+      "export function __ts_mbt_set_holder_static_level(value) { return (Holder.staticLevel = value); }",
+    ),
+  )
+}
+
+///|
 async test "bridge: emit MoonBit JS FFI bundle expands inherited callable class properties" {
   let bundle = emit_moonbit_js_ffi_bundle_from_entry_path(
     "fixtures/resolver/project/types/class-callable-property-alias-entry.d.ts", "./runtime/app.js",

@@ -14,9 +14,13 @@
 // Two checks, because neither alone is complete:
 //
 //   static  — every `instanceof X` in a generated `bridge.js` must have `X`
-//             either a JS global or bound in that module. This is the
-//             COMPLETE check: it sees a site whichever arm of the converter
-//             the probe value happens to reach.
+//             either a JS global or bound in that module, and every
+//             `instanceof X` in an inline `extern "js" fn` body — where the
+//             accessor paths put their own copy of the conversion, a lambda
+//             having no module scope to import into — must have `X` a JS
+//             global, full stop. This is the COMPLETE check: it sees a site
+//             whichever arm of the converter the probe value happens to
+//             reach.
 //   runtime — import each `bridge.js` and call every exported
 //             `__ts_mbt_tagged_union_*_from_js` over a value battery. A
 //             `ReferenceError` is a failure; the converter's own
@@ -138,8 +142,7 @@ function boundNames(src) {
   return bound;
 }
 
-function staticCheck(file, src) {
-  const bound = boundNames(src);
+function staticCheck(file, src, bound) {
   const unbound = new Map();
   for (const m of src.matchAll(/instanceof\s+([A-Za-z_$][\w$.]*)/g)) {
     const name = m[1];
@@ -149,6 +152,51 @@ function staticCheck(file, src) {
     unbound.set(name, (unbound.get(name) ?? 0) + 1);
   }
   return { file, unbound: [...unbound.entries()].map(([n, c]) => ({ name: n, count: c })) };
+}
+
+// `bridge.js` is not the only place a generated `instanceof` lands. An
+// `extern "js" fn` whose body is an inline lambda carries its own copy of the
+// conversion, because MoonBit's JS backend will not import a named helper into
+// one — so the class-accessor paths inline `tagged_union_from_js_expression`
+// directly.
+//
+// Those bodies get the STRICTER test: an inline lambda has no module scope of
+// its own, so a JS global is the only thing that can resolve there. Nothing
+// this side can be rescued by a `bridge.js` import.
+//
+// Scoped to the directories that hold a generated `bridge.js`, not to `_build`
+// at large. Walking every `.mbt` under `_build` reaches MoonBit's own build
+// output — including `moon fmt`'s copy of the checker's whitebox tests, whose
+// `#|` lines are TypeScript SOURCE for a test case and reported three
+// `instanceof` targets that are not generated code at all. Widening the input
+// set is not the same as widening the question.
+async function findInlineExternSources(bridgeFiles) {
+  const out = [];
+  for (const bridge of bridgeFiles) {
+    const dir = dirname(bridge);
+    let entries;
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const e of entries) {
+      if (e.isFile() && e.name.endsWith(".mbt")) out.push(join(dir, e.name));
+    }
+  }
+  out.sort();
+  return out;
+}
+
+// Only the inline `#|` continuation lines, so a MoonBit comment mentioning
+// `instanceof` is not read as generated JS.
+function inlineExternJs(src) {
+  const lines = [];
+  for (const line of src.split("\n")) {
+    const m = line.match(/^\s*#\|(.*)$/);
+    if (m) lines.push(m[1]);
+  }
+  return lines.join("\n");
 }
 
 // Which exports are safe to call with an arbitrary probe value.
@@ -243,8 +291,16 @@ async function main() {
   const runtimeResults = [];
   for (const file of files) {
     const src = readFileSync(file, "utf8");
-    staticResults.push(staticCheck(file, src));
+    staticResults.push(staticCheck(file, src, boundNames(src)));
     runtimeResults.push(await runtimeCheck(file, opts));
+  }
+
+  let inlineExternFiles = 0;
+  for (const file of await findInlineExternSources(files)) {
+    const js = inlineExternJs(readFileSync(file, "utf8"));
+    if (!js.includes("instanceof")) continue;
+    inlineExternFiles += 1;
+    staticResults.push(staticCheck(file, js, new Set()));
   }
 
   const unboundSites = staticResults.reduce(
@@ -261,6 +317,7 @@ async function main() {
 
   const fns = runtimeResults.reduce((n, r) => n + r.fns, 0);
   console.log(`bridge modules found:            ${files.length}`);
+  console.log(`inline-extern sources scanned:   ${inlineExternFiles}`);
   console.log(`bridge modules imported:         ${loaded}`);
   console.log(`converters called:               ${fns}`);
   console.log(`converter calls exercised:       ${calls}`);

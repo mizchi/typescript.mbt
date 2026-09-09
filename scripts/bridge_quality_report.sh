@@ -355,6 +355,12 @@ jsvalue_cause_counts() {
 run_check "verify-scaffolds" bash scripts/verify_scaffolds.sh
 run_check "verify-generated-fixtures" bash scripts/verify_generated_fixtures.sh
 run_check "verify-examples" bash scripts/verify_examples.sh
+# Runs against the corpus the three above just generated. It asks the one
+# question none of them do: a declaration that PROMISES a payload-bearing enum
+# has to be implemented by JS that BUILDS one. Called rather than reimplemented
+# in shell — a second copy of the rule is the defect this report already
+# carries three notes about.
+run_check "bridge-enum-return-probe" node scripts/bridge_enum_return_probe.mjs
 
 collect_metric_roots
 

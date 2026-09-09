@@ -170,19 +170,76 @@ repo has been removed. Items below are scoped to the bridge generator only.
     FAILS on any occurrence. Mutation-tested both directions, and
     verified NOT to fire on the `Type::method` forms that fooled the
     first measurement.
-- [ ] **`_from_js` exists but the return wrapper still declines it.**
-  The other half of the same defect, now that the predicate distinction
-  above is written down: for a union whose cases are a primitive plus a
-  GLOBAL constructor (`PathLike`, `TimeLike`, `Mode`, `OpenMode`) the
-  `_from_js` converter is emitted and works, while
-  `ffi_tagged_union_return_is_safe_to_wrap` refuses the auto-wrap for any
-  `InstanceOfNamed` — so those returns declare the enum and deliver the
-  raw value. Letting the wrap gate accept a global-constructor
-  `instanceof` is what its own doc comment already claims it does.
-  `bridge_enum_return_probe.mjs` cannot currently see these: its regex
-  matches `declare pub fn NAME(`, so every `Type::method` form is
-  skipped, and node_fs's 12 such returns are mostly getters. Widen the
-  probe first, then measure.
+- [x] **`_from_js` exists but the wrapper still declines it** — DONE, and
+  the estimate above was wrong twice. "node_fs's 12 such returns are
+  mostly getters" was a guess; the widened probe says **4 sites, all in
+  node_fs, all `PathLike`, two getters and two setters**. And the fix is
+  in TWO places, not one: the gate, and the accessor paths that consult
+  it.
+  - **The gate contradicted its own doc comment for a full commit.**
+    8d227ad rewrote `ffi_tagged_union_return_is_safe_to_wrap`'s header to
+    say a global constructor "resolves and is kept … which is why
+    `PathLike = string | Buffer | URL` gets a working wrapper", and left
+    `Some(InstanceOfNamed(_)) => return false` in the body. So
+    `PathLike`'s `_from_js` was emitted, exercised by
+    `verify-bridge-runtime`, and never CALLED. Refusing an ERASED name is
+    `tagged_union_case_runtime_discriminator`'s job and it already does it
+    by returning `None`; the second, blunter copy of that judgement could
+    only disagree with the first.
+  - **Measured alone the gate change is a ZERO-diff no-op**, and that is
+    not the same as pointless — it is consulted by
+    `ffi_type_needs_js_return_conversion_with_state` and
+    `ffi_type_js_return_expr`, and no top-level function in the corpus
+    returns a global-`Named` union. It is LOAD-BEARING for the accessor
+    fix below, proven by mutation: with the old arm restored the
+    regenerated node_fs getter is `#| (self) => self.path` again.
+  - **The four accessor paths never asked about tagged unions at all.**
+    `ffi_class_property_getter_decl_to_moonbit` /
+    `_setter_decl_to_moonbit` route through
+    `ffi_rendered_generated_enum_info` and `ffi_enum_arg_expr`, which walk
+    `state.enums` — the LITERAL-union enums, whose converters are MoonBit
+    functions in `converters.mbt`. A tagged union's converters live in
+    `bridge.js`, so the class METHOD path puts the argument direction in
+    the JS BODY (`ffi_inline_js_arg_expr_with_state`) and the accessor
+    path had neither direction. Two enum families, one of them asked
+    about at these sites: the applied-in-some-places family with the axis
+    being the FAMILY rather than the site.
+  - The return direction needed a helper that did not exist —
+    `ffi_inline_js_return_expr_with_state`, the mirror of the argument
+    one — because an inline extern lambda cannot import the named
+    `bridge.js` helper (`ffi_inline_js_tagged_union_to_js` states that in
+    its own comment). It binds the value first: the from_js body repeats
+    its argument once per case predicate, and the expression here is
+    `self.path`, a property READ, where the named helper reads a
+    parameter. Statics take the named helpers instead, their binding
+    being a real `bridge.js` function.
+  - **The setter fix turned out to cover a SECOND family, 26 sites of
+    it.** `ffi_inline_js_arg_expr_with_state` also unwraps an OPTION box,
+    so `Context::set_context_env(value : Bindings?)` had been assigning
+    MoonBit's `{$tag: 1, _0: v}` straight into JS's `env` field — across
+    hono, hono-real, drizzle, vitest and typescript. One missing call,
+    two independent wrong values. Corpus totals: 33 emitted lines change,
+    26 option-box unwraps, 2 tagged-union getters, 2 setters, 2 static
+    struct converters, and every package's `.mbti` declaration count is
+    unchanged, so the public surface is identical.
+  - The probe was the precondition and it was widened as one: it now
+    reads `fn[T]` and `Type::method` forms, and — the half that matters —
+    scans INLINE EXTERN bodies as well as named `bridge.js` wrappers,
+    since the two are where a declaration's implementation can land and
+    only the second was ever checked. 47 named wrappers and 8 inline
+    bodies cross a payload enum, 0 unconverted; wired into
+    `bridge_quality_report.sh` as a `run_check`, called rather than
+    reimplemented in shell. Mutation-tested by putting the raw
+    passthrough back.
+  - `verify-bridge-runtime`'s static half now scans those inline bodies
+    too, under the STRICTER rule that only a JS global can resolve there
+    (an inline lambda has no module scope). Its first version walked
+    every `.mbt` under `_build` and reported three `instanceof` targets
+    out of `moon fmt`'s copy of a checker whitebox test, whose `#|` lines
+    are TypeScript source for a test case — widening the input set is not
+    widening the question, so it is scoped to the directories holding a
+    generated `bridge.js`. 1 source scanned, 0 unbound; fails when an
+    erased name is injected into that body.
 - [ ] **Bind a module-exported class so its `instanceof` resolves.** The
   ceiling is measured and small: of the 197 declined names, the runtime
   classes are node_fs's `Stats` / `StatsFs` / `BigIntStats` /

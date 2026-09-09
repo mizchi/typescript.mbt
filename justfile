@@ -171,7 +171,7 @@ verify-checker-scaling *ARGS:
     node scripts/verify_checker_scaling.mjs {{ ARGS }}
 
 # Full CI check
-ci: fmt check test verify-mbti-dts verify-scaffolds verify-generated-fixtures verify-examples verify-bridge-runtime verify-mangle-safety verify-dce-coverage verify-rule-equivalence verify-graph-walk verify-checker-soundness verify-checker-scaling
+ci: fmt check test verify-mbti-dts verify-scaffolds verify-generated-fixtures verify-examples verify-bridge-runtime verify-bridge-enum-returns verify-mangle-safety verify-dce-coverage verify-rule-equivalence verify-graph-walk verify-checker-soundness verify-checker-scaling
 
 # Update dependencies
 update:
@@ -202,6 +202,23 @@ clean:
 #   just verify-bridge-runtime --verbose
 verify-bridge-runtime *ARGS:
     node scripts/verify_bridge_runtime.mjs {{ ARGS }}
+
+# Does the JS emitted for a declaration that PROMISES a payload-bearing enum
+# actually build one?
+#
+# verify-bridge-runtime asks whether a converter RUNS; this asks whether the
+# wrapper that should call it does. `serve(...) -> ServerType` returned the raw
+# Node server, and node_fs's `ReadStream.path: PathLike` moved the raw value in
+# both directions, with the declared type unchanged either way — so no compile
+# gate could see it and a MoonBit `match` read `$tag` off a string.
+#
+# Both places an implementation can land: a named `bridge.js` wrapper, and an
+# `extern "js" fn` whose body is an inline lambda. Reading only the first is
+# how the accessor sites stayed invisible.
+#
+# Assumes the three generation harnesses above have populated `_build`.
+verify-bridge-enum-returns:
+    node scripts/bridge_enum_return_probe.mjs
 
 # Validate `--mangle-properties` against the mangle-safety corpus
 verify-mangle-safety *ARGS:

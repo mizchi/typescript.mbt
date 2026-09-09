@@ -2818,6 +2818,71 @@ product surfaces now.
   report gains a `duplicate declared fn names` metric that FAILS on any
   occurrence, mutation-tested in both directions and verified not to fire
   on the `Type::method` forms that fooled the first measurement.
+  The other half of that split is a gate that contradicted its own doc
+  comment for a whole commit, and it is worth recording as its own
+  failure mode: a comment describing intent, written in the same change
+  that left the code doing the opposite. 8d227ad rewrote
+  `ffi_tagged_union_return_is_safe_to_wrap`'s header to say that a global
+  constructor "resolves and is kept … which is why `PathLike = string |
+  Buffer | URL` gets a working wrapper", and left
+  `Some(InstanceOfNamed(_)) => return false` in the body — so `PathLike`'s
+  `_from_js` was emitted, exercised by `verify-bridge-runtime`, and never
+  CALLED, and the declared enum came back holding a raw JS string.
+  Refusing an ERASED name is `tagged_union_case_runtime_discriminator`'s
+  job and it already does it by returning `None`; a second, blunter copy
+  of that judgement could only disagree with the first, which is exactly
+  what it did.
+  Measured ALONE that gate change is a zero-diff no-op, because nothing
+  else consults it for a global-`Named` union return — and it is
+  load-bearing all the same, proven by mutation: with the old arm back the
+  regenerated accessor is `#| (self) => self.path` again. A change whose
+  own corpus delta is zero is not automatically the rejected kind this
+  file records; the question is whether something downstream needs it.
+  What needed it is FOUR accessor paths that never asked about tagged
+  unions at all. `ffi_class_property_getter_decl_to_moonbit` and its
+  setter twin route through `ffi_rendered_generated_enum_info` /
+  `ffi_enum_arg_expr`, which walk `state.enums` — the LITERAL-union
+  enums, whose converters are MoonBit functions in `converters.mbt`. A
+  tagged union's converters live in `bridge.js`, so the class METHOD path
+  puts the argument direction in the JS BODY
+  (`ffi_inline_js_arg_expr_with_state`) and the accessor path had neither
+  direction: node_fs's `ReadStream.path: PathLike` declared the enum both
+  ways while moving the raw value, and no compile gate could see it
+  because the declared type is identical either way. Same
+  applied-in-some-places family with the axis swapped — not one rule
+  written at several SITES, but one site asking about one of two FAMILIES.
+  The return direction needed a helper that did not exist,
+  `ffi_inline_js_return_expr_with_state`, because an inline extern lambda
+  cannot import the named `bridge.js` helper —
+  `ffi_inline_js_tagged_union_to_js` says so in its own comment. It binds
+  the value before converting, since the from_js body repeats its argument
+  once per case predicate and the expression here is `self.path`, a
+  property READ, where the named helper reads a parameter. Statics keep
+  the named helpers, their binding being a real `bridge.js` function.
+  **The setter fix then covered a SECOND family nobody was looking for**,
+  and it is 26 of the 33 changed lines: `ffi_inline_js_arg_expr_with_state`
+  also unwraps an OPTION box, so `Context::set_context_env(value :
+  Bindings?)` had been assigning MoonBit's `{$tag: 1, _0: v}` straight
+  into JS's `env` field, across hono, hono-real, drizzle, vitest and
+  typescript. One missing call, two independent wrong values; every
+  package's `.mbti` declaration count is unchanged, so the public surface
+  is identical.
+  The probe was the stated precondition and widening it is where the
+  lesson sits. `bridge_enum_return_probe.mjs` matched `declare pub fn
+  NAME(`, so `fn[T]` and every `Type::method` form was skipped — but the
+  half that mattered was not the regex: a declaration's implementation
+  lands EITHER in a named `bridge.js` wrapper OR in an inline extern
+  lambda, and only the first was ever read. It now reads both (47 named
+  wrappers and 8 inline bodies cross a payload enum, 0 unconverted) and
+  is wired into `bridge_quality_report.sh` as a `run_check` rather than
+  reimplemented in shell. `verify-bridge-runtime` gets the same widening
+  on its static half, under the STRICTER rule that only a JS global can
+  resolve inside an inline lambda, which has no module scope at all. Its
+  first version walked every `.mbt` under `_build` and reported three
+  `instanceof` targets out of `moon fmt`'s copy of a checker whitebox
+  test, whose `#|` lines are TypeScript SOURCE for a test case: widening
+  the input set is not the same as widening the question, so it is scoped
+  to the directories holding a generated `bridge.js`.
 
 ## Project Structure
 
