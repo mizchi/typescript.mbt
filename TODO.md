@@ -240,16 +240,72 @@ repo has been removed. Items below are scoped to the bridge generator only.
     widening the question, so it is scoped to the directories holding a
     generated `bridge.js`. 1 source scanned, 0 unbound; fails when an
     erased name is injected into that body.
-- [ ] **Bind a module-exported class so its `instanceof` resolves.** The
-  ceiling is measured and small: of the 197 declined names, the runtime
-  classes are node_fs's `Stats` / `StatsFs` / `BigIntStats` /
-  `BigIntStatsFs`, hono__node_server's `Server` / `IncomingMessage` /
-  `ServerResponse` / the three `Http2*`, and drizzle's `Table` / `View` —
-  about ten. Each needs `const N = __ts_mbt_module.N` threaded through
-  `bridge_imports` at the converter-emission point, and then `Stats |
-  BigIntStats` returns get a typed enum instead of a raw passthrough. Worth
-  doing for the `stat()` family specifically; not worth it for the ~187
-  names that are erased no matter what.
+- [x] **Bind a module-exported class — MEASURED, ceiling is ONE return
+  position, and measuring it found 18 live bugs next door.** The estimate
+  above ("about ten", "worth doing for the `stat()` family specifically")
+  is wrong in both halves, and the runtime says so: importing each
+  generated package's own module and asking `typeof mod[name]` gives
+  **2 bindable names of the 197 declined**, `Table` (drizzle-orm) and
+  `Stats` (node:fs).
+  - Every name the estimate listed is NOT bindable, for two reasons worth
+    separating. hono__node_server's `Server` / `Http2Server` /
+    `Http2SecureServer` / `IncomingMessage` / `ServerResponse` are
+    **exported by a DIFFERENT module** — they are `node:http` / `node:http2`
+    classes that the package re-exports as TYPES — so `__ts_mbt_module.Server`
+    is `undefined` and binding them needs an import of another module, not
+    the one-line threading this item described. `StatsFs` /
+    `BigIntStatsFs` / `BigIntStats` are type-only on `node:fs`.
+  - And the ceiling is a question about CONVERTERS, not names: `_from_js` is
+    withheld unless EVERY case is discriminable, so `Stats` being bindable
+    buys nothing while `BigIntStats` stays erased — which is exactly the
+    `stat()` family this item called its main prize. Two converters are
+    fully unblocked (`Auto_SQLValue_or_TableValue`,
+    `Auto_ViewValue_or_TableValue`, both drizzle), and only ONE of them
+    occurs in a return position: `aliasedTable`. The binding mechanism
+    already exists — `bridge.js` emits `const Dir = __ts_mbt_module.Dir` —
+    so what is missing is the call at the converter-emission point.
+  - **The measurement's real output is 18 live wrong-value sites**, found
+    because `aliasedTable` turned out to convert its ARGUMENT and hand its
+    return back raw while declaring `-> Auto_ViewValue_or_TableValue`. The
+    probe had been blind to them twice over: it matched
+    `/_from_js|_to_js|\$tag/` over the whole body, so the `$tag` of the
+    PARAMETER's conversion passed the return; and it read payload enums
+    from `bridge.mbti` only, where the SYNTHESIZED `Auto_X_or_Y` unions are
+    never declared — **212 of 231 payload enums live in `types.mbt`**. Both
+    fixed: the directions are separate questions now (`"$tag":` /
+    `_from_js(` BUILDS a MoonBit value, `.$tag ===` / `_to_js(` READS one),
+    and the enum scan reads every `.mbt`.
+  - The 18 are declared in `scripts/bridge_unconverted_enum_crossings.txt`
+    with a kind and a reason each — 15 `erased-payload`, 2
+    `optional-gate`, 1 `module-class`. Undeclared fails, stale fails, both
+    mutation-tested.
+- [ ] **Give `ffi_widen_unbuildable_union_outputs` a `Union(parts)` arm —
+  needs a cross-layer channel first.** 15 of the 18 declared crossings
+  above are erased payloads whose honest answer is the same widening that
+  fixed `ServerType`, and it never sees them: a synthesized union keeps the
+  original `Union(parts)` shape in the AST while its signature already
+  reads `Auto_X_or_Y`, which `ffi_inline_js_tagged_union_to_js` states in
+  its own comment sixty lines away. Sixth fail-open shape arm here, and the
+  first one written INSIDE the fix for the previous one.
+  Implemented (`ffi_output_union_alias_name`, resolving both spellings) and
+  **REVERTED on a measured blocker**: the widening lives in the FFI layer
+  and the public wrapper — `pub fn getNameOfJSDocTypedef(...) ->
+  Auto_IdentifierValue_or_PrivateIdentifierValue?` — is rendered by the
+  DECL layer, which holds no `MoonBitJsFfiState`. Widening one side gives
+  `[4014] Expr Type Mismatch: has type JSValue?, wanted Auto_...?`, the two
+  layers disagreeing, which is the same split that produced the duplicate
+  `.mbti` declarations. Take it with the channel, not with a second copy of
+  the widening in the decl layer.
+- [ ] **Convert an OPTIONAL tagged-union crossing.** The cheapest real fix
+  on the declared list, and the previous note's claim that "no generated
+  accessor in the corpus has that shape" was wrong — there are 2:
+  `TypeChecker::getConstantValue` returns `Auto_NumberValue_or_StringValue?`,
+  whose cases are `String | Double`, so `typeof` discriminates and the
+  `_from_js` is fully buildable. `ffi_inline_js_return_expr_with_state`
+  leaves the optional form alone because MoonBit's `Option` repr is decided
+  separately by `ffi_option_return_needs_wrap` /
+  `ffi_converted_return_extern_pair`, and converting in both places would
+  box twice. Needs those two to agree on who wraps.
 - [ ] **Drop `ffi_synthesize_inline_union`'s `func_members > 0` gate.** Now
   that soundness lives centrally the gate is conservative rather than
   load-bearing: it refuses to synthesize an enum whose `_from_js` would be

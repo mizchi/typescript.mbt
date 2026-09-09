@@ -218,6 +218,8 @@ verify-bridge-runtime *ARGS:
 #
 # Assumes the three generation harnesses above have populated `_build`.
 verify-bridge-enum-returns:
+    # Declared backlog lives in scripts/bridge_unconverted_enum_crossings.txt;
+    # an undeclared occurrence and a stale declaration both fail.
     node scripts/bridge_enum_return_probe.mjs
 
 # Validate `--mangle-properties` against the mangle-safety corpus

@@ -1,0 +1,65 @@
+# Declarations that PROMISE a payload-bearing enum and whose emitted JS never
+# builds (return) or reads (parameter) one.
+#
+# Read by `scripts/bridge_enum_return_probe.mjs`. Format, `|`-separated:
+#
+#   <package> | <declaration> | <direction> | <kind> | <reason>
+#
+# An occurrence NOT listed here fails the probe. A listed entry that no longer
+# occurs is reported STALE and also fails — that report is the only thing that
+# keeps a file like this from decaying into a suppression list, and it is the
+# lesson `scripts/bridge_widened_unions.txt` and
+# `scripts/checker_out_of_scope.txt` were both written for.
+#
+# The package key is the generated package's own directory name, so the same
+# `typescript.d.ts` appears twice: once as `typescript_ast` (its own example)
+# and once as `typescript` (nested under the node-imports example).
+#
+# WHY THESE ARE DECLARED RATHER THAN FIXED
+#
+# The honest answer for an erased-payload union is to WIDEN the declared type
+# to `JSValue`, which is what `ffi_widen_unbuildable_union_outputs` does for
+# `ServerType`. That function has no `Union(parts)` arm, so it never sees a
+# SYNTHESIZED union: the AST keeps the original `Union` shape while the
+# signature already reads `Auto_X_or_Y`, exactly as
+# `ffi_inline_js_tagged_union_to_js` describes in its own comment. Adding the
+# arm was implemented and REVERTED, with a measured blocker: the widening lives
+# in the FFI layer and the public wrapper (`pub fn getNameOfJSDocTypedef(...) ->
+# Auto_IdentifierValue_or_PrivateIdentifierValue?`) is rendered by the DECL
+# layer, which holds no `MoonBitJsFfiState`. Widening one side gives
+# `Expr Type Mismatch: has type JSValue?, wanted Auto_...?` — the two layers
+# disagreeing, which is the same split that produced the duplicate `.mbti`
+# declarations fixed in b1e20fe. The fix is a cross-layer channel, filed in
+# TODO.md; shipping it half-applied is what this repo keeps paying for.
+#
+# kinds
+#   erased-payload   a case payload is a TS interface / alias / type parameter,
+#                    so no `instanceof` can ever resolve. WIDEN.
+#   optional-gate    the `_from_js` is buildable and the OPTIONAL form declines
+#                    it, because MoonBit's `Option` repr is decided separately.
+#                    CONVERTIBLE — the cheapest real fix on this list.
+#   module-class     every payload is a class the module exports at runtime, so
+#                    binding `const N = __ts_mbt_module.N` would make the
+#                    `instanceof` resolve. CONVERTIBLE.
+
+drizzle_orm | aliasedTable | ret | module-class | Table and View are both real classes on `drizzle-orm`; binding them is the whole fix, and this is the ONLY return position in the corpus that the class binding would improve
+
+typescript_ast | walkUpBindingElementsAndPatterns | ret | erased-payload | VariableDeclaration and ParameterDeclaration are TypeScript interfaces
+typescript_ast | getNameOfJSDocTypedef | ret | erased-payload | Identifier and PrivateIdentifier are TypeScript interfaces
+typescript_ast | CompilerOptions::index_get | ret | erased-payload | TsConfigSourceFile and CompilerOptionsValue are erased, and the position is optional as well
+typescript_ast | CompilerOptions::index_set | param | erased-payload | mirror of index_get; the write direction needs no runtime predicate but is declined by the same optional handling
+typescript_ast | TypeChecker::getConstantValue | ret | optional-gate | `String | Double` — BOTH primitives, so `typeof` discriminates and the `_from_js` is fully buildable. Declined only because the return is optional and `ffi_inline_js_return_expr_with_state` leaves the optional form alone
+typescript_ast | LanguageService::prepareCallHierarchy | ret | erased-payload | CallHierarchyItem is an interface; its array sibling would discriminate on its own
+
+typescript | walkUpBindingElementsAndPatterns | ret | erased-payload | same declaration as the typescript_ast package
+typescript | getNameOfJSDocTypedef | ret | erased-payload | same declaration as the typescript_ast package
+typescript | CompilerOptions::index_get | ret | erased-payload | same declaration as the typescript_ast package
+typescript | CompilerOptions::index_set | param | erased-payload | same declaration as the typescript_ast package
+typescript | TypeChecker::getConstantValue | ret | optional-gate | same declaration as the typescript_ast package
+typescript | LanguageService::prepareCallHierarchy | ret | erased-payload | same declaration as the typescript_ast package
+
+node_fs | fstatSync_number_stat_options_optional | ret | erased-payload | `Stats` IS a runtime class on node:fs but `BigIntStats` is type-only, and a union needs EVERY case discriminable — which is why binding module classes buys nothing here, against the estimate that named the stat() family as its main prize
+node_fs | statfsSync_path_like_stat_fs_options_optional | ret | erased-payload | StatsFs and BigIntStatsFs are both type-only on node:fs
+node_fs | mkdtempSync_string_encoding_option_optional | ret | erased-payload | NonSharedBuffer is a node alias for Buffer; resolving the alias would make `instanceof Buffer` discriminate, so this is alias resolution rather than class binding
+node_fs | readlinkSync_path_like_encoding_option_optional | ret | erased-payload | same `String | NonSharedBuffer` shape as mkdtempSync
+node_fs | realpathSync_path_like_encoding_option_optional | ret | erased-payload | same `String | NonSharedBuffer` shape as mkdtempSync

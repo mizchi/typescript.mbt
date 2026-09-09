@@ -2883,6 +2883,64 @@ product surfaces now.
   test, whose `#|` lines are TypeScript SOURCE for a test case: widening
   the input set is not the same as widening the question, so it is scoped
   to the directories holding a generated `bridge.js`.
+  Asked to take the next item — bind a module-exported class so its
+  `instanceof` resolves — the measurement retired the item and found
+  eighteen live bugs beside it. The filed ceiling was "about ten names,
+  worth doing for the `stat()` family specifically", and importing each
+  generated package's OWN module and asking `typeof mod[name]` gives **2
+  bindable names of the 197 declined**. Every name the estimate listed
+  fails, for two separable reasons: hono__node_server's `Server` /
+  `Http2Server` / `IncomingMessage` / `ServerResponse` are exported by a
+  DIFFERENT module — `node:http` classes the package re-exports as TYPES,
+  so `__ts_mbt_module.Server` is `undefined` and binding needs another
+  module's import rather than the one-line threading the item described —
+  while `StatsFs` / `BigIntStats` / `BigIntStatsFs` are type-only. And the
+  ceiling is a question about CONVERTERS, not names: `_from_js` is withheld
+  unless EVERY case is discriminable, so `Stats` being a real class buys
+  nothing while `BigIntStats` stays erased, which is precisely the `stat()`
+  family the item called its prize. Two converters unblock, one of them in
+  a return position. Ninth instance of a label standing in for the
+  objective, and the first where the label was a NAME COUNT standing in for
+  a conjunction over cases.
+  What the measurement is actually worth is what it exposed. `aliasedTable`
+  converts its ARGUMENT and hands its return back raw while declaring
+  `-> Auto_ViewValue_or_TableValue` — the `ServerType` bug again — and the
+  probe written one commit earlier to catch exactly that could not see it,
+  for two independent reasons. It tested `/_from_js|_to_js|\$tag/` over the
+  whole body, so the `$tag` belonging to the PARAMETER's conversion passed
+  the return: "this body contains a conversion somewhere" is not "this body
+  converts its return", and the two directions are separate questions with
+  separate shapes (`"$tag":` / `_from_js(` BUILDS a MoonBit value,
+  `.$tag ===` / `_to_js(` READS one). And it read payload enums from
+  `bridge.mbti` alone, where a SYNTHESIZED `Auto_X_or_Y` is never
+  declared — **212 of the 231 payload enums live in `types.mbt`**. Fixing
+  both takes the probe from 0 findings to 18. Fifth time this session the
+  measuring instrument carried the same substitution bug as the code it was
+  hunting, after the payload filter, the `::` regex, the snake-case
+  function and the input-set widening.
+  The 15 erased-payload cases among the 18 want the widening that fixed
+  `ServerType`, and that widening never sees them: a synthesized union
+  keeps the original `Union(parts)` shape in the AST while its signature
+  already reads `Auto_X_or_Y`, which
+  `ffi_inline_js_tagged_union_to_js` states in its own comment sixty lines
+  away. Sixth fail-open shape arm in this file's ledger, and the first
+  written INSIDE the fix for the previous one. The arm was implemented and
+  REVERTED on a measured blocker rather than shipped: the widening lives in
+  the FFI layer and the public wrapper (`pub fn getNameOfJSDocTypedef(...)
+  -> Auto_IdentifierValue_or_PrivateIdentifierValue?`) is rendered by the
+  DECL layer, which holds no `MoonBitJsFfiState`, so widening one side
+  gives `[4014] Expr Type Mismatch: has type JSValue?, wanted Auto_...?` —
+  the two layers disagreeing, the same split that produced the duplicate
+  `.mbti` declarations. All 18 are declared in
+  `scripts/bridge_unconverted_enum_crossings.txt` with a kind and a reason
+  each (15 `erased-payload`, 2 `optional-gate`, 1 `module-class`);
+  undeclared fails, stale fails, both mutation-tested. Turning 18 invisible
+  wrong values into 18 named ones with reasons is the deliverable, and the
+  `optional-gate` pair also corrects a claim made one commit earlier in
+  writing: `ffi_inline_js_return_expr_with_state` said no corpus accessor
+  had the optional shape, and `TypeChecker::getConstantValue` returns
+  `Auto_NumberValue_or_StringValue?` — `String | Double`, both primitives,
+  fully buildable.
 
 ## Project Structure
 
