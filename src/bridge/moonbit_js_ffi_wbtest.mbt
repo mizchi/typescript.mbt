@@ -5731,3 +5731,76 @@ test "bridge: promise layer section variants stay coherent" {
     ),
   )
 }
+
+///|
+/// The `CallableMeta` arm of `ffi_widen_unbuildable_union_outputs`, and the
+/// predicate it uses.
+///
+/// This is a regression pin for a fix that measured as a NO-OP twice. A
+/// tagged-union return the bridge cannot build must widen to `JSValue`,
+/// and `@hono/node-server`'s `get_serve` did not, because its type carries
+/// an OPTIONAL parameter and therefore arrives wrapped in `CallableMeta` —
+/// which fell through the catch-all untouched while the sibling
+/// `get_create_adaptor_server`, whose parameter list has no optional, went
+/// through the `Func` arm and widened correctly. Fifth wrapper-node
+/// fail-open arm in this repo.
+test "bridge: an unbuildable tagged-union output widens through every wrapper" {
+  let unbuildable_cases : Array[(String, @ast.TsType)] = [
+    // `Server` is a node:http interface, not a JS global constructor, so no
+    // `instanceof` predicate resolves and no `_from_js` is emitted.
+    ("ServerValue", @ast.TsType::Named("Server")),
+    ("Http2ServerValue", @ast.TsType::Named("Http2Server")),
+  ]
+  let buildable_cases : Array[(String, @ast.TsType)] = [
+    ("StringValue", @ast.TsType::String_),
+    ("BufferValue", @ast.TsType::Named("Buffer")),
+  ]
+  let state : MoonBitJsFfiState = {
+    declared_type_names: [],
+    struct_type_names: [],
+    generic_type_params_by_name: {},
+    enums: [],
+    external_type_names: [],
+    local_type_param_names: [],
+    function_field_method_wrapper_limit: ffi_function_field_method_wrapper_limit,
+    tagged_union_decls_by_name: {
+      "ServerType": { name: "ServerType", cases: unbuildable_cases },
+      "PathLike": { name: "PathLike", cases: buildable_cases },
+    },
+    synthesized_inline_unions: {},
+    needs_js_any: false,
+    needs_promise: false,
+    needs_option_return_wrap: false,
+  }
+  let server_type = @ast.TsType::Named("ServerType")
+  let opts = @ast.TsType::Named("Options")
+
+  // Bare, and through a returned function.
+  assert_eq(ffi_output_type_name(state, server_type), "JSValue")
+  assert_eq(
+    ffi_output_type_name(state, Func([opts], server_type)),
+    "(Options) -> JSValue",
+  )
+  // Through `CallableMeta` — the arm that was missing. `ffi_type_name` peels
+  // this wrapper on its own first line, so a walk that decides the type has
+  // to peel it too or it decides a different type from the rendered one.
+  assert_eq(
+    ffi_output_type_name(
+      state,
+      CallableMeta(Func([opts], server_type), [false]),
+    ),
+    "(Options) -> JSValue",
+  )
+  // The legal neighbour, and the reason the predicate asks
+  // `tagged_union_from_js_expression` rather than
+  // `ffi_tagged_union_return_is_safe_to_wrap`: `PathLike`'s cases are a
+  // primitive and a GLOBAL constructor, so its `_from_js` exists and works.
+  // The wrap gate refuses any `InstanceOfNamed` and would have widened this.
+  assert_eq(ffi_output_type_name(state, Named("PathLike")), "PathLike")
+  assert_eq(
+    ffi_output_type_name(state, Func([opts], Named("PathLike"))),
+    "(Options) -> PathLike",
+  )
+  // A name that is not a tagged union at all is untouched.
+  assert_eq(ffi_output_type_name(state, Named("Options")), "Options")
+}

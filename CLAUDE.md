@@ -2739,6 +2739,56 @@ product surfaces now.
   `BufferEncoding` is a node global this package does not resolve, so even
   a successful lowering would hand the user a case payload they cannot
   build.
+  The mirror-image defect is the DECLARED type promising a representation
+  the emitted JS never builds, and `scripts/bridge_enum_return_probe.mjs`
+  asks for it: `@hono/node-server` declared `serve(...) -> ServerType`
+  while the wrapper returned the raw Node server object, and the
+  representation is not a guess — the alias's own constructor emits
+  `{ "$tag": 0, "_0": value }`, so a MoonBit `match` read `$tag` off an
+  object that has none. Fixing it is worth recording mostly for HOW the
+  first attempt failed: it measured as a NO-OP, and the predicate was
+  never the reason. Two rounds of reading the code got the diagnosis
+  wrong; one `println` settled it in a single run, and the lesson is to
+  instrument a "this cannot be happening" gap rather than re-read it.
+  Two causes, both this file's recurring shapes. The walk had `Named` and
+  `Func` arms and no `CallableMeta`, which records source-level parameter
+  OPTIONALITY — so `get_serve`'s `(Options, ((AddressInfo) -> Unit)?) ->
+  ServerType` fell through the catch-all while the sibling
+  `get_create_adaptor_server`'s `(Options) -> ServerType`, having no
+  optional parameter and therefore no wrapper, widened correctly. That
+  asymmetry between two adjacent declarations is what exposed it.
+  `ffi_type_name` peels the same wrapper on its own FIRST line: a walk
+  that DECIDES a type has to peel every wrapper the renderer peels, or it
+  decides a different type from the one that gets printed. Fifth
+  wrapper-node fail-open arm here. And the ten renderer sites were found
+  by grepping the assignment `let return_type = ffi_type_name(state, …)`,
+  which missed `ffi_callable_value_decl_to_moonbit` — the renderer for
+  the direct call form, the one that emits `serve(...)` — because it
+  spells its local `return_type_src`. Writing a shared
+  `ffi_output_type_name` specifically to avoid the applied-in-some-places
+  family and then applying it by textual match on a variable NAME is that
+  family inside its own fix; the census is by ARGUMENT now.
+  The predicate was wrong too, and the TEST found it rather than the
+  corpus. `ffi_tagged_union_return_is_safe_to_wrap` refuses ANY
+  `InstanceOfNamed`, global constructors included, so `PathLike = string
+  | Buffer | URL` is "unsafe to wrap" while its `_from_js` exists and
+  works — widening on that gate would have widened node_fs's twelve
+  global-`Named` union returns as well. The right question is
+  `tagged_union_from_js_expression(decl, "value") is None`, which is
+  exactly what withholds the `_from_js` half. The three
+  `*_should_emit_wrapper` predicates deliberately do NOT consult the
+  widening: they refuse a wrapper whose rendered type uses `JSValue`, so
+  routing them through it would DELETE `serve(...)` instead of widening
+  it, and their real question — does this wrapper carry any type
+  information — is still answered yes by the typed PARAMETERS.
+  It also surfaced a pre-existing defect nothing could see while the two
+  renderings agreed: the `.mbti` carries declarations the `.mbt` does
+  not. `get_create_adaptor_server` appears twice, once with no impl
+  counterpart at all, and corpus-wide there are 52 duplicated declaration
+  names of 2,161 in the `typescript` package, 13 in vitest, 9 in node_fs.
+  A second emitter renders the same value exports independently of the
+  ffi layer and the two matched only by coincidence — which is also why
+  the enum-return probe still reports one residual.
 
 ## Project Structure
 

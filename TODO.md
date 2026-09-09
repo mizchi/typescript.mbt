@@ -84,37 +84,78 @@ repo has been removed. Items below are scoped to the bridge generator only.
     (`scaffold_ts_to_moonbit_heterogeneous_union`) is `boolean | "boundary"`
     — no `Named` member at all. That is why the bug survived: not one
     fixture in the corpus put a named type in a return position.
-- [ ] **A tagged-union RETURN type the wrapper never builds** (4 sites,
-  `scripts/bridge_enum_return_probe.mjs`). `@hono/node-server` declares
-  `serve(...) -> ServerType` and `create_adaptor_server(...) -> ServerType`
-  (plus the two `get_*` forms that return a function returning it) while the
-  JS wrapper is `return __ts_mbt_module.serve(...)` — the raw Node server
-  object. `ServerType` is payload-bearing, and the representation is not a
-  guess: the alias's own constructor emits
-  `__ts_mbt_server_type_from_server(value) { return { "$tag": 0, "_0": value
-  }; }`, so a MoonBit `match` on the returned value reads `$tag` off an
-  object that has none. The declared type and the wrapper are decided in
-  different places and are free to disagree; when
-  `ffi_tagged_union_return_is_safe_to_wrap` says no, the declared return
-  should widen to `JSValue`.
-  - Attempted and REVERTED rather than left as a no-op: routing all eleven
-    return-type renderers through one `ffi_output_type_name` that widens
-    `Named(n)` (and a returned `Func`'s own return, recursively) when
-    `tagged_union_decls_by_name` has `n` and the wrap predicate refuses.
-    `moon check` clean, the example regenerated with the new binary
-    (timestamps confirm it), and all four sites still said `ServerType` — so
-    the predicate answers `false` and the reason is not yet known. The map is
-    keyed by `ffi_type_identifier(name, "OpaqueType")`, which is identity for
-    `ServerType`, so the obvious key-mismatch explanation is ruled out; the
-    next step is to find which renderer actually emits `pub extern "js" fn
-    serve` (the binding name `__ts_mbt_serve` points at
-    `ffi_func_decl_to_moonbit`, which WAS one of the eleven).
-  - The probe is worth keeping either way, and it corrected itself once: its
-    first version counted payload-FREE enums (`enum Mode { Read Write }`,
-    from a TS numeric enum, which is an integer tag where a raw numeric
-    passthrough is correct) and reported 11 sites. Its own comment claimed a
-    payload filter the code never implemented — the same substitution this
-    file keeps recording, in the measuring instrument. 4 of 73, not 11.
+- [x] **A tagged-union RETURN type the wrapper never builds** — DONE, 4
+  sites -> 1 (the residual is the pre-existing `.mbti` duplicate below).
+  The reverted attempt measured as a no-op for TWO reasons, and neither
+  was the predicate: `unbuildable("ServerType")` was TRUE all along, which
+  a `println` settled in one run after two rounds of reasoning had got it
+  wrong.
+  - **The `CallableMeta` wrapper.** The walk had `Named` and `Func` arms
+    and no `CallableMeta`, so a value whose type carries an OPTIONAL
+    parameter fell through the catch-all untouched. That is why the
+    sibling pair disagreed: `get_create_adaptor_server`'s `(Options) ->
+    ServerType` widened and `get_serve`'s `(Options, ((AddressInfo) ->
+    Unit)?) -> ServerType` did not. `ffi_type_name` peels the same wrapper
+    on its own FIRST line — a walk that decides a type has to peel every
+    wrapper the renderer peels, or it decides a different type from the
+    one that gets printed. Fifth wrapper-node fail-open arm in this repo,
+    exactly the third the `PureCall` note says to expect after the second.
+  - **A renderer the substitution missed.** Ten sites were found by
+    grepping the assignment `let return_type = ffi_type_name(state, …)`,
+    and `ffi_callable_value_decl_to_moonbit` — the renderer for the direct
+    call form of a callable value, which is what emits `serve(...)` —
+    spells its local `return_type_src`. Writing a shared
+    `ffi_output_type_name` helper specifically to avoid the
+    applied-in-some-places family, then applying it by textual match on a
+    variable NAME, is that family inside the fix for it. The census is by
+    ARGUMENT now (`func.return_type` / `import_.return_type` /
+    `value.type_` / `return_type`), which is what it should have keyed on.
+  - **The predicate was also asking the wrong question**, found while
+    writing the test rather than by the corpus.
+    `ffi_tagged_union_return_is_safe_to_wrap` refuses ANY
+    `InstanceOfNamed`, global constructors included, so `PathLike =
+    string | Buffer | URL` is "unsafe to wrap" while its `_from_js` exists
+    and works — widening on that gate would have widened node_fs's 12
+    global-`Named` union returns too. The shipped predicate asks
+    `tagged_union_from_js_expression(decl, "value") is None`, which is
+    exactly the condition that withholds the `_from_js` half.
+  - The three `*_should_emit_wrapper` predicates deliberately do NOT
+    consult the widening: they refuse a wrapper whose rendered type uses
+    `JSValue`, so routing them through it would DELETE `serve(...)` from
+    the surface rather than widen it, leaving only `get_serve()`. Their
+    question is whether the wrapper carries any type information, and the
+    answer stays yes because the PARAMETERS are typed.
+  - The three `server_type_from_*` CONSTRUCTORS correctly keep
+    `-> ServerType`: they come from `ffi_type_alias_constructors`, a
+    different path, and they DO build `{ "$tag": 0, "_0": value }`.
+    Pinned by a unit test that fails under mutation of the `CallableMeta`
+    arm with `"(Options) -> ServerType" != "(Options) -> JSValue"`.
+- [ ] **The `.mbti` carries declarations the `.mbt` does not** —
+  pre-existing, corpus-wide, and only VISIBLE because the fix above made
+  two renderings of one declaration disagree. `hono__node_server`'s
+  `.mbti` has `get_create_adaptor_server` twice, once `-> (Options) ->
+  ServerType` with no `.mbt` counterpart at all and once `-> (Options) ->
+  JSValue` matching the impl; before the widening both printed
+  identically and the duplication was invisible. Corpus-wide: 52
+  duplicated declaration names of 2,161 in the `typescript` package, 13
+  of 253 in vitest, 9 of 320 in node_fs, 5 in drizzle, 3 in
+  hono__node_server, 2 in react-types. So a second emitter renders the
+  same value exports independently of the ffi layer, and the two agreed
+  only by coincidence. This is the residual `1` the enum-return probe
+  still reports.
+- [ ] **`_from_js` exists but the return wrapper still declines it.**
+  The other half of the same defect, now that the predicate distinction
+  above is written down: for a union whose cases are a primitive plus a
+  GLOBAL constructor (`PathLike`, `TimeLike`, `Mode`, `OpenMode`) the
+  `_from_js` converter is emitted and works, while
+  `ffi_tagged_union_return_is_safe_to_wrap` refuses the auto-wrap for any
+  `InstanceOfNamed` — so those returns declare the enum and deliver the
+  raw value. Letting the wrap gate accept a global-constructor
+  `instanceof` is what its own doc comment already claims it does.
+  `bridge_enum_return_probe.mjs` cannot currently see these: its regex
+  matches `declare pub fn NAME(`, so every `Type::method` form is
+  skipped, and node_fs's 12 such returns are mostly getters. Widen the
+  probe first, then measure.
 - [ ] **Bind a module-exported class so its `instanceof` resolves.** The
   ceiling is measured and small: of the 197 declined names, the runtime
   classes are node_fs's `Stats` / `StatsFs` / `BigIntStats` /

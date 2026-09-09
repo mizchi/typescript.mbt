@@ -4218,7 +4218,7 @@ fn ffi_import_decl_to_moonbit(
     let param_type = ffi_type_name(state, type_)
     params.push("\{param_name} : \{param_type}")
   }
-  let return_type = ffi_type_name(state, import_.return_type)
+  let return_type = ffi_output_type_name(state, import_.return_type)
   let fn_name = ffi_value_fn_name(import_.name)
   let params_str = params.join(", ")
   "pub extern \"js\" fn \{fn_name}(\{params_str}) -> \{return_type} = \"\{ffi_binding_name(import_.name)}\""
@@ -4238,7 +4238,7 @@ fn ffi_import_decl_to_moonbit_direct(
     let param_type = ffi_type_name(state, type_)
     params.push("\{param_name} : \{param_type}")
   }
-  let return_type = ffi_type_name(state, import_.return_type)
+  let return_type = ffi_output_type_name(state, import_.return_type)
   let fn_name = ffi_value_fn_name(import_.name)
   let params_str = params.join(", ")
   ffi_direct_module_decl(
@@ -4259,7 +4259,7 @@ fn ffi_import_string_subset_decl_to_moonbit(
     let param_type = ffi_func_string_subset_param_type_name(state, type_)
     params.push("\{param_name} : \{param_type}")
   }
-  let return_type = ffi_type_name(state, import_.return_type)
+  let return_type = ffi_output_type_name(state, import_.return_type)
   let fn_name = ffi_func_string_subset_name(import_.name)
   let params_str = params.join(", ")
   "pub extern \"js\" fn \{fn_name}(\{params_str}) -> \{return_type} = \"\{ffi_func_string_subset_binding_name(import_.name)}\""
@@ -4279,13 +4279,119 @@ fn ffi_import_string_subset_decl_to_moonbit_direct(
     let param_type = ffi_func_string_subset_param_type_name(state, type_)
     params.push("\{param_name} : \{param_type}")
   }
-  let return_type = ffi_type_name(state, import_.return_type)
+  let return_type = ffi_output_type_name(state, import_.return_type)
   let fn_name = ffi_func_string_subset_name(import_.name)
   let params_str = params.join(", ")
   ffi_direct_module_decl(
     module_spec,
     "pub extern \"js\" fn \{fn_name}(\{params_str}) -> \{return_type} = \"\{runtime_export_name}\"",
   )
+}
+
+///|
+/// Widen an OUTPUT position whose type is a tagged-union alias the bridge
+/// cannot build at runtime.
+///
+/// The declared MoonBit type and the JS wrapper are decided in different
+/// places and were free to disagree. A payload-bearing `pub(all) enum` is
+/// represented as `{ "$tag": i, "_0": v }` — which is not a guess: the
+/// alias's own constructors emit exactly that
+/// (`__ts_mbt_server_type_from_server(value) { return { "$tag": 0, "_0":
+/// value }; }`). When `ffi_tagged_union_return_is_safe_to_wrap` says no, no
+/// `_from_js` exists and the extern binds straight to the raw JS function,
+/// so `@hono/node-server`'s `serve(...) -> ServerType` handed back a raw
+/// Node server object while promising the enum. A MoonBit `match` on that
+/// reads `$tag` off an object that has none.
+///
+/// Widening to `JSValue` is the honest answer: the caller has to cast, which
+/// is what it was already doing whether it knew or not. The one thing this
+/// must not touch is the alias's own CONSTRUCTORS
+/// (`server_type_from_server(value : Server) -> ServerType`), which DO build
+/// the representation — they come from `ffi_type_alias_constructors`, a
+/// different path, so restricting this to the imported-function / imported-
+/// value renderers is what keeps them working.
+///
+/// The `CallableMeta` arm is load-bearing and was missing in the first
+/// version, which is the fifth time in this repo a wrapper node's fail-open
+/// default arm has cost a bug. `CallableMeta` records source-level parameter
+/// optionality, so a value whose type has an OPTIONAL parameter arrives
+/// wrapped: `get_serve`'s `(Options, ((AddressInfo) -> Unit)?) -> ServerType`
+/// fell through the catch-all untouched while `get_create_adaptor_server`'s
+/// `(Options) -> ServerType` — no optional parameter, so no wrapper — widened
+/// correctly. `ffi_type_name` peels the same wrapper on its own first line;
+/// this walk has to peel every wrapper `ffi_type_name` does or it decides a
+/// different type from the one that gets rendered.
+///
+/// Recurses through a returned FUNCTION's own return type, since that value
+/// crosses the boundary in the same direction, and leaves its PARAMETERS
+/// alone — those go MoonBit -> JS, where `_to_js` needs no runtime predicate
+/// and the enum is real.
+fn ffi_widen_unbuildable_union_outputs(
+  state : MoonBitJsFfiState,
+  type_ : @ast.TsType,
+) -> @ast.TsType {
+  // `Named("any")` is what `ffi_type_name` renders as `JSValue` (and what
+  // sets `needs_js_any`), so producing it here needs no second spelling of
+  // the widening.
+  // The question is whether the enum representation can be BUILT from a raw
+  // JS value at all, which is exactly what withholds the `_from_js` half —
+  // so ask that function, not `ffi_tagged_union_return_is_safe_to_wrap`.
+  // The two are not the same: the wrap gate refuses ANY `InstanceOfNamed`,
+  // global constructors included, so `PathLike = string | Buffer | URL` is
+  // "unsafe to wrap" while its `_from_js` exists and works. Widening on the
+  // wrap gate would have widened those returns too.
+  fn unbuildable(name : String) -> Bool {
+    match state.tagged_union_decls_by_name.get(name) {
+      Some(decl) => tagged_union_from_js_expression(decl, "value") is None
+      None => false
+    }
+  }
+
+  match type_ {
+    CallableMeta(inner, meta) =>
+      CallableMeta(ffi_widen_unbuildable_union_outputs(state, inner), meta)
+    Named(name) => if unbuildable(name) { Named("any") } else { type_ }
+    Func(params, ret) =>
+      Func(params, ffi_widen_unbuildable_union_outputs(state, ret))
+    _ =>
+      match @checker.classify_optional_like_union(type_) {
+        Some((Named(name), true)) =>
+          if unbuildable(name) {
+            Union([Named("any"), Undefined])
+          } else {
+            type_
+          }
+        _ => type_
+      }
+  }
+}
+
+///|
+/// `ffi_type_name` for a value crossing JS -> MoonBit. Every RENDERER of an
+/// imported function's / value's return type goes through this.
+///
+/// Finding the sites by grepping the assignment `let return_type =
+/// ffi_type_name(state, …)` is how the first attempt missed one and measured
+/// as a no-op: `ffi_callable_value_decl_to_moonbit` — the renderer for the
+/// direct call form of a callable value, which is what emits `serve(...)` —
+/// spells its local `return_type_src`, so a textual substitution keyed on the
+/// variable NAME skipped it. Writing this helper to avoid the
+/// applied-in-some-places family and then applying it by variable name is
+/// that family, in the fix for it. The sites are enumerated by ARGUMENT
+/// (`func.return_type`, `import_.return_type`, `value.type_`, `return_type`),
+/// which is what the census should have keyed on.
+///
+/// The three `*_should_emit_wrapper` PREDICATES deliberately do NOT use this.
+/// They decide whether a typed wrapper is emitted at all, and they refuse one
+/// whose rendered type uses `JSValue` — so consulting the widening there would
+/// DELETE `serve(...)` from the surface instead of widening it, leaving only
+/// `get_serve()`. Their question is "would this wrapper carry any type
+/// information", and the answer stays yes because the PARAMETERS are typed.
+fn ffi_output_type_name(
+  state : MoonBitJsFfiState,
+  type_ : @ast.TsType,
+) -> String {
+  ffi_type_name(state, ffi_widen_unbuildable_union_outputs(state, type_))
 }
 
 ///|
@@ -4307,7 +4413,7 @@ fn ffi_func_decl_to_moonbit(
     let safe_type = ffi_type_name(state, param.type_)
     params.push("\{safe_name} : \{safe_type}")
   }
-  let return_type = ffi_type_name(state, func.return_type)
+  let return_type = ffi_output_type_name(state, func.return_type)
   let fn_name = ffi_value_fn_name(func.name)
   let params_str = params.join(", ")
   "pub extern \"js\" fn \{fn_name}(\{params_str}) -> \{return_type} = \"\{ffi_binding_name(func.name)}\""
@@ -4334,7 +4440,7 @@ fn ffi_func_decl_to_moonbit_direct(
     let safe_type = ffi_type_name(state, param.type_)
     params.push("\{safe_name} : \{safe_type}")
   }
-  let return_type = ffi_type_name(state, func.return_type)
+  let return_type = ffi_output_type_name(state, func.return_type)
   let fn_name = ffi_value_fn_name(func.name)
   let params_str = params.join(", ")
   ffi_direct_module_decl(
@@ -4485,7 +4591,7 @@ fn ffi_func_string_subset_decl_to_moonbit(
     let safe_type = ffi_func_string_subset_param_type_name(state, param.type_)
     params.push("\{safe_name} : \{safe_type}")
   }
-  let return_type = ffi_type_name(state, func.return_type)
+  let return_type = ffi_output_type_name(state, func.return_type)
   let fn_name = ffi_func_string_subset_name(func.name)
   let params_str = params.join(", ")
   "pub extern \"js\" fn \{fn_name}(\{params_str}) -> \{return_type} = \"\{ffi_func_string_subset_binding_name(func.name)}\""
@@ -4512,7 +4618,7 @@ fn ffi_func_string_subset_decl_to_moonbit_direct(
     let safe_type = ffi_func_string_subset_param_type_name(state, param.type_)
     params.push("\{safe_name} : \{safe_type}")
   }
-  let return_type = ffi_type_name(state, func.return_type)
+  let return_type = ffi_output_type_name(state, func.return_type)
   let fn_name = ffi_func_string_subset_name(func.name)
   let params_str = params.join(", ")
   ffi_direct_module_decl(
@@ -4526,7 +4632,7 @@ fn ffi_value_decl_to_moonbit(
   state : MoonBitJsFfiState,
   value : @ast.TsValueDecl,
 ) -> String {
-  let return_type = ffi_type_name(state, value.type_)
+  let return_type = ffi_output_type_name(state, value.type_)
   let fn_name = ffi_namespace_getter_name(value.name)
   "pub extern \"js\" fn \{fn_name}() -> \{return_type} = \"__ts_mbt_get_\{ffi_to_snake_case(value.name)}\""
 }
@@ -4544,7 +4650,7 @@ fn ffi_callable_value_decl_to_moonbit(
     let safe_type = ffi_callable_value_param_type_name(state, param)
     moonbit_params.push("\{param_name} : \{safe_type}")
   }
-  let return_type_src = ffi_type_name(state, return_type)
+  let return_type_src = ffi_output_type_name(state, return_type)
   let fn_name = ffi_value_fn_name(value.name)
   let params_str = moonbit_params.join(", ")
   "pub extern \"js\" fn \{fn_name}(\{params_str}) -> \{return_type_src} = \"\{ffi_binding_name(value.name)}\""
