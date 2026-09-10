@@ -287,29 +287,41 @@ repo has been removed. Items below are scoped to the bridge generator only.
   reads `Auto_X_or_Y`, which `ffi_inline_js_tagged_union_to_js` states in
   its own comment sixty lines away. Sixth fail-open shape arm here, and the
   first one written INSIDE the fix for the previous one.
-  Implemented (`ffi_output_union_alias_name`, resolving both spellings) and
-  **REVERTED**. What is MEASURED is the failure: widening makes the private
-  extern `JSValue?` while `pub fn getNameOfJSDocTypedef(...) ->
-  Auto_IdentifierValue_or_PrivateIdentifierValue?` in `bridge.mbt` still
-  declares the enum, giving `[4014] Expr Type Mismatch: has type JSValue?,
-  wanted Auto_...?` — the same two-renderings-of-one-export split that
-  produced the duplicate `.mbti` declarations.
-  What is NOT established is the cause, and the first diagnosis here said
-  "the decl layer holds no `MoonBitJsFfiState`, so this needs a cross-layer
-  channel" — which the code partly contradicts:
-  `parse_bridge_pub_extern_fn_decl_line` shows the decl layer DERIVING its
-  `return_type` from the FFI layer's emitted `pub extern "js" fn` text, so
-  widening the FFI side should have carried. Either that wrapper's type
-  comes from somewhere else, or one of the renderers the widening routes
-  through is not the line the decl layer parses — the
-  applied-in-some-places family again rather than a missing channel, and
-  much cheaper if so.
-  The experiment is one command: re-apply the arm, regenerate, and read
-  `bridge.mbt` beside `externs.mbt` for `getNameOfJSDocTypedef` to see which
-  of the two moved. Do that before building any channel; the note that
-  asserted the blocker was written from the error message alone.
-  `ffi_output_union_alias_name` is now in the tree for the optional-gate fix
-  below, so the arm itself is two lines.
+  Implemented (`ffi_output_union_alias_name`, resolving both spellings),
+  **RUN as an experiment, and REVERTED** — and the experiment retired the
+  blocker this entry used to assert. There are THREE renderings of one
+  export, not two, and only one of them moved:
+
+      mbti    : getNameOfJSDocTypedef(...) -> Auto_Identifier…?   (unchanged)
+      bridge  : getNameOfJSDocTypedef(...) -> Auto_Identifier…?   (unchanged)
+      externs : get_name_of_jsdoc_typedef(...) -> JSValue?        (WIDENED)
+
+  So `[4014] Expr Type Mismatch: has type JSValue?, wanted Auto_…?`
+  reproduces, and the first diagnosis — "the decl layer holds no
+  `MoonBitJsFfiState`, so this needs a cross-layer channel", written from
+  the error message alone — is WRONG in the direction the correction
+  suspected. The decl layer builds that wrapper by iterating
+  **`bridge_mbti.split("\n")`** and parsing
+  `parse_bridge_top_level_fn_decl_line`, so `fn_decl.return_type` is read
+  off the `.mbti` LINE, not off the FFI layer's `.mbt` text. The `.mbti`
+  declaration rendering is therefore one more site the widening does not
+  route through — applied-in-some-places again — and because the wrapper
+  DERIVES from that line, there is exactly ONE place to fix and no channel
+  to build: correct the `.mbti` type and the wrapper follows.
+  What is still unlocated is which emitter renders that `.mbti` line. It is
+  not any of the `"declare pub fn "` literals in `moonbit_bridge.mbt` —
+  those are the parser prefix and the helper/getter forms — so the `.mbti`
+  body comes from elsewhere and needs one more step to find. Start there,
+  not at the FFI layer.
+  **The experiment's own FIRST run measured nothing, and the fault was in
+  the experiment.** The arm was written as `Named(_) | Union(_)` ABOVE the
+  optional-like branch, and `Auto_X_or_Y?` is `Union([…, Undefined])` in the
+  AST — so the new arm swallowed every optional, derived a synthesized name
+  from parts that include `Undefined`, found it registered nowhere, and
+  declined silently. Ordering the optional classification FIRST is what made
+  the widening fire at all. An experiment can fail in the instrument exactly
+  the way the code under test does; the reading to trust is the one where
+  something visibly moved.
 - [x] **Convert an OPTIONAL tagged-union crossing — DONE**, and both of the
   reasons the previous note gave for declining it were false, which is the
   part worth keeping.
