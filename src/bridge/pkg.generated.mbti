@@ -61,6 +61,8 @@ pub fn tagged_union_case_is_no_payload(@ast.TsType) -> Bool
 
 pub fn tagged_union_case_named_refs(@ast.TsType, Array[String]) -> Unit
 
+pub fn tagged_union_case_runtime_discriminator(@ast.TsType) -> TaggedUnionCaseDiscriminator?
+
 pub fn tagged_union_cases(Array[@ast.TsType]) -> Array[(String, @ast.TsType)]?
 
 pub fn tagged_union_decl_to_moonbit_section(BridgeTaggedUnionDecl) -> String?

@@ -1,0 +1,73 @@
+# Declarations that PROMISE a payload-bearing enum and whose emitted JS never
+# builds (return) or reads (parameter) one.
+#
+# Read by `scripts/bridge_enum_return_probe.mjs`. Format, `|`-separated:
+#
+#   <package> | <declaration> | <direction> | <kind> | <reason>
+#
+# An occurrence NOT listed here fails the probe. A listed entry that no longer
+# occurs is reported STALE and also fails — that report is the only thing that
+# keeps a file like this from decaying into a suppression list, and it is the
+# lesson `scripts/bridge_widened_unions.txt` and
+# `scripts/checker_out_of_scope.txt` were both written for.
+#
+# The package key is the generated package's own directory name, so the same
+# `typescript.d.ts` would appear twice: once as `typescript_ast` (its own
+# example) and once as `typescript` (nested under the node-imports example).
+#
+# THE BACKLOG IS EMPTY, AND THE STALE REPORT IS WHAT EMPTIED IT
+#
+# All 18 occurrences this file was written to declare are fixed. The list is
+# kept — with its format and its history — because the probe's value is the
+# two directions it fails in, and an empty declared set is the state where a
+# NEW unconverted crossing fails immediately.
+#
+# The 16 that closed last were one decision made in three places, and the
+# order they fell in is the record worth keeping:
+#
+#   1. `ffi_widen_unbuildable_union_outputs` had no arm for a SYNTHESIZED
+#      union. Such a union keeps its `Union(parts)` shape in the AST while its
+#      signature already reads `Auto_X_or_Y`, so the walk decided about a type
+#      that was not the one being printed.
+#   2. The first version of that arm asked whether the alias was already in
+#      `state.tagged_union_decls_by_name`, which is filled as a SIDE EFFECT of
+#      rendering — so the answer depended on whether an earlier declaration in
+#      the file happened to mention the same union.
+#      `Auto_IdentifierValue_or_PrivateIdentifierValue` is also a parameter of
+#      `idText`, nine lines above, and was therefore registered;
+#      `Auto_VariableDeclarationValue_or_ParameterDeclarationValue` occurs
+#      exactly once and was not. `ffi_output_union_decl` builds the decl on the
+#      spot instead.
+#   3. Widening the extern alone gives `[4014] has type JSValue?, wanted
+#      Auto_...?`, because the `.mbti` line comes from the DECL layer and the
+#      public wrapper is rendered FROM that line — three renderings of one
+#      export. `reconcile_bridge_widened_union_returns` makes the declaration
+#      agree with the extern that implements it. Both aftermaths of the
+#      widening had to be covered: when the union is still mentioned elsewhere
+#      the stale declaration is `[4014]`, and when the widened return was its
+#      last mention nothing synthesizes the enum any more and the same stale
+#      declaration is `[4032] the type Auto_... is undefined`.
+#   4. An index signature's two directions are two questions and were rendered
+#      with ONE type name. `index_get` crosses JS -> MoonBit and widens;
+#      `index_set` crosses the other way, where `_to_js` needs no runtime
+#      predicate, so it keeps its type and converts in the body.
+#   5. A METHOD's return needed the widening too, and it does NOT belong in
+#      `ffi_function_type_parts`: a function type has no direction of its own,
+#      so widening there also widened callback returns (MoonBit -> JS, where
+#      the enum works) and broke `Matcher::_call_`, whose wrapper reads a
+#      struct FIELD rendered elsewhere — `has type ExpectationResult, wanted
+#      JSValue`. It belongs in the one branch that binds straight to a JS call.
+#
+# The `module-class` entry (`aliasedTable`) went with them: binding
+# `drizzle-orm`'s real `Table` / `View` classes would have made its
+# `instanceof` resolve, and widening is the answer that needed no new
+# machinery. The measured ceiling for that binding was 2 bindable names of the
+# 197 declined and 2 unblockable converters, which is why it was never worth
+# taking on its own.
+#
+# kinds (kept for whatever lands here next)
+#   erased-payload   a case payload is a TS interface / alias / type parameter,
+#                    so no `instanceof` can ever resolve. WIDEN.
+#   module-class     every payload is a class the module exports at runtime, so
+#                    binding `const N = __ts_mbt_module.N` would make the
+#                    `instanceof` resolve. CONVERTIBLE.

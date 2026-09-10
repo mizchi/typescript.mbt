@@ -1345,3 +1345,125 @@ test "bridge: prune upcast helpers whose base arity mismatches the emitted decl"
   assert_false(pruned_mbti.contains("Broken::asWidget"))
   assert_false(pruned_mbti.contains("Ghost::asMissing"))
 }
+
+///|
+/// An OUTPUT position typed as a tagged union the bridge cannot BUILD widens
+/// to `JSValue`, and all three renderings of the export agree about it.
+///
+/// The three are the point. The widening is decided in the ffi layer, the
+/// `.mbti` line is rendered by the DECL layer, and the public wrapper is
+/// rendered FROM that line -- so moving one gives
+/// `[4014] has type JSValue?, wanted Auto_...?`, and when the widened return
+/// was the union's LAST mention the enum stops being synthesized at all and
+/// the same stale line is `[4032] the type Auto_... is undefined`. Both
+/// aftermaths are covered here: `Alpha | Beta` is mentioned by `Bag`'s index
+/// setter, so its enum survives, while nothing else mentions it in the plain
+/// return's own right.
+///
+/// Every union in the fixture is mentioned once per position ON PURPOSE. The
+/// synthesized alias is registered as a side effect of rendering, so the first
+/// version of the widening -- which asked whether the alias was already
+/// registered -- fixed a declaration whose union happened to appear as a
+/// parameter above it and silently skipped its neighbour.
+async test "bridge: an unbuildable tagged-union output widens in all three renderings" {
+  let bundle = emit_moonbit_ts_bridge_package_bundle_from_entry_path(
+    "fixtures/resolver/project/types/widened-union-output-entry.d.ts", "./runtime/widened.js",
+  ) catch {
+    e => {
+      match e {
+        ReadError(msg) | ParseError(msg) | ResolveError(msg) =>
+          fail("Emit error: \{msg}")
+      }
+      return
+    }
+  }
+  // A plain return, and the optional form: extern, wrapper and declaration.
+  assert_true(
+    bundle.bridge_mbt.contains(
+      "extern \"js\" fn erased_return(x : Double) -> JSValue = \"__ts_mbt_erased_return\"",
+    ),
+  )
+  assert_true(
+    bundle.bridge_mbt.contains("pub fn erasedReturn(x : Double) -> JSValue {"),
+  )
+  assert_true(
+    bundle.bridge_mbti.contains(
+      "declare pub fn erasedReturn(x : Double) -> JSValue",
+    ),
+  )
+  assert_true(
+    bundle.bridge_mbt.contains(
+      "extern \"js\" fn erased_optional_return(x : Double) -> JSValue? = \"__ts_mbt_erased_optional_return\"",
+    ),
+  )
+  assert_true(
+    bundle.bridge_mbti.contains(
+      "declare pub fn erasedOptionalReturn(x : Double) -> JSValue?",
+    ),
+  )
+  // The NEGATIVE control, and it is what keeps this from being "switch the
+  // lowering off": `string` and `URL` discriminate at runtime, so that union
+  // keeps its enum in every rendering.
+  assert_true(
+    bundle.bridge_mbt.contains(
+      "extern \"js\" fn buildable_return(x : Double) -> Auto_URLValue_or_StringValue = \"__ts_mbt_buildable_return\"",
+    ),
+  )
+  assert_true(
+    bundle.bridge_mbti.contains(
+      "declare pub fn buildableReturn(x : Double) -> Auto_URLValue_or_StringValue",
+    ),
+  )
+  // An index signature's two directions are two questions. The read widens;
+  // the write keeps the enum and converts in the body, `_to_js` needing no
+  // runtime predicate.
+  assert_true(
+    bundle.bridge_mbt.contains(
+      "pub fn Bag::index_get(self : Bag, key : String) -> JSValue? {",
+    ),
+  )
+  assert_true(
+    bundle.bridge_mbt.contains(
+      "pub extern \"js\" fn Bag::index_set(self : Bag, key : String, value : Auto_BetaValue_or_AlphaValue) -> Unit =",
+    ),
+  )
+  assert_true(
+    bundle.bridge_mbt.contains(
+      "#| (self, key, value) => { self[key] = (() => { if (value === null || typeof value !== \"object\" || !(\"$tag\" in value)) return value; if (value.$tag === 0) return value._0; else if (value.$tag === 1) return value._0; throw new Error(\"unexpected Auto_BetaValue_or_AlphaValue tag: \" + value.$tag); })(); }",
+    ),
+  )
+  // A METHOD's return: the extern binds straight to a JS call, so the
+  // direction is known there and only there.
+  assert_true(
+    bundle.bridge_mbt.contains(
+      "pub extern \"js\" fn Service::erasedMethod(self : Service, arg0 : String) -> JSValue =",
+    ),
+  )
+  assert_true(
+    bundle.bridge_mbti.contains(
+      "declare pub fn Service::erasedMethod(self : Service, arg0 : String) -> JSValue",
+    ),
+  )
+  // The raw passthrough each of them used to emit: a declaration promising
+  // the enum over a JS value that has no `$tag`.
+  assert_false(
+    bundle.bridge_mbti.contains(
+      "declare pub fn erasedReturn(x : Double) -> Auto_",
+    ),
+  )
+  assert_false(
+    bundle.bridge_mbti.contains(
+      "declare pub fn erasedOptionalReturn(x : Double) -> Auto_",
+    ),
+  )
+  assert_false(
+    bundle.bridge_mbti.contains(
+      "declare pub fn Service::erasedMethod(self : Service, arg0 : String) -> Auto_",
+    ),
+  )
+  assert_false(
+    bundle.bridge_mbt.contains(
+      "#| (self, key, value) => { self[key] = value; }",
+    ),
+  )
+}

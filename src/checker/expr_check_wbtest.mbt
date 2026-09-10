@@ -18750,3 +18750,233 @@ test "checker: TS7022 indirect through the iteration protocol (batch DV)" {
     @test.assert_eq(issues(h + src), 0)
   }
 }
+
+///|
+/// Batch DW: the excess-property check reaches a `Record<string, V>`
+/// target. Two sites held one decision and gave opposite answers.
+///
+/// `check_expr_against`'s `(ObjectLit, Applied(name, _))` arm
+/// deliberately routes the six projectable utility types into
+/// `check_object_lit_against_target` — its comment says so, "since
+/// `lookup_field` / `collect_declared_fields` know how to project their
+/// field shapes" — and that function then threw them straight back out
+/// through TWO early returns, `member_recv_unmodeled` and
+/// `type_contains_unresolved_named`, both of which call any `Applied` to
+/// a non-class, non-interface name unresolvable.
+///
+/// The exemption is `Record` only, and only with a bare `string` /
+/// `number` KEY. The wider version — every projectable utility, judged by
+/// all of its arguments — was implemented and MEASURED: it is +1 TP and
+/// +1 FP, the false positive being `isomorphicMappedTypeInference`'s
+/// `f20<T, K extends keyof T>(obj: Pick<T, K>)`, which accepts any object
+/// literal because `T` is inferred FROM the argument.
+test "checker: excess properties through Record<string, V> (batch DW)" {
+  let issues = fn(src : String) -> Int {
+    let mut n = 0
+    for i in check_module_function_bodies_permissive(parse_module_or_empty(src)) {
+      if i.message.contains("does not exist on target type") {
+        n = n + 1
+      }
+    }
+    n
+  }
+  let color = "type Color = { r: number, g: number, b: number };\n"
+  // The corpus shape (`typeSatisfaction_propertyValueConformance3`) and its
+  // plain-annotation twin.
+  for
+    src in [
+      "const P = { black: { r: 0, g: 0, d: 0 } } satisfies Record<string, Color>;",
+      "const P: Record<string, Color> = { black: { r: 0, g: 0, d: 0 } };", "const P: Record<number, Color> = { 1: { r: 0, g: 0, d: 0 } };",
+    ] {
+    assert_true(issues(color + src) > 0)
+  }
+  // Silent: a well-formed value; and the two shapes whose keys are not
+  // enumerable, where excess properties are legal because the
+  // instantiation may be wider.
+  for
+    src in [
+      "const P: Record<string, Color> = { black: { r: 0, g: 0, b: 0 } };", "declare function f20<T, K extends keyof T>(obj: Pick<T, K>): T;\nconst x = f20({ foo: 1, bar: 2 });",
+      "declare function g<K extends string>(o: Record<K, number>): void;\ng({ a: 1, b: 2 });",
+    ] {
+    @test.assert_eq(issues(color + src), 0)
+  }
+}
+
+///|
+/// Batch DX: the excess-property check runs at a CALL argument when the
+/// callee is provably non-generic.
+///
+/// A position matrix says the check covered the annotated declaration,
+/// `return`, an array element, `satisfies`, assignment and a nested
+/// property, and was missing at every CALL position — which is where real
+/// code hits TS2353. Batch DW measured the blunt fix: removing the
+/// suppression outright is +0 conformance files and +3 false positives on
+/// TS7-accepted code, because a constrained type parameter's bound IS
+/// inlined into the parameter position.
+///
+/// The fact that lifts it is `callee_non_generic`: no type parameters
+/// means no bound can have been inlined, so an `Object(_)` parameter
+/// target must be a written inline object type. Only two call sites can
+/// prove it — a direct call to a resolved function declaration, and `new`
+/// on a resolved class — and everything else keeps the suppression.
+///
+/// The conformance corpus scores this rule at ZERO, so this test IS the
+/// measurement.
+test "checker: excess properties at a call argument (batch DX)" {
+  let issues = fn(src : String) -> Int {
+    let mut n = 0
+    for i in check_module_function_bodies_permissive(parse_module_or_empty(src)) {
+      if i.message.contains("does not exist on target type") {
+        n = n + 1
+      }
+    }
+    n
+  }
+  let t = "type T = { a: number };\n"
+  for
+    src in [
+      // A direct call to a non-generic declaration — the commonest real
+      // TS2353 site, and the whole point of the batch.
+      "declare function f(o: T): void;\nf({ a: 1, b: 2 });", "declare function n(o: T): void;\nn({ a: 1, b: 2, c: 3 });",
+      "function g(o: T) {}\ng({ a: 1, b: 2 });",
+      // `new` on a non-generic class.
+       "class C { constructor(o: T) {} }\nnew C({ a: 1, b: 2 });",
+      // Nested under an argument: the target there came from a
+      // `lookup_field` on a written parameter type, so the fact holds at
+      // depth.
+       "declare function f(o: { a: { x: number } }): void;\nf({ a: { x: 1, y: 2 } });",
+      "declare function f(o: { a: { x: number } }): void;\nf({ a: { x: 1 }, b: 2 });",
+    ] {
+    assert_true(issues(t + src) > 0)
+  }
+  // Silent, and the first four are the false positives the gate exists to
+  // avoid — all TS7-ACCEPTED, because a type parameter's bound is inlined
+  // into the parameter position and excess properties are legal against a
+  // type parameter:
+  for
+    src in [
+      "declare function foo<U extends { length: number }>(x: U): void;\nfoo({ length: 1, extra: 2 });",
+      "function foo<U extends { length: number }>(x: U) {}\nfoo({ length: 1, extra: 2 });",
+      "declare function foo<U>(x: U): void;\nfoo({ a: 1, b: 2 });", "declare function bar<U extends { a: number }>(x: U[]): void;\nbar([{ a: 1, b: 2 }]);",
+      "class C<U extends T> { constructor(o: U) {} }\nnew C({ a: 1, b: 2 });",
+      // A type ASSERTION suppresses the check in tsc, and did here
+      // already — the gate must not turn that on.
+       "declare function f(o: T): void;\nf({ a: 1, b: 2 } as T);",
+      // A well-formed argument.
+       "declare function f(o: T): void;\nf({ a: 1 });",
+      // Positions the gate deliberately does NOT reach, because neither
+      // call site can prove the callee's genericity: a method call and a
+      // call through a function-typed binding. Both are MISSes, which is
+      // the affordable direction.
+       "class C { m(o: T) {} }\nnew C().m({ a: 1, b: 2 });", "const f: (o: T) => void = (o) => {};\nf({ a: 1, b: 2 });",
+    ] {
+    @test.assert_eq(issues(t + src), 0)
+  }
+}
+
+///|
+/// Batch DY: the assignment-form `for…of` target check at its other two
+/// spellings. It fired for a bare `Var` and was blind to `o.x`,
+/// `foo().x` and `arr[0]` — the parser wraps a non-identifier
+/// assignment-form head as `TsBinding::Target(expr)`, which fell through
+/// to the destructuring-pattern arm and was dropped there. One shared
+/// closure now holds the guard chain, so the three spellings cannot
+/// diverge again.
+///
+/// Corpus yield is ZERO, and the reason is worth more than the rule:
+/// `ES5For-of8` is `function foo() { return { x: 0 } }` with
+/// `for (foo().x of ['a','b','c'])`, and an UN-ANNOTATED function's
+/// return type does not resolve here at all — `const bad: string =
+/// foo().x` is silent too. So the file needs return-type inference from a
+/// body, not this rule.
+test "checker: assignment-form for-of target, all three spellings (batch DY)" {
+  let issues = fn(src : String) -> Int {
+    let mut n = 0
+    for i in check_module_function_bodies_permissive(parse_module_or_empty(src)) {
+      if i.path.contains("for-of target") {
+        n = n + 1
+      }
+    }
+    n
+  }
+  for
+    src in [
+      "declare let n: number;\nfor (n of [\"a\", \"b\"]) { }", "declare const o: { x: number };\nfor (o.x of [\"a\", \"b\"]) { }",
+      "declare const arr: number[];\nfor (arr[0] of [\"a\", \"b\"]) { }", "declare function foo(): { x: number };\nfor (foo().x of [\"a\", \"b\"]) { }",
+      "function foo(): { x: number } { return { x: 0 }; }\nfor (foo().x of [\"a\", \"b\"]) { }",
+    ] {
+    assert_true(issues(src) > 0)
+  }
+  // Silent: a matching target type, `any`, and a union that admits the
+  // element type. Plus the shape the corpus file actually has — an
+  // un-annotated `foo()`, whose return type does not resolve, so this
+  // abstains rather than guessing.
+  for
+    src in [
+      "declare const o: { x: string };\nfor (o.x of [\"a\", \"b\"]) { }", "declare const arr: string[];\nfor (arr[0] of [\"a\", \"b\"]) { }",
+      "declare const o: { x: any };\nfor (o.x of [\"a\", \"b\"]) { }", "declare const o: { x: string | number };\nfor (o.x of [\"a\", \"b\"]) { }",
+      "function foo() { return { x: 0 }; }\nfor (foo().x of [\"a\", \"b\"]) { }",
+    ] {
+    @test.assert_eq(issues(src), 0)
+  }
+}
+
+///|
+/// Batch DZ: TS18030, an optional chain containing a private identifier.
+///
+/// Taken from the "strict-null / narrowing" bucket, whose label is wrong
+/// about every file in it. Five files carry a strict-null code and the
+/// cheapest lever in each is something else entirely: this one is pure
+/// GRAMMAR (the position of the `?.` relative to the `#name` is the whole
+/// rule), `typeofThis` needs a `this`-rebinding context, another needs
+/// name resolution in a type-argument position, another declaration-merge
+/// inference, and the last one aliased control flow. Eighth instance of a
+/// label standing in for the objective.
+///
+/// Every row below was probed against the real compiler, and the one that
+/// mattered is the LAST silent case: `(this?.c).#b` is TS2532 and NOT
+/// TS18030, so parenthesizing ends the chain. This parser gets that right
+/// by construction rather than by a rule — the inner expression is parsed
+/// by its own invocation of the postfix loop, so the outer `.#b` never sees
+/// the flag — and the same mechanism is why a private access inside a call
+/// ARGUMENT within the chain stays legal.
+test "expr_check: an optional chain cannot contain private identifiers (batch DZ)" {
+  let issues = fn(src : String) -> Int {
+    check_module_function_bodies_permissive(parse_module_or_empty(src)).length()
+  }
+  let cls = "class A { #b?: A; c?: A; getA(x?: any): A { return new A(); }\n"
+  // --- fires: the `#private` sits after a `?.` in the same chain
+  for
+    src in [
+      // Directly after the `?.` that opens the chain.
+      cls + "  m() { this?.#b; } }",
+      // Later in the chain, through a plain `.` step.
+      cls + "  m() { this?.c.#b; } }",
+      // Later in the chain, through a call.
+      cls + "  m() { this?.getA().#b; } }",
+      // The receiver need not be `this`.
+      cls + "  m(o: A) { o?.c.#b; } }",
+    ] {
+    assert_true(issues(src) > 0)
+  }
+  // --- stays silent (the legal neighbours, all probed)
+  for
+    src in [
+      // No optional chain at all.
+      cls + "  m() { this.#b; } }",
+      // The `?.` comes AFTER the private name — this is the spelling real
+      // code writes, and the flag is still false when `.#b` is read.
+      cls + "  m() { this.#b?.c; } }",
+      // An optional chain with no private access.
+      cls + "  m() { this?.c; } }",
+      cls + "  m(k: any) { this?.getA()?.c; } }",
+      // Parenthesizing ends the chain: tsc reports TS2532 here and not
+      // TS18030, and the nested postfix loop is what makes that automatic.
+      cls + "  m() { (this?.c).#b; } }",
+      // A private access inside a call argument within the chain belongs
+      // to its own chain, for the same reason.
+      cls + "  m(o: A) { this?.getA(o.#b); } }",
+    ] {
+    @test.assert_eq(issues(src), 0)
+  }
+}

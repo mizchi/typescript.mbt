@@ -144,7 +144,7 @@ checker-miss-buckets *ARGS:
 # batch improves it, the same way the FP budget only ever tightened.
 verify-checker-soundness:
     moon build --target native
-    bash scripts/checker_conformance_oracle.sh --max-fp 0 --max-legal-parsefail 0 --max-miss 134
+    bash scripts/checker_conformance_oracle.sh --max-fp 0 --max-legal-parsefail 0 --max-miss 132
 
 # Is any checker rule superlinear in the size of a module-wide list?
 #
@@ -171,7 +171,7 @@ verify-checker-scaling *ARGS:
     node scripts/verify_checker_scaling.mjs {{ ARGS }}
 
 # Full CI check
-ci: fmt check test verify-mbti-dts verify-scaffolds verify-generated-fixtures verify-examples verify-mangle-safety verify-dce-coverage verify-rule-equivalence verify-graph-walk verify-checker-soundness verify-checker-scaling
+ci: fmt check test verify-mbti-dts verify-scaffolds verify-generated-fixtures verify-examples verify-bridge-runtime verify-bridge-enum-returns verify-mangle-safety verify-dce-coverage verify-rule-equivalence verify-graph-walk verify-checker-soundness verify-checker-scaling
 
 # Update dependencies
 update:
@@ -180,6 +180,47 @@ update:
 # Clean build artifacts
 clean:
     rm -rf _build target
+
+# Run the generated `bridge.js` converters under Node.
+#
+# verify-scaffolds / verify-generated-fixtures / verify-examples ask whether
+# a generated package COMPILES, and bridge_quality_report.sh asks whether a
+# REJECTED export is budgeted. Neither asks whether the code emitted for an
+# ACCEPTED export runs. It did not: a tagged-union case whose payload is
+# `Named(N)` was discriminated with `N instanceof` whether or not `N` exists
+# at runtime, so 411 sites across the corpus carried a ReferenceError.
+#
+# Two checks. Static: every `instanceof X` must have `X` a JS global or a
+# binding of that module — complete, since it sees a site whichever arm a
+# probe value reaches. Runtime: import each bridge.js and call every
+# exported `_from_js` over a value battery — this is what proves the static
+# list is real rather than a grep artifact.
+#
+# Assumes the three generation harnesses above have populated `_build`.
+#
+#   just verify-bridge-runtime
+#   just verify-bridge-runtime --verbose
+verify-bridge-runtime *ARGS:
+    node scripts/verify_bridge_runtime.mjs {{ ARGS }}
+
+# Does the JS emitted for a declaration that PROMISES a payload-bearing enum
+# actually build one?
+#
+# verify-bridge-runtime asks whether a converter RUNS; this asks whether the
+# wrapper that should call it does. `serve(...) -> ServerType` returned the raw
+# Node server, and node_fs's `ReadStream.path: PathLike` moved the raw value in
+# both directions, with the declared type unchanged either way — so no compile
+# gate could see it and a MoonBit `match` read `$tag` off a string.
+#
+# Both places an implementation can land: a named `bridge.js` wrapper, and an
+# `extern "js" fn` whose body is an inline lambda. Reading only the first is
+# how the accessor sites stayed invisible.
+#
+# Assumes the three generation harnesses above have populated `_build`.
+verify-bridge-enum-returns:
+    # Declared backlog lives in scripts/bridge_unconverted_enum_crossings.txt;
+    # an undeclared occurrence and a stale declaration both fail.
+    node scripts/bridge_enum_return_probe.mjs
 
 # Validate `--mangle-properties` against the mangle-safety corpus
 verify-mangle-safety *ARGS:

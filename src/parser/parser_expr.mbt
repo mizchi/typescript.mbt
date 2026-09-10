@@ -681,6 +681,32 @@ fn Parser::resolve_private_name(self : Parser, name : String) -> String {
 }
 
 ///|
+/// TS18030 ("An optional chain cannot contain private identifiers"), recorded
+/// when the property name about to be read is a `#private` and the chain has
+/// already seen a `?.`.
+///
+/// Purely syntactic: the position of the `?.` relative to the `#name` is the
+/// whole rule, so it needs no type and belongs in the parser. Called before
+/// `parse_property_name_token` at BOTH sites that consume a chain property —
+/// the `?.` branch (`this?.#b`) and the plain `.` branch (`this?.a.#b`,
+/// `this?.getA().#b`) — with one flag, because writing the condition at one
+/// of them is what this repo's ledger keeps recording.
+///
+/// The legal neighbour is the same access with the `?.` AFTER the private
+/// name: `this.#b?.a` reads `.#b` at the plain-`.` branch before any `?.` has
+/// been seen, so the flag is false and nothing fires.
+fn Parser::record_optional_chain_private_name(
+  self : Parser,
+  saw_optional_in_chain : Bool,
+) -> Unit {
+  if saw_optional_in_chain && self.peek().kind is PrivateIdent(_) {
+    self.grammar_misuses.push(
+      "an optional chain cannot contain private identifiers",
+    )
+  }
+}
+
+///|
 fn Parser::parse_property_name_token(self : Parser) -> String raise ParseError {
   match self.advance().kind {
     Ident(name) => name
@@ -2517,6 +2543,15 @@ fn Parser::parse_call(self : Parser) -> @ast.TsExpr raise ParseError {
   // followed — bare `parse_primary()` results (`x` alone, no
   // `(args)`) shouldn't be tagged pure.
   let mut saw_call_in_chain = false
+  // TS18030: once a `?.` has appeared, a `#private` member access anywhere
+  // LATER in the same chain is an error. Chain-local rather than a Parser
+  // field on purpose: an argument to a call inside the chain
+  // (`this?.getA(other.#b)`) is parsed by its own invocation of this loop,
+  // so it gets its own flag and cannot inherit ours. Parenthesizing ends
+  // the chain for the same reason — `(this?.a).#b` parses the inner
+  // expression in a nested loop, and tsc agrees that the outer `.#b` is
+  // then legal.
+  let mut saw_optional_in_chain = false
   // Explicit type arguments captured for the call about to be built
   // (`foo<number>(x)`). Reset after each call form consumes them.
   let mut pending_type_args : Array[@ast.TsType] = []
@@ -2538,6 +2573,11 @@ fn Parser::parse_call(self : Parser) -> @ast.TsExpr raise ParseError {
     if self.check(Question) && self.peek_at(1).kind == Dot {
       let _ = self.advance()
       let _ = self.advance()
+      // Set BEFORE the property name below is read, so `this?.#b` — the
+      // private ident directly after the `?.` that opens the chain — and
+      // `this?.a.#b` are one condition tested at two sites rather than two
+      // conditions.
+      saw_optional_in_chain = true
       // `?.<T>(args)` — generic optional call. Consume the type
       // args then fall through to the `LParen` branch so the
       // OptionalChain wrap still happens.
@@ -2576,6 +2616,7 @@ fn Parser::parse_call(self : Parser) -> @ast.TsExpr raise ParseError {
           continue
         }
         _ => {
+          self.record_optional_chain_private_name(saw_optional_in_chain)
           let prop = self.parse_property_name_token()
           expr = @ast.TsExpr::OptionalChain(PropAccess(expr, prop))
           continue
@@ -2610,6 +2651,7 @@ fn Parser::parse_call(self : Parser) -> @ast.TsExpr raise ParseError {
     } else if self.check(Dot) {
       // property
       let _ = self.advance()
+      self.record_optional_chain_private_name(saw_optional_in_chain)
       let prop = self.parse_property_name_token()
       expr = PropAccess(expr, prop)
     } else {

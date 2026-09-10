@@ -1309,6 +1309,111 @@ product surfaces now.
   reports while `let x = g(() => x)` with `g` declaring its return type
   is ACCEPTED, as are `let x = function () { return x }`, `[() => x]`
   and `{ m: () => x }`.
+  Batch DW is +1 and is the first batch here whose target abstention
+  probing CONFIRMED, which is worth as much as the four it refuted. The
+  rule that shipped is a different bug: two sites held one decision and
+  gave opposite answers. `check_expr_against`'s
+  `(ObjectLit, Applied(name, _))` arm deliberately routes the six
+  projectable utility types into `check_object_lit_against_target` — its
+  own comment says so, "since `lookup_field` / `collect_declared_fields`
+  know how to project their field shapes" — and that function threw them
+  straight back out through TWO early returns, `member_recv_unmodeled`
+  and `type_contains_unresolved_named`, both of which call any `Applied`
+  to a non-class, non-interface name unresolvable. So
+  `{ black: { r, g, d } } satisfies Record<string, Color>` reported
+  nothing. The exemption is `Record` ONLY and only with a bare
+  `string` / `number` key, and the wider version was implemented and
+  MEASURED before being cut down: every projectable utility judged by all
+  of its arguments is +1 TP and +1 FP, the false positive being
+  `f20<T, K extends keyof T>(obj: Pick<T, K>)`, which accepts any object
+  literal because `T` is inferred FROM the argument.
+  The confirmed abstention is the excess-property check at CALL
+  ARGUMENTS. A position matrix says the check covers the annotated
+  declaration, `return`, an array element, `satisfies`, assignment and a
+  nested property and is missing at every CALL position, which is the
+  commonest place real code hits TS2353 — and the one-line suppression
+  guarding it (`sub_path.contains("arg[") && target is Object(_)`) is
+  load-bearing: removing it is +0 TP and +3 FPs on hand-written
+  TS7-accepted code, because a constrained type parameter's bound really
+  IS inlined into the parameter position, so
+  `foo<U extends { length: number }>(x: U)` accepts
+  `{ length: 1, extra: 2 }` and the earlier early returns do not catch
+  it. Corpus-wide the blunt removal is +0 TP / +1 FP. The shippable
+  version gates on the CALLEE being non-generic — no type parameters
+  means no bound can have been inlined — and is filed rather than built,
+  because it buys no conformance file and the real-world diagnostic is
+  its only argument.
+  Batches DX and DY are the first two in this series whose conformance
+  yield is ZERO BY DESIGN, and they are the answer to a question the gate
+  cannot ask. DX runs the excess-property check at a CALL argument — the
+  commonest place real code hits TS2353, and a position the corpus does
+  not test at all — behind the one fact that makes it decidable:
+  `callee_non_generic`, proven only at a direct call to a resolved
+  function declaration and at `new` on a resolved class, defaulting to
+  `false` so any site that cannot answer keeps the suppression. An
+  ABSENT entry in `func_type_params` is explicitly not proof, since a
+  call-signature-typed variable and a lib method have no entry either.
+  Both nested shapes under an argument come along, because a nested
+  target came from a `lookup_field` on a written parameter type. A method
+  call and a call through a function-typed binding stay MISSes, neither
+  site being able to prove the callee's genericity.
+  DY is the assignment-form `for…of` target at its other two spellings:
+  the check fired for a bare `Var` and was blind to `o.x`, `foo().x` and
+  `arr[0]`, because the parser wraps a non-identifier head as
+  `TsBinding::Target(expr)` and that fell through to the
+  destructuring-pattern arm. Its zero is more informative than the rule:
+  `ES5For-of8` is `function foo() { return { x: 0 } }`, and an
+  UN-ANNOTATED function's return type does not resolve here at all —
+  `const bad: string = foo().x` is silent too — so the file needs
+  return-type inference from a BODY and never needed this rule.
+  The same round priced the rest of the assignability bucket by opening
+  every file, and the answer settles the strategy: **35 files, ~35
+  causes.** The four cheapest-LOOKING (a plain `number` / `string`
+  mismatch, a shape this checker does flag) each need something
+  different — a well-known-symbol accessor pair's inferred type,
+  object-literal union normalization on widening, expando + namespace
+  declaration merging, and the return-type inference above. `globalThis`
+  at 3 files is the only mini-cluster. The measured rate is about one
+  file per investigation, so the conformance number has stopped ranking
+  work a second time, and what remains worth taking is what the corpus
+  cannot score: 83 of the 134 misses carry exactly one error code and 25
+  of the 39 solo codes have exactly one file.
+  Batch DZ is +1 and its value is what it says about the TRIAGE's own
+  family table rather than about the rule. The
+  "strict-null / narrowing" bucket is five files, and the label is wrong
+  about **all five**: opening each one, the cheapest lever is pure grammar
+  (TS18030), a `this`-rebinding context (TS2331), name resolution in a
+  type-argument position (TS2749), `[]`-to-`never[]` inference plus flow
+  analysis (TS2403 / TS2454), and aliased control flow (TS18046) — five
+  unrelated kinds of work, not one. Eighth instance of a label standing in
+  for the objective, and the first in a bucket small enough that the count
+  looked trustworthy; a bucket of five is not safer than a bucket of
+  forty-eight, it is just faster to disprove.
+  The rule that shipped is TS18030, an optional chain containing a
+  private identifier, and it lives in the parser because the POSITION of
+  the `?.` relative to the `#name` is the whole rule. One chain-local
+  flag set where `?.` is consumed and tested at both sites that read a
+  chain property, rather than a condition at each — `this?.#b` (directly
+  after the `?.` that opens the chain) and `this?.a.#b` (later, through a
+  plain `.`) are one fact. Chain-LOCAL is what makes two legal
+  neighbours automatic instead of needing rules: a private access inside
+  a call argument within the chain (`this?.getA(o.#b)`) is parsed by its
+  own invocation of the postfix loop, and so is the inner expression of
+  `(this?.c).#b` — and that second one is the case worth probing, because
+  `(this?.c).#b` is TS2532 and NOT TS18030, so parenthesizing really does
+  end the chain. Reasoning would have got it wrong either way; the probe
+  settled it, and tscheck now agrees with tsc on all seven spellings.
+  TS2331 is DEFERRED on a measured cost rather than on difficulty, which
+  is worth recording because the rule looks free. Probed cell by cell: an
+  arrow inside a namespace body fires at any depth, a `function`
+  declaration OR expression inside one does not (it rebinds `this`), a
+  class method does not, and neither script top level nor module top
+  level does — so the fact needed is "inside a namespace body and not
+  inside a `this`-rebinding function". `in_function` cannot serve,
+  because it is true inside arrows too, and a new field needs the same
+  save / clear / restore discipline `self.labels` already needs at
+  fifteen function-body sites. That is precisely how the
+  applied-in-some-places bug gets written, for +1 file.
 - `src/transform` is the JS-side pipeline behind `mtsc`: bundling, folding,
   tree-shaking, and the property mangler. Its safety story is type-driven and
   has two halves — `export_surface.mbt` (names reachable from the entry's
@@ -2560,6 +2665,354 @@ product surfaces now.
   keeps domain-specific specialization for Node FS / React / Hono / crypto /
   class-shape generation, plus `.mbti` -> `.d.ts` emission for MoonBit-generated
   packages.
+  Its gates all asked one of two questions and neither was the important
+  one. `verify-scaffolds` / `verify-generated-fixtures` /
+  `verify-examples` ask whether a generated package COMPILES;
+  `scripts/bridge_quality_report.sh` asks whether a REJECTED export is
+  budgeted. **Nothing asked whether the code emitted for an ACCEPTED
+  export RUNS**, and the answer was no. A tagged-union case whose payload
+  is `Named(N)` was discriminated with `value instanceof N` whether or not
+  `N` exists at runtime: `tagged_union_named_constructor_name` asks
+  whether a name is PascalCase and MoonBit-spellable — a NAMING test —
+  and the discriminator read that as licence to emit the predicate, so an
+  interface, a type alias, an enum and a type parameter all got one. 411
+  unbound sites over 197 distinct names, against 14 globals and 4 bound;
+  **2,126 of 2,530 converter calls threw `ReferenceError`** under Node.
+  The names are the diagnosis on their own — `T` / `TResult` /
+  `TDriverParam` are type parameters, `PathLike` / `Booleanish` are
+  aliases, `ScriptTarget` / `ModifierFlags` are enums, `Expression` /
+  `SourceFile` / `Identifier` are TypeScript interfaces.
+  The rule ALREADY EXISTED, which makes this the family this file keeps
+  recording rather than a missing feature.
+  `moonbit_inline_union_runtime_named_ok` is the global-constructor
+  allowlist and its own doc comment states this exact hazard ("interfaces,
+  type aliases, and type parameters have no runtime binding, so `value
+  instanceof Name` would throw in the generated converter"); it was
+  consulted at ONE site, and there only when the union has a FUNCTION
+  member, because the call sits inside `if func_members > 0`. That
+  condition is right for the check immediately above it — a second
+  function case collides on `typeof === "function"` — and has nothing to
+  do with whether a sibling's `instanceof` resolves, so it is the
+  namespace `if outer_modules.length() == 0` shape again: one item's
+  condition inherited by others that do not share it.
+  What made declining cheap is splitting the two converter DIRECTIONS,
+  which had been emitted as a pair: `_to_js` reads `$tag` and needs no
+  runtime predicate at all, so parameter positions keep their types and
+  only the return-side `_from_js` is withheld, with a note naming the
+  case. Before the split a declined `_from_js` took the sound `_to_js`
+  down with it. The whole fix costs ZERO product surface — the bridge
+  quality report is identical on every metric — because
+  `ffi_tagged_union_return_is_safe_to_wrap` already refused to CALL these
+  converters, so the 411 sites were dead broken code. That is also why
+  nothing noticed: `just verify-bridge-runtime`
+  (`scripts/verify_bridge_runtime.mjs`) is the harness that was missing,
+  and it needs BOTH of its halves — a static check that every
+  `instanceof X` has `X` a JS global or a module binding (complete, since
+  it sees a site whichever arm a probe value reaches) and a runtime check
+  that imports all 86 generated bridge modules and calls every exported
+  `_from_js` over a value battery (which is what proves the static list is
+  real rather than a grep artifact). The reason the corpus could not reach
+  it is the recurring one: the ONLY fixture with live `_from_js` calls is
+  `boolean | "boundary"`, with no `Named` member anywhere, so not one
+  fixture put a named type in a return position.
+  The rejection side got the same treatment, and its lesson is the
+  count-versus-item one. `heterogeneous_union_unsupported_export_budget`
+  was set to 0 when the count was 0, an example added later
+  reintroduced two, and the report had been exiting 1 ever since with no
+  way to tell an accepted limitation from a regression — the defect that
+  retired `docs/checker-priority.md`, in a shell script.
+  `scripts/bridge_widened_unions.txt` declares each occurrence with a kind
+  and a reason; an UNDECLARED occurrence fails, and a declared entry that
+  no longer occurs is reported STALE, which is the one mechanism that
+  keeps such a file from becoming a suppression list (both directions
+  proven by mutation, not asserted). The diagnostic it declares had to be
+  fixed first, because it named a cause that CANNOT OCCUR: "non-PascalCase
+  named, function, or unsupported shape" lists a function member, which is
+  accepted as `FnValue`, and put everything real under "unsupported
+  shape" — so an anonymous object type and an object intersection, the two
+  actual occurrences, could not be told apart from a lowercase name by
+  reading the message. And the honest verdict on those two is that neither
+  earns the object-payload feature they both want:
+  `BufferEncodingOption`'s `{ encoding: "buffer" }` is redundant with its
+  `"buffer"` string member, which the existing fallback already
+  constructs, and `WriteFileOptions` needs a SECOND thing — its sibling
+  `BufferEncoding` is a node global this package does not resolve, so even
+  a successful lowering would hand the user a case payload they cannot
+  build.
+  The mirror-image defect is the DECLARED type promising a representation
+  the emitted JS never builds, and `scripts/bridge_enum_return_probe.mjs`
+  asks for it: `@hono/node-server` declared `serve(...) -> ServerType`
+  while the wrapper returned the raw Node server object, and the
+  representation is not a guess — the alias's own constructor emits
+  `{ "$tag": 0, "_0": value }`, so a MoonBit `match` read `$tag` off an
+  object that has none. Fixing it is worth recording mostly for HOW the
+  first attempt failed: it measured as a NO-OP, and the predicate was
+  never the reason. Two rounds of reading the code got the diagnosis
+  wrong; one `println` settled it in a single run, and the lesson is to
+  instrument a "this cannot be happening" gap rather than re-read it.
+  Two causes, both this file's recurring shapes. The walk had `Named` and
+  `Func` arms and no `CallableMeta`, which records source-level parameter
+  OPTIONALITY — so `get_serve`'s `(Options, ((AddressInfo) -> Unit)?) ->
+  ServerType` fell through the catch-all while the sibling
+  `get_create_adaptor_server`'s `(Options) -> ServerType`, having no
+  optional parameter and therefore no wrapper, widened correctly. That
+  asymmetry between two adjacent declarations is what exposed it.
+  `ffi_type_name` peels the same wrapper on its own FIRST line: a walk
+  that DECIDES a type has to peel every wrapper the renderer peels, or it
+  decides a different type from the one that gets printed. Fifth
+  wrapper-node fail-open arm here. And the ten renderer sites were found
+  by grepping the assignment `let return_type = ffi_type_name(state, …)`,
+  which missed `ffi_callable_value_decl_to_moonbit` — the renderer for
+  the direct call form, the one that emits `serve(...)` — because it
+  spells its local `return_type_src`. Writing a shared
+  `ffi_output_type_name` specifically to avoid the applied-in-some-places
+  family and then applying it by textual match on a variable NAME is that
+  family inside its own fix; the census is by ARGUMENT now.
+  The predicate was wrong too, and the TEST found it rather than the
+  corpus. `ffi_tagged_union_return_is_safe_to_wrap` refuses ANY
+  `InstanceOfNamed`, global constructors included, so `PathLike = string
+  | Buffer | URL` is "unsafe to wrap" while its `_from_js` exists and
+  works — widening on that gate would have widened node_fs's twelve
+  global-`Named` union returns as well. The right question is
+  `tagged_union_from_js_expression(decl, "value") is None`, which is
+  exactly what withholds the `_from_js` half. The three
+  `*_should_emit_wrapper` predicates deliberately do NOT consult the
+  widening: they refuse a wrapper whose rendered type uses `JSValue`, so
+  routing them through it would DELETE `serve(...)` instead of widening
+  it, and their real question — does this wrapper carry any type
+  information — is still answered yes by the typed PARAMETERS.
+  It also surfaced a pre-existing defect nothing could see while the two
+  renderings agreed: the `.mbti` carries declarations the `.mbt` does
+  not, because the decl layer and the ffi layer render the same value
+  export independently and `add_bridge_ergonomic_helper_decls` guarded on
+  `contains(helper_decl)` — a substring test using the full SIGNATURE,
+  asking "is this exact line present" where the question is "is this
+  FUNCTION declared". MoonBit has no overloading, so a second
+  `declare pub fn` of one name is always wrong; while the two layers
+  happened to render identical text the duplicate was skipped and the
+  disagreement was invisible.
+  **The first measurement of it was wrong, and the way it was wrong is
+  this file's own recurring mistake in the instrument**: a pattern
+  `^declare pub fn [A-Za-z_][A-Za-z0-9_]*` stops at `::`, so
+  `BuilderProgram::getProgram` and six sibling METHODS collapsed onto
+  `BuilderProgram` and read as a duplicated name — reported as "52
+  duplicated names of 2,161 in the `typescript` package, 13 in vitest, 9
+  in node_fs", which is an artifact of the regex and not a defect.
+  Taking the name up to the `(` that must follow it immediately gives the
+  real answer: **4 duplicated names in 2 packages**, all four with no
+  impl counterpart at all — three `get_*` value getters in
+  hono__node_server and node_fs's `mkdir` (one `pub extern "js" fn
+  mkdir`, so not overloading either). In every case the stale line is the
+  LESS precise one (`get_serve() -> JSValue` against the impl's
+  `() -> (Options, cb?) -> JSValue`; `mkdir`'s `callback : JSValue`
+  against its real callback type), except `get_create_adaptor_server`,
+  whose stale line was more precise and simply untrue.
+  The fix makes the `.mbti` AGREE with the `.mbt` by construction rather
+  than accumulate beside it: the derived declaration REPLACES a
+  same-named line in place, keyed by name through one map lookup per line
+  (a scan per name over the `typescript` package's 2,161 declarations is
+  the quadratic this file keeps paying for). Proven to touch nothing
+  else — regenerating the whole corpus before and after and diffing every
+  declaration line order-independently leaves **85 of 87 packages
+  byte-identical**, with the 2 changed losing exactly those 4 lines. The
+  report gains a `duplicate declared fn names` metric that FAILS on any
+  occurrence, mutation-tested in both directions and verified not to fire
+  on the `Type::method` forms that fooled the first measurement.
+  The other half of that split is a gate that contradicted its own doc
+  comment for a whole commit, and it is worth recording as its own
+  failure mode: a comment describing intent, written in the same change
+  that left the code doing the opposite. 8d227ad rewrote
+  `ffi_tagged_union_return_is_safe_to_wrap`'s header to say that a global
+  constructor "resolves and is kept … which is why `PathLike = string |
+  Buffer | URL` gets a working wrapper", and left
+  `Some(InstanceOfNamed(_)) => return false` in the body — so `PathLike`'s
+  `_from_js` was emitted, exercised by `verify-bridge-runtime`, and never
+  CALLED, and the declared enum came back holding a raw JS string.
+  Refusing an ERASED name is `tagged_union_case_runtime_discriminator`'s
+  job and it already does it by returning `None`; a second, blunter copy
+  of that judgement could only disagree with the first, which is exactly
+  what it did.
+  Measured ALONE that gate change is a zero-diff no-op, because nothing
+  else consults it for a global-`Named` union return — and it is
+  load-bearing all the same, proven by mutation: with the old arm back the
+  regenerated accessor is `#| (self) => self.path` again. A change whose
+  own corpus delta is zero is not automatically the rejected kind this
+  file records; the question is whether something downstream needs it.
+  What needed it is FOUR accessor paths that never asked about tagged
+  unions at all. `ffi_class_property_getter_decl_to_moonbit` and its
+  setter twin route through `ffi_rendered_generated_enum_info` /
+  `ffi_enum_arg_expr`, which walk `state.enums` — the LITERAL-union
+  enums, whose converters are MoonBit functions in `converters.mbt`. A
+  tagged union's converters live in `bridge.js`, so the class METHOD path
+  puts the argument direction in the JS BODY
+  (`ffi_inline_js_arg_expr_with_state`) and the accessor path had neither
+  direction: node_fs's `ReadStream.path: PathLike` declared the enum both
+  ways while moving the raw value, and no compile gate could see it
+  because the declared type is identical either way. Same
+  applied-in-some-places family with the axis swapped — not one rule
+  written at several SITES, but one site asking about one of two FAMILIES.
+  The return direction needed a helper that did not exist,
+  `ffi_inline_js_return_expr_with_state`, because an inline extern lambda
+  cannot import the named `bridge.js` helper —
+  `ffi_inline_js_tagged_union_to_js` says so in its own comment. It binds
+  the value before converting, since the from_js body repeats its argument
+  once per case predicate and the expression here is `self.path`, a
+  property READ, where the named helper reads a parameter. Statics keep
+  the named helpers, their binding being a real `bridge.js` function.
+  **The setter fix then covered a SECOND family nobody was looking for**,
+  and it is 26 of the 33 changed lines: `ffi_inline_js_arg_expr_with_state`
+  also unwraps an OPTION box, so `Context::set_context_env(value :
+  Bindings?)` had been assigning MoonBit's `{$tag: 1, _0: v}` straight
+  into JS's `env` field, across hono, hono-real, drizzle, vitest and
+  typescript. One missing call, two independent wrong values; every
+  package's `.mbti` declaration count is unchanged, so the public surface
+  is identical.
+  The probe was the stated precondition and widening it is where the
+  lesson sits. `bridge_enum_return_probe.mjs` matched `declare pub fn
+  NAME(`, so `fn[T]` and every `Type::method` form was skipped — but the
+  half that mattered was not the regex: a declaration's implementation
+  lands EITHER in a named `bridge.js` wrapper OR in an inline extern
+  lambda, and only the first was ever read. It now reads both (47 named
+  wrappers and 8 inline bodies cross a payload enum, 0 unconverted) and
+  is wired into `bridge_quality_report.sh` as a `run_check` rather than
+  reimplemented in shell. `verify-bridge-runtime` gets the same widening
+  on its static half, under the STRICTER rule that only a JS global can
+  resolve inside an inline lambda, which has no module scope at all. Its
+  first version walked every `.mbt` under `_build` and reported three
+  `instanceof` targets out of `moon fmt`'s copy of a checker whitebox
+  test, whose `#|` lines are TypeScript SOURCE for a test case: widening
+  the input set is not the same as widening the question, so it is scoped
+  to the directories holding a generated `bridge.js`.
+  Asked to take the next item — bind a module-exported class so its
+  `instanceof` resolves — the measurement retired the item and found
+  eighteen live bugs beside it. The filed ceiling was "about ten names,
+  worth doing for the `stat()` family specifically", and importing each
+  generated package's OWN module and asking `typeof mod[name]` gives **2
+  bindable names of the 197 declined**. Every name the estimate listed
+  fails, for two separable reasons: hono__node_server's `Server` /
+  `Http2Server` / `IncomingMessage` / `ServerResponse` are exported by a
+  DIFFERENT module — `node:http` classes the package re-exports as TYPES,
+  so `__ts_mbt_module.Server` is `undefined` and binding needs another
+  module's import rather than the one-line threading the item described —
+  while `StatsFs` / `BigIntStats` / `BigIntStatsFs` are type-only. And the
+  ceiling is a question about CONVERTERS, not names: `_from_js` is withheld
+  unless EVERY case is discriminable, so `Stats` being a real class buys
+  nothing while `BigIntStats` stays erased, which is precisely the `stat()`
+  family the item called its prize. Two converters unblock, one of them in
+  a return position. Ninth instance of a label standing in for the
+  objective, and the first where the label was a NAME COUNT standing in for
+  a conjunction over cases.
+  What the measurement is actually worth is what it exposed. `aliasedTable`
+  converts its ARGUMENT and hands its return back raw while declaring
+  `-> Auto_ViewValue_or_TableValue` — the `ServerType` bug again — and the
+  probe written one commit earlier to catch exactly that could not see it,
+  for two independent reasons. It tested `/_from_js|_to_js|\$tag/` over the
+  whole body, so the `$tag` belonging to the PARAMETER's conversion passed
+  the return: "this body contains a conversion somewhere" is not "this body
+  converts its return", and the two directions are separate questions with
+  separate shapes (`"$tag":` / `_from_js(` BUILDS a MoonBit value,
+  `.$tag ===` / `_to_js(` READS one). And it read payload enums from
+  `bridge.mbti` alone, where a SYNTHESIZED `Auto_X_or_Y` is never
+  declared — **212 of the 231 payload enums live in `types.mbt`**. Fixing
+  both takes the probe from 0 findings to 18. Fifth time this session the
+  measuring instrument carried the same substitution bug as the code it was
+  hunting, after the payload filter, the `::` regex, the snake-case
+  function and the input-set widening.
+  All 18 were declared in `scripts/bridge_unconverted_enum_crossings.txt`
+  with a kind and a reason each; undeclared fails, stale fails, both
+  mutation-tested. Turning 18 invisible wrong values into 18 named ones
+  with reasons was the deliverable — and the STALE half is what emptied the
+  file, twice: it retired the `optional-gate` pair as soon as that was
+  fixed, and then all 16 that were left. **The declared backlog is zero**,
+  which is the state where a NEW unconverted crossing fails immediately.
+  Those 16 were ONE decision made in three places plus two renderers that
+  had never been asked, and every step contradicted the step before it.
+  `ffi_widen_unbuildable_union_outputs` had no arm for a SYNTHESIZED union —
+  such a union keeps its `Union(parts)` shape in the AST while its signature
+  already reads `Auto_X_or_Y`, which `ffi_inline_js_tagged_union_to_js`
+  states in its own comment sixty lines away, the sixth fail-open shape arm
+  in this file's ledger and the first written INSIDE the fix for the fifth.
+  The arm's FIRST version was then ORDER-DEPENDENT, which is the finding
+  worth keeping: it asked whether the alias was already in
+  `state.tagged_union_decls_by_name`, a map filled as a SIDE EFFECT of
+  rendering, so the answer depended on whether an earlier declaration in the
+  file happened to mention the same union.
+  `Auto_IdentifierValue_or_PrivateIdentifierValue` is also a PARAMETER of
+  `idText` nine lines above and was registered;
+  `Auto_VariableDeclarationValue_or_ParameterDeclarationValue` occurs exactly
+  once and was not — so one declaration was fixed and its neighbour silently
+  was not, the applied-in-some-places family with the sites picked by
+  declaration ORDER rather than by anyone's decision.
+  `ffi_output_union_decl` builds the decl (`{ name, cases }`) on the spot.
+  Widening the extern alone gives `[4014] has type JSValue?, wanted
+  Auto_...?`, because there are THREE renderings of one export: the `.mbti`
+  line comes from the DECL layer and the public wrapper is rendered FROM that
+  line. `reconcile_bridge_widened_union_returns` makes the declaration agree
+  with the extern that implements it — the principle
+  `add_bridge_ergonomic_helper_decls` already states, that the `.mbt` is what
+  the package really is. It has to be SCOPED and that is the whole
+  difficulty: a declaration differing from its extern is the NORMAL case (a
+  literal-union enum crosses as an `Int` and the wrapper converts it; an
+  opaque type arrives as `JSValue` and the wrapper wraps it in an option), so
+  it fires only where the extern hands back `JSValue` at the SAME optionality
+  AND the declared type is one of the two things the widening can leave
+  behind. Both halves are needed and only one was written first: when the
+  union is still mentioned elsewhere the enum survives and the symptom is
+  `[4014]`, and when the widened return was its LAST mention nothing
+  synthesizes the enum any more and the identical stale line is `[4032] the
+  type Auto_... is undefined` — which is how `walkUpBindingElementsAndPatterns`
+  failed to COMPILE in the same run where `getNameOfJSDocTypedef` came out
+  right.
+  The `.mbti` emitter was found by INSTRUMENTING, and the first run of that
+  experiment was a FALSE ZERO of exactly the kind this file keeps recording:
+  markers in the three `declare pub fn` renderers of `parser_moonbit.mbt`
+  attributed 0 of 11 lines, because the fixture chosen was a class-only
+  `.d.ts` and a class declares no top-level function, so
+  `func_decl_to_moonbit` was never called. A zero from a probe whose shape is
+  ABSENT is not an answer, and the note that stood here — "it is not any of
+  the `declare pub fn` literals in `moonbit_bridge.mbt`, so the body comes
+  from elsewhere" — was drawn from it. It is `parser_moonbit.mbt:1426`,
+  reached through `moonbit_decl.mbt:12526`.
+  The last two sites are the family on a fresh axis each. An index
+  signature's two DIRECTIONS are two questions and were rendered with one
+  type name: `index_get` crosses JS -> MoonBit and widens, `index_set`
+  crosses the other way, where `_to_js` reads `$tag` and needs no runtime
+  predicate, so it keeps its type and converts in the body — and
+  `ffi_inline_js_arg_expr_with_state`'s own tagged-union test was
+  `Named`-only, which would have sent every synthesized union down the
+  generic option unwrap to read `value._0` off a value MoonBit does not box.
+  And a METHOD's return needed the widening, but NOT in
+  `ffi_function_type_parts`: a function type has no direction of its own, so
+  the same rendering types a method's return and a CALLBACK parameter's
+  return, and widening there threw away a type that works and broke
+  `Matcher::_call_`, whose wrapper reads a struct FIELD rendered elsewhere
+  (`has type ExpectationResult, wanted JSValue`). It belongs in the one
+  branch of `ffi_function_field_method_decl` that binds straight to a JS
+  call. That leaves the struct FIELD itself still promising the enum
+  (`erasedMethod : (String) -> Auto_BetaValue_or_AlphaValue` in `types.mbt`)
+  — filed rather than half-applied, because the fix is a direction parameter
+  on `ffi_func_type_name` and the probe does not read struct fields yet, so
+  the honest first step is to COUNT them.
+  That pair is the fourth time in this sequence that a declining note's
+  own stated reason was false, and both of its reasons were.
+  `ffi_inline_js_return_expr_with_state` said converting an optional would
+  "box a value that path already boxed" — CHECKABLE and unchecked, since
+  `ffi_option_return_inner_is_boxed` returns FALSE for a tagged-union
+  alias, so `ffi_option_return_needs_wrap` never fires for one and no
+  MoonBit-side wrap exists to collide with (`Some(v)` IS `v`, `None` IS
+  `undefined`), confirmed against the emitted code rather than the source.
+  It also said no corpus declaration had the shape, and
+  `TypeChecker::getConstantValue` returns `Auto_NumberValue_or_StringValue?`
+  — `String | Double`, both primitives, so `typeof` discriminates.
+  And the site was a THIRD renderer. `TypeChecker` is an INTERFACE, so
+  `getConstantValue` never reached the class-method path; patching that
+  path, regenerating, and finding the count UNCHANGED is what found
+  `ffi_function_field_method_decl`. Interface methods, class methods and
+  the four accessor paths are three separate renderers of one decision, and
+  the ARGUMENTS were routed through the conversion at all of them while the
+  RETURN was routed at none — the same family as the accessors, one axis
+  further out, and the reason to fix a renderer and then MEASURE rather
+  than assume the site was the one that looked obvious.
 
 ## Project Structure
 

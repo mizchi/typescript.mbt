@@ -13,11 +13,11 @@ ambiguous_unsupported_export_budget=1
 namespace_omitted_unsupported_export_budget=0
 namespace_widened_unsupported_export_budget=0
 # Heterogeneous unions whose members carry no runtime-discriminable
-# constructor name. Function members, branded-string intersections,
-# empty-registry indexed accesses, and qualified namespace refs now
-# lower (2026-07-15), so the budget is 0: any new occurrence is a real
-# regression.
-heterogeneous_union_unsupported_export_budget=0
+# constructor name are DECLARED rather than counted -- see
+# scripts/bridge_widened_unions.txt for why a count could not rank work,
+# and for the two entries. An undeclared occurrence fails this report; a
+# declared entry that no longer occurs is reported as STALE.
+heterogeneous_union_declared_file="${BRIDGE_WIDENED_UNIONS_FILE:-$repo_root/scripts/bridge_widened_unions.txt}"
 
 rm -rf "$report_root"
 mkdir -p "$log_root"
@@ -147,20 +147,58 @@ count_matching_files() {
   printf '%s\n' "$total"
 }
 
+# Export names declared in scripts/bridge_widened_unions.txt, one per line.
+declared_widened_union_names() {
+  if [ ! -f "$heterogeneous_union_declared_file" ]; then
+    return
+  fi
+  # `<name> | <kind> | <reason>`; ignore comments and blanks.
+  sed -e 's/#.*$//' "$heterogeneous_union_declared_file" \
+    | awk -F'|' 'NF >= 1 { gsub(/^[ \t]+|[ \t]+$/, "", $1); if ($1 != "") print $1 }'
+}
+
+declared_widened_union_kind() {
+  local want="$1"
+  if [ ! -f "$heterogeneous_union_declared_file" ]; then
+    printf 'undeclared\n'
+    return
+  fi
+  sed -e 's/#.*$//' "$heterogeneous_union_declared_file" \
+    | awk -F'|' -v want="$want" '
+        NF >= 2 {
+          name = $1; kind = $2
+          gsub(/^[ \t]+|[ \t]+$/, "", name)
+          gsub(/^[ \t]+|[ \t]+$/, "", kind)
+          if (name == want) { print kind; found = 1; exit }
+        }
+        END { if (!found) print "undeclared" }
+      '
+}
+
+# The export name out of a `/// Unsupported export <name>: ...` line.
+unsupported_export_name() {
+  printf '%s\n' "$1" \
+    | sed -e 's|^/// Unsupported export ||' -e 's|:.*$||'
+}
+
 collect_unsupported_export_counts() {
   local details_file="$1"
+  local seen_file="$2"
   local total=0
   local ambiguous=0
   local namespace_omitted=0
   local namespace_widened=0
   local heterogeneous_union=0
+  local heterogeneous_union_undeclared=0
   local unbudgeted=0
   local file
   local line
   local line_no
   local classification
+  local export_name
 
   : > "$details_file"
+  : > "$seen_file"
 
   while IFS= read -r file; do
     line_no=0
@@ -182,8 +220,15 @@ collect_unsupported_export_counts() {
         classification="namespace-widened"
         namespace_widened=$((namespace_widened + 1))
       elif [[ "$line" == *"heterogeneous union member is not runtime-discriminable"* ]]; then
-        classification="heterogeneous-union-widened"
         heterogeneous_union=$((heterogeneous_union + 1))
+        export_name="$(unsupported_export_name "$line")"
+        printf '%s\n' "$export_name" >> "$seen_file"
+        if [ "$(declared_widened_union_kind "$export_name")" = "undeclared" ]; then
+          classification="heterogeneous-union-UNDECLARED"
+          heterogeneous_union_undeclared=$((heterogeneous_union_undeclared + 1))
+        else
+          classification="heterogeneous-union-declared"
+        fi
       else
         unbudgeted=$((unbudgeted + 1))
       fi
@@ -196,13 +241,53 @@ collect_unsupported_export_counts() {
     done < "$file"
   done < <(find_metric_files 'bridge.mbti')
 
-  printf '%s|%s|%s|%s|%s|%s\n' \
+  printf '%s|%s|%s|%s|%s|%s|%s\n' \
     "$total" \
     "$ambiguous" \
     "$namespace_omitted" \
     "$namespace_widened" \
     "$heterogeneous_union" \
+    "$heterogeneous_union_undeclared" \
     "$unbudgeted"
+}
+
+# A top-level `declare pub fn` name declared more than once in one package.
+#
+# MoonBit has no overloading, so two `pub fn` of one name cannot both exist —
+# a second declaration is therefore always wrong, and the `.mbti` is supposed
+# to describe the `.mbt`. Nothing checked the two against each other, and the
+# decl layer and the ffi layer render the same value export independently, so
+# a disagreement showed up as an extra declaration rather than as an error.
+# Four of them were in the corpus (`get_serve`, `get_get_request_listener`,
+# `get_create_adaptor_server`, `mkdir`), invisible for as long as the two
+# renderings happened to match.
+#
+# The name is taken up to the `(` that must follow it immediately, which is
+# what excludes a `Type::method` form — those are methods on one receiver, not
+# duplicates. Getting that wrong is how the first measurement of this reported
+# 52 duplicates in one package when the real answer was zero: a pattern that
+# stopped at `::` collapsed `BuilderProgram::getProgram` and six siblings onto
+# `BuilderProgram`.
+duplicate_declared_fn_names() {
+  local details_file="$1"
+  local total=0
+  local file
+  local name
+
+  : > "$details_file"
+
+  while IFS= read -r file; do
+    while IFS= read -r name; do
+      [ -n "$name" ] || continue
+      printf '%s\t%s\n' "$file" "$name" >> "$details_file"
+      total=$((total + 1))
+    done < <(
+      sed -n 's/^declare pub fn \([A-Za-z_][A-Za-z0-9_]*\)(.*/\1/p' "$file" \
+        | sort | uniq -d
+    )
+  done < <(find_metric_files 'bridge.mbti')
+
+  printf '%s\n' "$total"
 }
 
 jsvalue_cause_counts() {
@@ -270,6 +355,12 @@ jsvalue_cause_counts() {
 run_check "verify-scaffolds" bash scripts/verify_scaffolds.sh
 run_check "verify-generated-fixtures" bash scripts/verify_generated_fixtures.sh
 run_check "verify-examples" bash scripts/verify_examples.sh
+# Runs against the corpus the three above just generated. It asks the one
+# question none of them do: a declaration that PROMISES a payload-bearing enum
+# has to be implemented by JS that BUILDS one. Called rather than reimplemented
+# in shell — a second copy of the rule is the defect this report already
+# carries three notes about.
+run_check "bridge-enum-return-probe" node scripts/bridge_enum_return_probe.mjs
 
 collect_metric_roots
 
@@ -283,19 +374,35 @@ moonbit_decl_lines="$(sum_lines 'bridge.mbti')"
 typescript_decl_lines="$(sum_lines '*.d.ts')"
 javascript_lines="$(sum_lines '*.js')"
 diagnostic_files=$(( $(count_files 'SCAFFOLD_DIAGNOSTICS.md') + $(count_files 'AUTOLINK_DIAGNOSTICS.md') ))
+widened_union_seen_file="$report_root/widened-unions-seen.txt"
 IFS='|' read -r \
   unsupported_exports \
   ambiguous_unsupported_exports \
   namespace_omitted_unsupported_exports \
   namespace_widened_unsupported_exports \
   heterogeneous_union_unsupported_exports \
-  unbudgeted_unsupported_exports < <(collect_unsupported_export_counts "$unsupported_details_file")
+  heterogeneous_union_undeclared_exports \
+  unbudgeted_unsupported_exports < <(collect_unsupported_export_counts "$unsupported_details_file" "$widened_union_seen_file")
+
+# A declared entry that no longer occurs. This is the mechanism that keeps
+# the file from decaying into a suppression list: the whole point of
+# declaring an occurrence is that removing the limitation removes the entry,
+# and nothing else would notice.
+stale_widened_unions=()
+while IFS= read -r declared_name; do
+  [ -n "$declared_name" ] || continue
+  if ! grep -Fxq "$declared_name" "$widened_union_seen_file" 2>/dev/null; then
+    stale_widened_unions+=("$declared_name")
+  fi
+done < <(declared_widened_union_names)
 moonbit_declared_functions="$(count_matching_files 'bridge.mbti' '^declare pub fn ')"
 moonbit_declared_types="$(count_matching_files 'bridge.mbti' '^declare pub type ')"
 typescript_exported_declarations="$(count_matching_files '*.d.ts' '^export (declare )?(function|interface|class|const|type) ')"
 jsvalue_refs="$(count_matching_files 'bridge.mbti' 'JSValue')"
 jsvalue_functions="$(count_matching_files 'bridge.mbti' '^declare pub fn .*JSValue')"
 moon_build_smokes="$(find_metric_dirs '__tsmbt_build_smoke__' | wc -l | tr -d ' ')"
+duplicate_decl_details_file="$report_root/duplicate-declarations.tsv"
+duplicate_declared_fns="$(duplicate_declared_fn_names "$duplicate_decl_details_file")"
 IFS='|' read -r \
   jsvalue_surface_lines \
   jsvalue_unknown_any \
@@ -323,7 +430,13 @@ fi
 if [ "$namespace_widened_unsupported_exports" -gt "$namespace_widened_unsupported_export_budget" ]; then
   overall="fail"
 fi
-if [ "$heterogeneous_union_unsupported_exports" -gt "$heterogeneous_union_unsupported_export_budget" ]; then
+if [ "$heterogeneous_union_undeclared_exports" -gt 0 ]; then
+  overall="fail"
+fi
+if [ "$duplicate_declared_fns" -gt 0 ]; then
+  overall="fail"
+fi
+if [ "${#stale_widened_unions[@]}" -gt 0 ]; then
   overall="fail"
 fi
 
@@ -358,12 +471,15 @@ fi
   printf '| budgeted ambiguous unsupported exports | %s / %s |\n' "$ambiguous_unsupported_exports" "$ambiguous_unsupported_export_budget"
   printf '| budgeted namespace-runtime omitted exports | %s / %s |\n' "$namespace_omitted_unsupported_exports" "$namespace_omitted_unsupported_export_budget"
   printf '| budgeted namespace-widened exports | %s / %s |\n' "$namespace_widened_unsupported_exports" "$namespace_widened_unsupported_export_budget"
-  printf '| budgeted heterogeneous-union widened exports | %s / %s |\n' "$heterogeneous_union_unsupported_exports" "$heterogeneous_union_unsupported_export_budget"
+  printf '| declared heterogeneous-union widened exports | %s |\n' "$heterogeneous_union_unsupported_exports"
+  printf '| UNDECLARED heterogeneous-union widened exports | %s |\n' "$heterogeneous_union_undeclared_exports"
+  printf '| stale heterogeneous-union declarations | %s |\n' "${#stale_widened_unions[@]}"
   printf '| unbudgeted unsupported exports | %s |\n' "$unbudgeted_unsupported_exports"
   printf '| JSValue refs | %s |\n' "$jsvalue_refs"
   printf '| JSValue surface lines | %s |\n' "$jsvalue_surface_lines"
   printf '| JSValue functions | %s |\n' "$jsvalue_functions"
   printf '| generated build-smoke packages | %s |\n' "$moon_build_smokes"
+  printf '| duplicate declared fn names | %s |\n' "$duplicate_declared_fns"
   printf '\n'
   printf '## JSValue Cause Breakdown\n\n'
   printf 'This is a heuristic classification over generated `bridge.mbti` surface lines that contain `JSValue`, excluding the shared banner and type declaration.\n\n'
@@ -378,6 +494,8 @@ fi
   printf '\n'
   printf '## Unsupported Export Budget\n\n'
   printf 'Only ambiguous re-export surfaces with explicit candidate diagnostics are budgeted in this fixture corpus. Any other unsupported export class fails this report unless its budget is raised deliberately.\n\n'
+  printf 'Heterogeneous-union widenings are DECLARED rather than counted: every occurrence must appear in `%s` with a kind and a reason. An `heterogeneous-union-UNDECLARED` row fails this report, and so does a declared entry that no longer occurs (a count could do neither).\n\n' \
+    "${heterogeneous_union_declared_file#"$repo_root"/}"
   printf '| class | location | diagnostic |\n'
   printf '| --- | --- | --- |\n'
   if [ -s "$unsupported_details_file" ]; then
@@ -386,6 +504,27 @@ fi
     done < "$unsupported_details_file"
   else
     printf '| none |  |  |\n'
+  fi
+  printf '\n'
+  printf '### Duplicate declared function names\n\n'
+  if [ "$duplicate_declared_fns" -gt 0 ]; then
+    printf 'MoonBit has no overloading, so a name declared twice in one `bridge.mbti` cannot both exist in the `.mbt`. The `.mbti` describes the `.mbt`; a duplicate means two emitters rendered one export and disagreed.\n\n'
+    while IFS=$'\t' read -r location name; do
+      printf -- '- `%s` in `%s`\n' "$name" "${location#"$repo_root"/}"
+    done < "$duplicate_decl_details_file"
+  else
+    printf 'none\n'
+  fi
+  printf '\n'
+  printf '### Stale heterogeneous-union declarations\n\n'
+  if [ "${#stale_widened_unions[@]}" -gt 0 ]; then
+    printf 'These exports are declared in `%s` but no longer widen. The limitation is gone: delete the entry.\n\n' \
+      "${heterogeneous_union_declared_file#"$repo_root"/}"
+    for name in "${stale_widened_unions[@]}"; do
+      printf -- '- `%s`\n' "$name"
+    done
+  else
+    printf 'none\n'
   fi
 } > "$report_file"
 

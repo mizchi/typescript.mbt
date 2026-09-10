@@ -1106,21 +1106,312 @@ fn prune_mismatched_upcast_helpers(
 }
 
 ///|
+/// The top-level function name a `declare pub fn NAME(...)` line declares.
+/// `None` for any other line, and for a `Type::method` form — those are not
+/// what `parse_bridge_pub_extern_fn_decl_line` produces, so they can never
+/// collide with a derived declaration.
+fn bridge_mbti_declared_fn_name(line : String) -> String? {
+  let prefix = "declare pub fn "
+  if !line.has_prefix(prefix) {
+    return None
+  }
+  let rest = line[prefix.length():].to_owned()
+  match rest.find("(") {
+    Some(open) => {
+      let name = rest[:open].to_owned()
+      if name == "" || name.contains("::") {
+        None
+      } else {
+        Some(name)
+      }
+    }
+    None => None
+  }
+}
+
+///|
+/// Names of the PAYLOAD-bearing `pub(all) enum`s this package declares.
+///
+/// A payload-free enum -- what a TypeScript numeric or string-literal union
+/// lowers to -- is an integer or string tag at the JS boundary, and that is
+/// the family `collect_bridge_enum_converters` handles. Only a
+/// payload-bearing one is a tagged union, whose JS representation is
+/// `{ "$tag": i, "_0": v }`.
+fn collect_bridge_payload_enum_names(bridge_mbt : String) -> Array[String] {
+  let names : Array[String] = []
+  let prefix = "pub(all) enum "
+  let mut current = ""
+  for line_view in bridge_mbt.split("\n") {
+    let trimmed = line_view.to_owned().trim().to_owned()
+    if trimmed.has_prefix(prefix) && trimmed.has_suffix("{") {
+      let rest = trimmed[prefix.length():trimmed.length() - 1]
+        .to_owned()
+        .trim()
+        .to_owned()
+      current = if rest.contains("[") { "" } else { rest }
+      continue
+    }
+    if current == "" {
+      continue
+    }
+    if trimmed == "}" {
+      current = ""
+      continue
+    }
+    // `Case(Payload)` is a payload-bearing constructor; a bare `Case` is not.
+    if trimmed.contains("(") && !names.contains(current) {
+      names.push(current)
+    }
+  }
+  names
+}
+
+///|
+/// `(name, params_src, return_type)` for a `<prefix>NAME(params) -> RET` line,
+/// accepting a `Type::method` name where
+/// `parse_bridge_top_level_fn_decl_line` and
+/// `parse_bridge_pub_extern_fn_decl_line` both reject one -- they feed the
+/// public-wrapper machinery, which is about top-level names only. The trailing
+/// ` = "..."` / ` =` of an extern is cut, so one parse serves both surfaces.
+fn bridge_split_fn_decl_line(
+  line : String,
+  prefix : String,
+) -> (String, String, String)? {
+  if !line.has_prefix(prefix) {
+    return None
+  }
+  let rest = line[prefix.length():].to_owned()
+  let open = match rest.find("(") {
+    Some(i) => i
+    None => return None
+  }
+  let close = match bridge_find_matching_paren(rest, open) {
+    Some(i) => i
+    None => return None
+  }
+  let name = rest[:open].to_owned().trim().to_owned()
+  if name == "" {
+    return None
+  }
+  let params_src = rest[open + 1:close].to_owned()
+  let after = rest[close + 1:].to_owned().trim().to_owned()
+  if !after.has_prefix("->") {
+    return None
+  }
+  let return_src = after[2:].to_owned().trim().to_owned()
+  let return_type = match return_src.find("=") {
+    Some(i) => return_src[:i].to_owned().trim().to_owned()
+    None => return_src
+  }
+  if return_type == "" {
+    return None
+  }
+  Some((name, params_src, return_type))
+}
+
+///|
+/// Split a declared type into `(base, is_optional)`.
+fn bridge_split_optional_type(type_src : String) -> (String, Bool) {
+  let trimmed = type_src.trim().to_owned()
+  if trimmed.has_suffix("?") {
+    (trimmed[:trimmed.length() - 1].to_owned().trim().to_owned(), true)
+  } else {
+    (trimmed, false)
+  }
+}
+
+///|
+/// Make a `declare pub fn` line's RETURN type agree with the extern that
+/// implements it, for the one decision the two layers make separately and can
+/// therefore disagree about: a tagged-union return the bridge cannot BUILD at
+/// runtime.
+///
+/// `ffi_widen_unbuildable_union_outputs` widens such a return to `JSValue`,
+/// because no `_from_js` exists for it and the extern binds straight to the
+/// raw JS function. That decision needs `MoonBitJsFfiState`. The `.mbti` line
+/// comes from the DECL layer (`func_decl_to_moonbit` -> `moonbit_type_name`),
+/// which holds no such state, and `add_bridge_public_wrappers` renders the
+/// public wrapper FROM that line -- so one export has THREE renderings and
+/// only the ffi one moved. `[4014] Expr Type Mismatch: has type JSValue?,
+/// wanted Auto_...?` is what came out, and reverting the widening twice on
+/// that message is what kept the erased-payload backlog open.
+///
+/// Located by instrumenting rather than reading: markers in the three
+/// `declare pub fn` renderers of `parser_moonbit.mbt` attributed 0 of 11
+/// lines, and the reason was the FIXTURE -- a class-only `.d.ts` declares no
+/// top-level function, so `func_decl_to_moonbit` was never called. A zero
+/// from a probe whose shape is absent is not an answer.
+///
+/// Scoped rather than blanket, and that is the whole difficulty: a `.mbti`
+/// return type differing from its extern's is the NORMAL case. A literal-union
+/// enum crosses as an `Int` and the wrapper converts it; an opaque type
+/// arrives as `JSValue` and the wrapper wraps it in an option. Rewriting on
+/// "they differ" would delete both families of wrapper. The extern handing
+/// back `JSValue` at the SAME optionality as the declaration already excludes
+/// both of those -- a literal enum crosses as `Int` or `String`, and the
+/// option wrap turns a non-optional `JSValue` into a `T?`.
+///
+/// On top of that, the declared type has to be one of the two things the
+/// widening can leave behind, and it takes both because they are the same
+/// event seen from either side. When the union is mentioned somewhere else in
+/// the package -- `Auto_IdentifierValue_or_PrivateIdentifierValue` is also a
+/// PARAMETER of `idText` -- the enum stays declared and the stale declaration
+/// is `[4014] has type JSValue?, wanted Auto_...?`. When the widened return
+/// was the union's only mention, nothing synthesizes the enum any more and
+/// the same stale declaration is `[4032] the type Auto_... is undefined`.
+/// Writing only the first half is what made `walkUpBindingElementsAndPatterns`
+/// fail to compile while `getNameOfJSDocTypedef` came out right.
+fn reconcile_bridge_widened_union_returns(
+  bridge_mbti : String,
+  bridge_mbt : String,
+) -> String {
+  let payload_enums = collect_bridge_payload_enum_names(bridge_mbt)
+  let implemented = collect_bridge_implemented_type_names(bridge_mbt)
+  // A top-level extern is named for its snake_case binding
+  // (`get_name_of_jsdoc_typedef`); a member extern keeps the `Type::method`
+  // spelling the declaration uses. Both are keyed here under the name the
+  // `.mbti` side will look up.
+  let extern_returns : Map[String, String] = {}
+  for line_view in bridge_mbt.split("\n") {
+    let line = line_view.to_owned().trim().to_owned()
+    match bridge_split_fn_decl_line(line, "pub extern \"js\" fn ") {
+      Some((name, _, return_type)) =>
+        if !extern_returns.contains(name) {
+          extern_returns[name] = return_type
+        }
+      None => ()
+    }
+  }
+  let kept : Array[String] = []
+  for line_view in bridge_mbti.split("\n") {
+    let line = line_view.to_owned()
+    let mut rewritten : String? = None
+    // Only an unindented line, so a nested declaration is left verbatim
+    // rather than reconstructed without its indentation.
+    if line == line.trim().to_owned() {
+      match bridge_split_fn_decl_line(line, "declare pub fn ") {
+        Some((name, params_src, declared_ret)) => {
+          let (declared, declared_opt) = bridge_split_optional_type(
+            declared_ret,
+          )
+          // A bare identifier only: a generic instantiation (`Token[JSValue]`)
+          // is not a name either list can be consulted about, and reading one
+          // as absent would rewrite a return the widening never touched.
+          let is_plain_name = declared != "" &&
+            declared != "JSValue" &&
+            !declared.contains("[") &&
+            !declared.contains("(") &&
+            !declared.contains(" ")
+          let extern_key = if name.contains("::") {
+            name
+          } else {
+            bridge_value_fn_name(name)
+          }
+          if is_plain_name &&
+            (
+              payload_enums.contains(declared) ||
+              !implemented.contains(declared)
+            ) {
+            match extern_returns.get(extern_key) {
+              Some(extern_ret) => {
+                let (ext_base, ext_opt) = bridge_split_optional_type(extern_ret)
+                if ext_base == "JSValue" && ext_opt == declared_opt {
+                  rewritten = Some(
+                    "declare pub fn \{name}(\{params_src}) -> \{extern_ret}",
+                  )
+                }
+              }
+              None => ()
+            }
+          }
+        }
+        None => ()
+      }
+    }
+    match rewritten {
+      Some(next) => kept.push(next)
+      None => kept.push(line)
+    }
+  }
+  kept.join("\n")
+}
+
+///|
+/// Derive a `declare pub fn` for every emitted extern, and make the `.mbti`
+/// AGREE with the `.mbt` rather than merely accumulate beside it.
+///
+/// The guard here used to be `if !next_bridge_mbti.contains(helper_decl)` — a
+/// substring test on the whole file using the full SIGNATURE, which asks "is
+/// this exact line already present" where the question is "is this FUNCTION
+/// already declared". MoonBit has no overloading, so two `pub fn` of one name
+/// cannot both exist in a package; a second `declare pub fn` of that name is
+/// therefore always wrong, and the `.mbt` is the one that says what the
+/// package really is.
+///
+/// While the two layers happened to render the same text the duplication was
+/// invisible, which is why it survived: the decl layer describes an exported
+/// value independently of the ffi layer, and widening a tagged-union RETURN
+/// made two renderings of `get_create_adaptor_server` differ for the first
+/// time. Four cases in the corpus, all the same shape — the stale line is the
+/// less precise one (`get_serve() -> JSValue` against the impl's
+/// `() -> (Options, cb?) -> JSValue`, `mkdir`'s `callback : JSValue` against
+/// its real callback type), except `get_create_adaptor_server`, whose stale
+/// line was MORE precise and simply untrue.
+///
+/// Replacing in place rather than appending is what makes the agreement hold
+/// by construction, so the next disagreement cannot hide the same way. Keyed
+/// on the name via one map lookup per line, not a scan per name: the
+/// `typescript` package has 2,161 of these, and a nested scan there is the
+/// quadratic this repo keeps paying for.
 fn add_bridge_ergonomic_helper_decls(
   bridge_mbti : String,
   bridge_mbt : String,
 ) -> String {
-  let mut next_bridge_mbti = bridge_mbti
+  let derived_names : Array[String] = []
+  let derived_decl : Map[String, String] = {}
   for line_view in bridge_mbt.split("\n") {
     let line = line_view.to_owned().trim().to_owned()
     match parse_bridge_pub_extern_fn_decl_line(line) {
       Some(fn_decl) => {
         let helper_decl = "declare pub fn \{fn_decl.public_name}(\{fn_decl.params_src}) -> \{fn_decl.return_type}"
-        if !next_bridge_mbti.contains(helper_decl) {
-          next_bridge_mbti += "\n\n///|\n" + helper_decl
+        if !derived_decl.contains(fn_decl.public_name) {
+          derived_names.push(fn_decl.public_name)
+          derived_decl[fn_decl.public_name] = helper_decl
         }
       }
       None => ()
+    }
+  }
+  let consumed : Array[String] = []
+  let kept : Array[String] = []
+  for line_view in bridge_mbti.split("\n") {
+    let line = line_view.to_owned()
+    let mut rewritten = false
+    match bridge_mbti_declared_fn_name(line) {
+      Some(name) =>
+        match derived_decl.get(name) {
+          Some(decl) => {
+            // First occurrence becomes the impl's own signature; a further
+            // declaration of the same name is dropped, since only one can
+            // exist.
+            if !consumed.contains(name) {
+              consumed.push(name)
+              kept.push(decl)
+            }
+            rewritten = true
+          }
+          None => ()
+        }
+      None => ()
+    }
+    if !rewritten {
+      kept.push(line)
+    }
+  }
+  let mut next_bridge_mbti = kept.join("\n")
+  for name in derived_names {
+    if !consumed.contains(name) {
+      next_bridge_mbti += "\n\n///|\n" + derived_decl.get(name).unwrap()
     }
   }
   for helper in collect_bridge_type_guard_helpers(bridge_mbti, bridge_mbt) {
@@ -1720,9 +2011,9 @@ pub async fn emit_moonbit_ts_bridge_package_bundle_from_entry_path(
   )
   let graph = load_type_module_graph(entry_path)
   let export_surface = resolve_export_surface(graph)
-  let base_bridge_mbti = add_bridge_namespace_public_decls(
-    bundle.decl_mbt,
-    export_surface,
+  let base_bridge_mbti = reconcile_bridge_widened_union_returns(
+    add_bridge_namespace_public_decls(bundle.decl_mbt, export_surface),
+    bundle.ffi_mbt,
   )
   let (bridge_mbt, wrapped_bridge_mbti) = add_bridge_public_wrappers(
     base_bridge_mbti,

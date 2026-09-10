@@ -9056,12 +9056,19 @@ fn symbol_member_shape_blocks(
 }
 
 ///|
+/// `arg_callee_non_generic` is the one fact that lets the excess-property
+/// check run at a CALL argument. See `check_object_lit_against_target`'s
+/// `suppress_excess` for why the position is suppressed by default and why
+/// this is the exact fact that lifts it. It defaults to `false` — "the
+/// caller cannot answer" — which keeps the suppression, so a call site that
+/// does not thread it loses a finding rather than inventing one.
 fn check_expr_against(
   env : ExprEnv,
   expr : @ast.TsExpr,
   expected : @ast.TsType,
   ctx : CheckCtx,
   sub_path : String,
+  arg_callee_non_generic? : Bool = false,
 ) -> Unit {
   // Always walk for nested call-site argument errors, even when the outer
   // expected type is `Any` (e.g. an unannotated return where we still want
@@ -9741,6 +9748,7 @@ fn check_expr_against(
         ctx.resolver,
         ctx,
         sub_path,
+        arg_callee_non_generic~,
       )
       return
     }
@@ -9754,6 +9762,7 @@ fn check_expr_against(
             ctx.resolver,
             ctx,
             sub_path,
+            arg_callee_non_generic~,
           )
           return
         }
@@ -9779,6 +9788,7 @@ fn check_expr_against(
           ctx.resolver,
           ctx,
           sub_path,
+          arg_callee_non_generic~,
         )
         return
       }
@@ -12617,6 +12627,34 @@ fn optionality_level(t : @ast.TsType) -> (@ast.TsType, Int) {
 }
 
 ///|
+/// The utility types whose field shape `lookup_field` and
+/// `collect_declared_fields` can actually project. `Record<K, V>` answers
+/// every key with `V`; the other five project their argument's fields.
+///
+/// One predicate rather than a second literal list, because a second list
+/// is the defect this exists to fix: the `(ObjectLit, Applied(name, _))`
+/// dispatcher in `check_expr_against` deliberately routes these six into
+/// `check_object_lit_against_target` — its comment says so, "since
+/// `lookup_field` / `collect_declared_fields` know how to project their
+/// field shapes" — and that function then threw them out again through
+/// `member_recv_unmodeled`, which calls any `Applied` to a non-class,
+/// non-interface name unmodeled. Two sites, one decision, opposite
+/// answers.
+fn target_is_projectable_record(
+  ty : @ast.TsType,
+  resolver : Resolver,
+  ctx : CheckCtx,
+) -> Bool {
+  match resolver.unwrap(ty) {
+    Applied("Record", [k, v]) =>
+      resolver.unwrap(k) is (String_ | Number | Int) &&
+      not(type_contains_unresolved_named(v, resolver)) &&
+      not(is_in_scope_type_param(ctx, v))
+    _ => false
+  }
+}
+
+///|
 fn check_object_lit_against_target(
   env : ExprEnv,
   entries : Array[(String, @ast.TsExpr)],
@@ -12624,6 +12662,7 @@ fn check_object_lit_against_target(
   resolver : Resolver,
   ctx : CheckCtx,
   sub_path : String,
+  arg_callee_non_generic? : Bool = false,
 ) -> Unit {
   // When the target is a bare in-scope type parameter (`T extends Foo`),
   // we don't know the concrete shape — TS allows objects with additional
@@ -12642,14 +12681,45 @@ fn check_object_lit_against_target(
   // supplied key would look like an excess property and every declared field
   // like a missing one. TypeScript resolves these fully — suppress the whole
   // excess/missing check rather than emit false positives.
-  if member_recv_unmodeled(target, resolver) {
+  //
+  // The six projectable utility types are exempt: `member_recv_unmodeled`
+  // calls every `Applied` to a non-class, non-interface name unmodeled,
+  // which catches `Record<string, Color>` — and the caller routed it here
+  // precisely because its shape CAN be projected. Without the exemption
+  // the two sites disagree and `{ black: { r, g, d } } satisfies
+  // Record<string, Color>` reports nothing.
+  //
+  // The missing-required half stays vacuous for `Record` by construction:
+  // `collect_declared_fields` has no `Record` arm, so it returns no
+  // declared names and nothing can be reported missing — which is right,
+  // since `Record<string, V>` requires no particular key.
+  if member_recv_unmodeled(target, resolver) &&
+    not(target_is_projectable_record(target, resolver, ctx)) {
     return
   }
   // An unresolved `Named` / `Applied` target — typically a method-level type
   // parameter (`foo<U extends T>(x: U)`) the enclosing-scope check above
   // doesn't track — has an unknown shape, so TypeScript allows extra
   // properties (the instantiation may be wider). Suppress excess/missing.
-  if type_contains_unresolved_named(target, resolver) {
+  //
+  // `Record<string, V>` is judged by its VALUE argument instead of as a
+  // whole. `Record` is not a class or an interface, so the predicate calls
+  // it unresolved, and that is the second of the two early returns that
+  // made `{ black: { r, g, d } } satisfies Record<string, Color>` silent —
+  // while `lookup_field` answers every key of a `Record` with `V`, which
+  // is why the caller routed it here in the first place.
+  //
+  // Only `Record`, and only with a bare `string` / `number` KEY. The wider
+  // version — every projectable utility, judged by all of its arguments —
+  // was implemented and MEASURED, and it is a false positive on
+  // `isomorphicMappedTypeInference`: `f20<T, K extends keyof T>(obj:
+  // Pick<T, K>)` accepts any object literal, because `T` is inferred FROM
+  // the argument, and `Pick`'s arguments there are type parameters that
+  // this predicate does not recognise as unresolved. A type-parameter KEY
+  // is the same hazard (`f<K extends string>(o: Record<K, number>)`), so
+  // the key must be the concrete keyword.
+  if not(target_is_projectable_record(target, resolver, ctx)) &&
+    type_contains_unresolved_named(target, resolver) {
     return
   }
   // Excess-property reporting is suppressed for a bare anonymous `Object`
@@ -12662,8 +12732,31 @@ fn check_object_lit_against_target(
   // variable/property assignments to an explicit object type (`var x: { a:
   // string } = { a, b }`) keep their excess-property diagnostic. Field-type
   // and missing-required checks below still run regardless.
+  // Probed, and this is the ONE recorded abstention in this series whose
+  // stated reason turned out to be right: removing the suppression
+  // outright is +0 conformance files and +3 false positives on
+  // hand-written TS7-accepted code, because a constrained type
+  // parameter's bound really IS inlined into the parameter position —
+  // `foo<U extends { length: number }>(x: U)` accepts
+  // `{ length: 1, extra: 2 }`, and the earlier early returns do not catch
+  // it. Corpus-wide the blunt removal measures +0 TP / +1 FP.
+  //
+  // `arg_callee_non_generic` is what makes the position decidable without
+  // that hazard: a callee with NO type parameters has no bound to inline,
+  // so an `Object(_)` parameter target must be a written inline object
+  // type. Only the call sites that can prove it set the flag (a direct
+  // call to a resolved function declaration, and `new` on a resolved
+  // class); everything else keeps the suppression, which loses a finding
+  // rather than inventing one. The cost of the gate is a generic
+  // function's genuinely-inline object parameter, also a MISS.
+  //
+  // The conformance corpus scores this at ZERO — the call position is
+  // where real code hits TS2353, and the corpus does not test it, so the
+  // measurement that justifies the rule is the position matrix and the
+  // unit test, not the gate.
   let suppress_excess = sub_path.contains("arg[") &&
-    resolver.unwrap(target) is Object(_)
+    resolver.unwrap(target) is Object(_) &&
+    not(arg_callee_non_generic)
   // Per-field type checks for each provided key.
   for entry in entries {
     let key = entry.0
@@ -12715,7 +12808,14 @@ fn check_object_lit_against_target(
     }
     match resolver.lookup_field(target, key) {
       Some(declared) =>
-        check_expr_against(env, value, declared, ctx, "\{sub_path}.\{key}")
+        check_expr_against(
+          env,
+          value,
+          declared,
+          ctx,
+          "\{sub_path}.\{key}",
+          arg_callee_non_generic~,
+        )
       None =>
         // Unknown key on the target — TS calls this an excess-property
         // error. Skip class/struct opaque shapes by relying on lookup_field
@@ -13577,6 +13677,11 @@ fn check_arguments_with_sig(
   call_path : String,
   arity_reliable? : Bool = false,
   check_spread? : Bool = false,
+  // True only when the caller has PROVEN the callee declares no type
+  // parameters. That is what lets the excess-property check run at an
+  // argument position — see `check_object_lit_against_target`. Default
+  // `false` means "cannot answer", which keeps the suppression.
+  callee_non_generic? : Bool = false,
 ) -> Unit {
   // TS2556 ("A spread argument must either have a tuple type or be passed
   // to a rest parameter"): tsc's arity rule for the first non-tuple spread
@@ -13920,7 +14025,14 @@ fn check_arguments_with_sig(
       check_expr_against(env, args[i], rest_elem_type, ctx, sub_path)
     } else if i < params.length() {
       check_generator_arg_treturn(ctx, args[i], params[i], sub_path)
-      check_expr_against(env, args[i], params[i], ctx, sub_path)
+      check_expr_against(
+        env,
+        args[i],
+        params[i],
+        ctx,
+        sub_path,
+        arg_callee_non_generic=callee_non_generic,
+      )
       // TS2345: an unannotated array-destructuring parameter is tuple-like
       // (`function fun([a, b]) {}` types as `[any, any]`), so an iterable
       // that is not array-like never satisfies it (`fun(new FooIterator)`).
@@ -16944,6 +17056,32 @@ fn check_stmt(env : ExprEnv, stmt : @ast.TsStmt, ctx : CheckCtx) -> Unit {
       // instead of re-declaring (which would otherwise pin the
       // declared slot to the iterable element type and reject
       // any later wider-typed assignments inside the body).
+      // TS2322 for the assignment-form target, shared by all three
+      // spellings of the write. One closure rather than a copy per arm:
+      // the rule fired for a bare `Var` and was blind to `o.x`,
+      // `foo().x` and `arr[0]` — the same guard chain written once and
+      // reached from one of the three places it applies (`ES5For-of8` is
+      // the property spelling).
+      let report_forof_target = fn(target_ty : @ast.TsType, what : String) {
+        if is_checkable(target_ty) &&
+          is_checkable(elem_ty) &&
+          !is_in_scope_type_param(ctx, target_ty) &&
+          !type_contains_unresolved_named(target_ty, ctx.resolver) &&
+          !type_contains_unresolved_named(elem_ty, ctx.resolver) &&
+          !type_deeply_contains_unmodeled(target_ty, ctx.resolver) &&
+          !type_deeply_contains_unmodeled(elem_ty, ctx.resolver) &&
+          !is_assignable_to(
+            ctx.resolver.unwrap(widen_literal(elem_ty)),
+            ctx.resolver.unwrap(target_ty),
+          ) &&
+          !is_structurally_assignable_named(elem_ty, target_ty, ctx.resolver) {
+          record(
+            ctx,
+            what,
+            "iterable yields `\{type_display(widen_literal(elem_ty))}` which is not assignable to `\{type_display(target_ty)}`",
+          )
+        }
+      }
       match (kind, binding) {
         (@ast.TsForOfKind::Assign, @ast.TsBinding::Ident(n)) => {
           // TS2304: the assignment-form target must be an existing binding
@@ -16955,34 +17093,29 @@ fn check_stmt(env : ExprEnv, stmt : @ast.TsStmt, ctx : CheckCtx) -> Unit {
           // declared slot -- not the narrowed one -- is the assignment
           // target (`x = true; for (x of nums)` re-widens `x`).
           match env.lookup_declared(n) {
-            Some(target_ty) =>
-              if is_checkable(target_ty) &&
-                is_checkable(elem_ty) &&
-                !is_in_scope_type_param(ctx, target_ty) &&
-                !type_contains_unresolved_named(target_ty, ctx.resolver) &&
-                !type_contains_unresolved_named(elem_ty, ctx.resolver) &&
-                !type_deeply_contains_unmodeled(target_ty, ctx.resolver) &&
-                !type_deeply_contains_unmodeled(elem_ty, ctx.resolver) &&
-                !is_assignable_to(
-                  ctx.resolver.unwrap(widen_literal(elem_ty)),
-                  ctx.resolver.unwrap(target_ty),
-                ) &&
-                !is_structurally_assignable_named(
-                  elem_ty,
-                  target_ty,
-                  ctx.resolver,
-                ) {
-                record(
-                  ctx,
-                  "for-of target",
-                  "iterable yields `\{type_display(widen_literal(elem_ty))}` which is not assignable to `\{type_display(target_ty)}`",
-                )
-              }
+            Some(target_ty) => report_forof_target(target_ty, "for-of target")
             None => ()
           }
           if is_checkable(elem_ty) {
             env.narrow(n, elem_ty)
           }
+        }
+        // The PROPERTY / INDEX spellings of the same write. The parser
+        // wraps a non-identifier assignment-form head as
+        // `TsBinding::Target(expr)`, which used to fall through to the
+        // destructuring-pattern arm below and be dropped there. Restricted
+        // to a member reference: an arbitrary expression in that position
+        // is not a valid assignment target and is somebody else's
+        // diagnostic.
+        (
+          @ast.TsForOfKind::Assign,
+          @ast.TsBinding::Target(PropAccess(_, _) | IndexAccess(_, _) as tgt),
+        ) => {
+          check_call_args_in_expr(env, tgt, ctx)
+          report_forof_target(
+            infer_expr(env, ctx.resolver, tgt),
+            "for-of target",
+          )
         }
         (@ast.TsForOfKind::Assign, _) => {
           // Assignment-form destructuring PATTERN: the named targets keep
@@ -18054,6 +18187,18 @@ fn check_call_args_in_expr(
             // type is a `Union`), so the signature is exact and the TS2556
             // spread-argument arity rule can run.
             check_spread=true,
+            // A callee with NO type parameters cannot have had a bound
+            // inlined into a parameter position, which is what makes the
+            // excess-property check decidable at an argument. An ABSENT
+            // entry in `func_type_params` is not proof — a call-signature
+            // -typed variable or a lib method has no entry either — so the
+            // fact is only claimed when the resolver has a signature for
+            // this name AND its type-parameter list is empty.
+            callee_non_generic=(match ctx.resolver.func_type_params.get(name) {
+                Some(tps) => tps.length() == 0
+                None => false
+              }) &&
+              sig is Some(_),
           )
         }
         other =>
@@ -18546,6 +18691,13 @@ fn check_call_args_in_expr(
             ctx,
             "new `\{class_name}`",
             arity_reliable=true,
+            // Same fact as the direct-call site: a non-generic class's
+            // constructor parameters are written types, so an object
+            // literal argument's excess keys are decidable.
+            callee_non_generic=match ctx.resolver.classes.get(class_name) {
+              Some(c) => c.type_params.length() == 0
+              None => false
+            },
           )
           for a in args {
             check_call_args_in_expr(env, a, ctx)

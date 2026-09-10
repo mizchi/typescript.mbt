@@ -1,0 +1,34 @@
+# Heterogeneous-union exports that are DECLARED to widen to JSValue.
+#
+# `bridge_quality_report.sh` used to budget these as a COUNT, which cannot
+# rank work and cannot say whether a given occurrence is one somebody should
+# fix. The budget was set to 0 on 2026-07-15 when the count was 0, and the
+# `typescript-node-imports` example added later reintroduced two — so the
+# report has been failing with `2 / 0` and no way to tell an accepted
+# limitation from a regression. This file is the same mechanism
+# `scripts/checker_out_of_scope.txt` uses for the checker's MISS bucket:
+# every occurrence must be declared here with a kind and a reason, an
+# UNDECLARED occurrence fails the report, and a declared entry that no
+# longer occurs is reported as STALE so the list cannot decay into a
+# suppression list.
+#
+# Format: <export name> | <kind> | <reason>
+# Blank lines and `#` comments are ignored. The export name is matched
+# against the `/// Unsupported export <name>:` line in a generated
+# `bridge.mbti`, so one entry covers every package that vendors the same
+# declaration.
+#
+# Kinds:
+#   object-payload    the offending member is an anonymous object type or an
+#                     object intersection. Lowering needs a synthesized
+#                     payload struct AND an object-shaped predicate
+#                     (`typeof v === "object" && v !== null &&
+#                     !Array.isArray(v)`), admissible only when the union has
+#                     exactly one object-ish member.
+#   unresolved-global the offending member, or a sibling it would have to be
+#                     discriminated against, resolves to a declaration this
+#                     package cannot see.
+
+WriteFileOptions | object-payload | `(ObjectEncodingOptions & Abortable & { mode?; flag?; flush? }) | BufferEncoding | null`. Two things are missing, not one: the intersection needs a flattened payload struct, and the sibling `BufferEncoding` is a node GLOBAL alias this package does not resolve ("Unresolved type reference BufferEncoding" in the same file), so it lowers to an opaque type. Discriminating string-vs-object is only sound once we know `BufferEncoding` is a string union, and even a successful lowering would hand the user a case payload they cannot construct. The existing fallback already emits `write_file_options_from_buffer_encoding` and `write_file_options_null`; the options-object constructor is what is genuinely absent.
+
+BufferEncodingOption | object-payload | `"buffer" | { encoding: "buffer" }`. The object member is semantically redundant with the string member: Node accepts either and `buffer_encoding_option_from_string` already constructs the useful one. So this occurrence costs a spelling nobody needs, which is why it does not justify the object-payload feature on its own.
