@@ -2925,22 +2925,47 @@ product surfaces now.
   `ffi_inline_js_tagged_union_to_js` states in its own comment sixty lines
   away. Sixth fail-open shape arm in this file's ledger, and the first
   written INSIDE the fix for the previous one. The arm was implemented and
-  REVERTED on a measured blocker rather than shipped: the widening lives in
-  the FFI layer and the public wrapper (`pub fn getNameOfJSDocTypedef(...)
-  -> Auto_IdentifierValue_or_PrivateIdentifierValue?`) is rendered by the
-  DECL layer, which holds no `MoonBitJsFfiState`, so widening one side
-  gives `[4014] Expr Type Mismatch: has type JSValue?, wanted Auto_...?` —
-  the two layers disagreeing, the same split that produced the duplicate
-  `.mbti` declarations. All 18 are declared in
-  `scripts/bridge_unconverted_enum_crossings.txt` with a kind and a reason
-  each (15 `erased-payload`, 2 `optional-gate`, 1 `module-class`);
-  undeclared fails, stale fails, both mutation-tested. Turning 18 invisible
-  wrong values into 18 named ones with reasons is the deliverable, and the
-  `optional-gate` pair also corrects a claim made one commit earlier in
-  writing: `ffi_inline_js_return_expr_with_state` said no corpus accessor
-  had the optional shape, and `TypeChecker::getConstantValue` returns
-  `Auto_NumberValue_or_StringValue?` — `String | Double`, both primitives,
-  fully buildable.
+  REVERTED, and the two halves of that have to be kept apart: what is
+  MEASURED is `[4014] Expr Type Mismatch: has type JSValue?, wanted
+  Auto_...?` — the FFI layer's private extern widened while `pub fn
+  getNameOfJSDocTypedef(...) -> Auto_IdentifierValue_or_PrivateIdentifierValue?`
+  in `bridge.mbt` did not, the same two-renderings-of-one-export split that
+  produced the duplicate `.mbti` declarations. What is NOT established is
+  the cause. The first note here asserted "the decl layer holds no
+  `MoonBitJsFfiState`, so this needs a cross-layer channel", written from
+  the error message alone — and `parse_bridge_pub_extern_fn_decl_line`
+  shows that layer DERIVING its return type from the FFI layer's emitted
+  text, so widening the FFI side should have carried, and the real cause is
+  more likely one renderer the widening does not route through. A blocker
+  asserted from a diagnostic is a hypothesis; the experiment is one command
+  and is written down in TODO.md.
+  All 18 are declared in `scripts/bridge_unconverted_enum_crossings.txt`
+  with a kind and a reason each; undeclared fails, stale fails, both
+  mutation-tested. Turning 18 invisible wrong values into 18 named ones
+  with reasons is the deliverable — and the STALE half earned itself back
+  immediately, because the `optional-gate` pair is FIXED and the report is
+  what said so, taking the declared backlog to **16** (15
+  `erased-payload`, 1 `module-class`).
+  That pair is the fourth time in this sequence that a declining note's
+  own stated reason was false, and both of its reasons were.
+  `ffi_inline_js_return_expr_with_state` said converting an optional would
+  "box a value that path already boxed" — CHECKABLE and unchecked, since
+  `ffi_option_return_inner_is_boxed` returns FALSE for a tagged-union
+  alias, so `ffi_option_return_needs_wrap` never fires for one and no
+  MoonBit-side wrap exists to collide with (`Some(v)` IS `v`, `None` IS
+  `undefined`), confirmed against the emitted code rather than the source.
+  It also said no corpus declaration had the shape, and
+  `TypeChecker::getConstantValue` returns `Auto_NumberValue_or_StringValue?`
+  — `String | Double`, both primitives, so `typeof` discriminates.
+  And the site was a THIRD renderer. `TypeChecker` is an INTERFACE, so
+  `getConstantValue` never reached the class-method path; patching that
+  path, regenerating, and finding the count UNCHANGED is what found
+  `ffi_function_field_method_decl`. Interface methods, class methods and
+  the four accessor paths are three separate renderers of one decision, and
+  the ARGUMENTS were routed through the conversion at all of them while the
+  RETURN was routed at none — the same family as the accessors, one axis
+  further out, and the reason to fix a renderer and then MEASURE rather
+  than assume the site was the one that looked obvious.
 
 ## Project Structure
 
