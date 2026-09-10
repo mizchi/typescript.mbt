@@ -12,55 +12,62 @@
 # `scripts/checker_out_of_scope.txt` were both written for.
 #
 # The package key is the generated package's own directory name, so the same
-# `typescript.d.ts` appears twice: once as `typescript_ast` (its own example)
-# and once as `typescript` (nested under the node-imports example).
+# `typescript.d.ts` would appear twice: once as `typescript_ast` (its own
+# example) and once as `typescript` (nested under the node-imports example).
 #
-# WHY THESE ARE DECLARED RATHER THAN FIXED
+# THE BACKLOG IS EMPTY, AND THE STALE REPORT IS WHAT EMPTIED IT
 #
-# The honest answer for an erased-payload union is to WIDEN the declared type
-# to `JSValue`, which is what `ffi_widen_unbuildable_union_outputs` does for
-# `ServerType`. That function has no `Union(parts)` arm, so it never sees a
-# SYNTHESIZED union: the AST keeps the original `Union` shape while the
-# signature already reads `Auto_X_or_Y`, exactly as
-# `ffi_inline_js_tagged_union_to_js` describes in its own comment. Adding the
-# arm was implemented and REVERTED, with a measured blocker: the widening lives
-# in the FFI layer and the public wrapper (`pub fn getNameOfJSDocTypedef(...) ->
-# Auto_IdentifierValue_or_PrivateIdentifierValue?`) is rendered by the DECL
-# layer, which holds no `MoonBitJsFfiState`. Widening one side gives
-# `Expr Type Mismatch: has type JSValue?, wanted Auto_...?` — the two layers
-# disagreeing, which is the same split that produced the duplicate `.mbti`
-# declarations fixed in b1e20fe. The fix is a cross-layer channel, filed in
-# TODO.md; shipping it half-applied is what this repo keeps paying for.
+# All 18 occurrences this file was written to declare are fixed. The list is
+# kept — with its format and its history — because the probe's value is the
+# two directions it fails in, and an empty declared set is the state where a
+# NEW unconverted crossing fails immediately.
 #
-# kinds
+# The 16 that closed last were one decision made in three places, and the
+# order they fell in is the record worth keeping:
+#
+#   1. `ffi_widen_unbuildable_union_outputs` had no arm for a SYNTHESIZED
+#      union. Such a union keeps its `Union(parts)` shape in the AST while its
+#      signature already reads `Auto_X_or_Y`, so the walk decided about a type
+#      that was not the one being printed.
+#   2. The first version of that arm asked whether the alias was already in
+#      `state.tagged_union_decls_by_name`, which is filled as a SIDE EFFECT of
+#      rendering — so the answer depended on whether an earlier declaration in
+#      the file happened to mention the same union.
+#      `Auto_IdentifierValue_or_PrivateIdentifierValue` is also a parameter of
+#      `idText`, nine lines above, and was therefore registered;
+#      `Auto_VariableDeclarationValue_or_ParameterDeclarationValue` occurs
+#      exactly once and was not. `ffi_output_union_decl` builds the decl on the
+#      spot instead.
+#   3. Widening the extern alone gives `[4014] has type JSValue?, wanted
+#      Auto_...?`, because the `.mbti` line comes from the DECL layer and the
+#      public wrapper is rendered FROM that line — three renderings of one
+#      export. `reconcile_bridge_widened_union_returns` makes the declaration
+#      agree with the extern that implements it. Both aftermaths of the
+#      widening had to be covered: when the union is still mentioned elsewhere
+#      the stale declaration is `[4014]`, and when the widened return was its
+#      last mention nothing synthesizes the enum any more and the same stale
+#      declaration is `[4032] the type Auto_... is undefined`.
+#   4. An index signature's two directions are two questions and were rendered
+#      with ONE type name. `index_get` crosses JS -> MoonBit and widens;
+#      `index_set` crosses the other way, where `_to_js` needs no runtime
+#      predicate, so it keeps its type and converts in the body.
+#   5. A METHOD's return needed the widening too, and it does NOT belong in
+#      `ffi_function_type_parts`: a function type has no direction of its own,
+#      so widening there also widened callback returns (MoonBit -> JS, where
+#      the enum works) and broke `Matcher::_call_`, whose wrapper reads a
+#      struct FIELD rendered elsewhere — `has type ExpectationResult, wanted
+#      JSValue`. It belongs in the one branch that binds straight to a JS call.
+#
+# The `module-class` entry (`aliasedTable`) went with them: binding
+# `drizzle-orm`'s real `Table` / `View` classes would have made its
+# `instanceof` resolve, and widening is the answer that needed no new
+# machinery. The measured ceiling for that binding was 2 bindable names of the
+# 197 declined and 2 unblockable converters, which is why it was never worth
+# taking on its own.
+#
+# kinds (kept for whatever lands here next)
 #   erased-payload   a case payload is a TS interface / alias / type parameter,
 #                    so no `instanceof` can ever resolve. WIDEN.
-#   optional-gate    RETIRED: the `_from_js` is buildable and the optional
-#                    form declined it. The stated reason ("the MoonBit side
-#                    could box a value that path already boxed") was checkable
-#                    and false — `ffi_option_return_inner_is_boxed` returns
-#                    FALSE for a tagged-union alias, so no MoonBit-side wrap
-#                    exists to collide with. Both occurrences are converted.
 #   module-class     every payload is a class the module exports at runtime, so
 #                    binding `const N = __ts_mbt_module.N` would make the
 #                    `instanceof` resolve. CONVERTIBLE.
-
-drizzle_orm | aliasedTable | ret | module-class | Table and View are both real classes on `drizzle-orm`; binding them is the whole fix, and this is the ONLY return position in the corpus that the class binding would improve
-
-typescript_ast | walkUpBindingElementsAndPatterns | ret | erased-payload | VariableDeclaration and ParameterDeclaration are TypeScript interfaces
-typescript_ast | getNameOfJSDocTypedef | ret | erased-payload | Identifier and PrivateIdentifier are TypeScript interfaces
-typescript_ast | CompilerOptions::index_get | ret | erased-payload | TsConfigSourceFile and CompilerOptionsValue are erased, and the position is optional as well
-typescript_ast | CompilerOptions::index_set | param | erased-payload | mirror of index_get; the write direction needs no runtime predicate but is declined by the same optional handling
-typescript_ast | LanguageService::prepareCallHierarchy | ret | erased-payload | CallHierarchyItem is an interface; its array sibling would discriminate on its own
-
-typescript | walkUpBindingElementsAndPatterns | ret | erased-payload | same declaration as the typescript_ast package
-typescript | getNameOfJSDocTypedef | ret | erased-payload | same declaration as the typescript_ast package
-typescript | CompilerOptions::index_get | ret | erased-payload | same declaration as the typescript_ast package
-typescript | CompilerOptions::index_set | param | erased-payload | same declaration as the typescript_ast package
-typescript | LanguageService::prepareCallHierarchy | ret | erased-payload | same declaration as the typescript_ast package
-
-node_fs | fstatSync_number_stat_options_optional | ret | erased-payload | `Stats` IS a runtime class on node:fs but `BigIntStats` is type-only, and a union needs EVERY case discriminable — which is why binding module classes buys nothing here, against the estimate that named the stat() family as its main prize
-node_fs | statfsSync_path_like_stat_fs_options_optional | ret | erased-payload | StatsFs and BigIntStatsFs are both type-only on node:fs
-node_fs | mkdtempSync_string_encoding_option_optional | ret | erased-payload | NonSharedBuffer is a node alias for Buffer; resolving the alias would make `instanceof Buffer` discriminate, so this is alias resolution rather than class binding
-node_fs | readlinkSync_path_like_encoding_option_optional | ret | erased-payload | same `String | NonSharedBuffer` shape as mkdtempSync
-node_fs | realpathSync_path_like_encoding_option_optional | ret | erased-payload | same `String | NonSharedBuffer` shape as mkdtempSync

@@ -1436,6 +1436,16 @@ fn ffi_function_type_parts(
       // Mirror of `ffi_func_type_name`: `T | Promise<T>` returns read as
       // `Promise[T]` so the method wrappers stay consistent with the
       // struct-field rendering of the same member.
+      //
+      // Deliberately NOT `ffi_output_type_name`: a function type has no
+      // direction of its own. The same rendering types a method's return
+      // (JS -> MoonBit, where an unbuildable tagged union must widen) and a
+      // CALLBACK parameter's return (MoonBit -> JS, where `_to_js` needs no
+      // predicate and widening would throw away a type that works). Widening
+      // here also broke `Matcher::_call_`, whose wrapper reads a struct FIELD
+      // rendered by `ffi_func_type_name`: `has type ExpectationResult, wanted
+      // JSValue`. The widening belongs where the direction is known -- the
+      // extern branch of `ffi_function_field_method_decl`.
       Some(
         (
           params,
@@ -1477,17 +1487,16 @@ fn ffi_inline_js_arg_expr_with_state(
       // `T` does not wrap with `{$tag, _0}`. Going through the generic
       // option unwrap would mis-read `value._0` (undefined for no-payload
       // cases like `Boundary`), so detect the tagged-union case first.
+      //
+      // BOTH spellings, for the reason `ffi_output_union_decl` records: an
+      // alias the module declared arrives as `Named`, while an inline `A | B`
+      // keeps its `Union(parts)` shape and only its RENDERED name is
+      // `Auto_X_or_Y`. Reading the `Named` spelling alone sent every
+      // synthesized union down the generic option unwrap, so
+      // `CompilerOptions::index_set(value : Auto_...?)` would have read
+      // `value._0` off a value MoonBit does not box.
       let tagged_named_name = match state {
-        Some(s) =>
-          match collapsed {
-            @ast.TsType::Named(name) =>
-              if s.tagged_union_decls_by_name.contains(name) {
-                Some(name)
-              } else {
-                None
-              }
-            _ => None
-          }
+        Some(s) => ffi_output_union_alias_name(s, collapsed)
         None => None
       }
       match tagged_named_name {
@@ -1607,6 +1616,48 @@ fn ffi_output_union_alias_name(
             Some(name)
           } else {
             None
+          }
+        }
+        None => None
+      }
+    _ => None
+  }
+}
+
+///|
+/// The tagged-union DECL a type will render against, for both spellings, and
+/// WITHOUT registering anything.
+///
+/// `ffi_output_union_alias_name` answers the same question by asking whether
+/// the name is already in `state.tagged_union_decls_by_name`, and for a
+/// SYNTHESIZED union that map is filled as a side effect of rendering
+/// (`ffi_synthesize_inline_union`). So the answer depends on whether some
+/// EARLIER declaration in the file happened to mention the same union — which
+/// is how the first version of the output widening fixed
+/// `getNameOfJSDocTypedef` and not `walkUpBindingElementsAndPatterns`: the
+/// first union is also a PARAMETER of `idText` nine lines above, so it was
+/// registered by the time the return was decided, and the second occurs
+/// exactly once. A rule whose answer depends on declaration order is the
+/// applied-in-some-places family with the sites chosen by the corpus.
+///
+/// A synthesized decl is just `{ name, cases }`, so it can be built on the
+/// spot; registration is the emission pass's business, not this decision's.
+/// Returning `None` when the union does not tag-lower at all costs nothing —
+/// such a type renders as `JSValue` through the existing `@js.Any` widening,
+/// which is the same answer this would have produced.
+fn ffi_output_union_decl(
+  state : MoonBitJsFfiState,
+  type_ : @ast.TsType,
+) -> BridgeTaggedUnionDecl? {
+  match type_ {
+    @ast.TsType::Named(name) => state.tagged_union_decls_by_name.get(name)
+    @ast.TsType::Union(parts) =>
+      match ffi_inline_union_shaped_cases(parts) {
+        Some(cases) => {
+          let name = ffi_inline_union_synthesized_name(cases)
+          match state.tagged_union_decls_by_name.get(name) {
+            Some(decl) => Some(decl)
+            None => Some({ name, cases })
           }
         }
         None => None
@@ -1852,6 +1903,27 @@ fn ffi_function_field_method_decl(
               js_call_raw,
             )
           _ => js_call_raw
+        }
+        // Only THIS branch binds straight to a JS call, so only here is the
+        // return's direction known to be JS -> MoonBit and the output
+        // widening applicable. The conversion above declines exactly when the
+        // tagged union has no `_from_js`, which is exactly when the declared
+        // type has to widen, so the pair cannot disagree.
+        //
+        // Guarded on the unwidened rendering still MATCHING, because
+        // `return_type` may already have been rewritten from the `This` /
+        // `This?` sentinel to the receiver above, and re-deriving it from the
+        // AST node would undo that.
+        let return_type = match generic_inner {
+          Func(_, ret) => {
+            let normalized = @checker.normalize_promise_like_union_return(ret)
+            if ffi_type_name(state, normalized) == return_type {
+              ffi_output_type_name(state, normalized)
+            } else {
+              return_type
+            }
+          }
+          _ => return_type
         }
         let forward_args : Array[String] = ["self"]
         for arg_expr in arg_exprs {
@@ -2247,14 +2319,26 @@ fn ffi_index_signature_accessor_decls(
     }
     out.join("\n")
   }
+  // The two directions of one index signature are two different questions,
+  // and this rendered ONE name for both. `index_get` crosses JS -> MoonBit,
+  // so a tagged union the bridge cannot BUILD has to be widened there exactly
+  // as an imported function's return is; `index_set` crosses the other way,
+  // where `_to_js` needs no runtime predicate and the enum is real. Reading
+  // one name for both is why `CompilerOptions::index_get` declared
+  // `Auto_TsConfigSourceFileValue_or_CompilerOptionsValueValue?` over a raw
+  // JS value.
+  let getter_value_name = ffi_struct_field_type_name(
+    state,
+    ffi_widen_unbuildable_union_outputs(state, value_type),
+  )
   // Avoid double-wrapping when the value type is already an Option (e.g.
   // `[k: string]: string | undefined`). The accessor semantics — `None` for
   // missing keys — fold the explicit-undefined case into the same outer
   // `None`, which matches how callers use op_get on a record.
-  let getter_return = if value_name.has_suffix("?") {
-    value_name
+  let getter_return = if getter_value_name.has_suffix("?") {
+    getter_value_name
   } else {
-    value_name + "?"
+    getter_value_name + "?"
   }
   let getter = attach_alias(
     match
@@ -2290,12 +2374,22 @@ fn ffi_index_signature_accessor_decls(
       let wrapper_decl = "pub fn \{type_name}::index_set(self : \{type_name}, key : \{key_name}, value : \{value_name}) -> Unit {\n  \{extern_name}(self, key, \{to_js_name}(value))\n}"
       attach_alias(extern_decl + "\n\n" + wrapper_decl, "#alias(\"_[_]=_\")")
     }
-    None =>
+    None => {
+      // A tagged-union value crosses MoonBit -> JS as `{$tag, _0}`, so the
+      // write needs `_to_js` inlined into the body. Unlike the getter this
+      // direction needs no runtime predicate and keeps its type. A no-op for
+      // every other value type, which is what makes it safe here.
+      let js_value = ffi_inline_js_arg_expr_with_state(
+        Some(state),
+        value_type,
+        "value",
+      )
       attach_alias(
         "pub extern \"js\" fn \{type_name}::index_set(self : \{type_name}, key : \{key_name}, value : \{value_name}) -> Unit =\n" +
-        "  #| (self, key, value) => { self[key] = value; }",
+        "  #| (self, key, value) => { self[key] = \{js_value}; }",
         "#alias(\"_[_]=_\")",
       )
+    }
   }
   Some([getter, setter])
 }
@@ -4466,8 +4560,8 @@ fn ffi_widen_unbuildable_union_outputs(
   // global constructors included, so `PathLike = string | Buffer | URL` is
   // "unsafe to wrap" while its `_from_js` exists and works. Widening on the
   // wrap gate would have widened those returns too.
-  fn unbuildable(name : String) -> Bool {
-    match state.tagged_union_decls_by_name.get(name) {
+  fn unbuildable(t : @ast.TsType) -> Bool {
+    match ffi_output_union_decl(state, t) {
       Some(decl) => tagged_union_from_js_expression(decl, "value") is None
       None => false
     }
@@ -4476,18 +4570,34 @@ fn ffi_widen_unbuildable_union_outputs(
   match type_ {
     CallableMeta(inner, meta) =>
       CallableMeta(ffi_widen_unbuildable_union_outputs(state, inner), meta)
-    Named(name) => if unbuildable(name) { Named("any") } else { type_ }
     Func(params, ret) =>
       Func(params, ffi_widen_unbuildable_union_outputs(state, ret))
+    Named(_) => if unbuildable(type_) { Named("any") } else { type_ }
     _ =>
+      // The OPTIONAL classification has to run FIRST. `Auto_X_or_Y?` is
+      // `Union([A, B, Undefined])`, so a `Union` arm placed above this one
+      // swallows every optional and then derives an alias name from parts
+      // that include `Undefined` — which is how the first two attempts at
+      // this arm measured as doing nothing at all.
       match @checker.classify_optional_like_union(type_) {
-        Some((Named(name), true)) =>
-          if unbuildable(name) {
+        Some((inner, true)) =>
+          if unbuildable(inner) {
             Union([Named("any"), Undefined])
           } else {
             type_
           }
-        _ => type_
+        _ =>
+          // A SYNTHESIZED inline union keeps its `Union(parts)` shape in the
+          // AST while its signature already reads `Auto_X_or_Y`, so a walk
+          // that only knows the `Named` spelling decides about a type that is
+          // not the one being printed. Sixth fail-open shape arm in this
+          // file's ledger, and the first written inside the fix for the
+          // fifth.
+          if unbuildable(type_) {
+            Named("any")
+          } else {
+            type_
+          }
       }
   }
 }

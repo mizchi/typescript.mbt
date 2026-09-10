@@ -2918,34 +2918,81 @@ product surfaces now.
   measuring instrument carried the same substitution bug as the code it was
   hunting, after the payload filter, the `::` regex, the snake-case
   function and the input-set widening.
-  The 15 erased-payload cases among the 18 want the widening that fixed
-  `ServerType`, and that widening never sees them: a synthesized union
-  keeps the original `Union(parts)` shape in the AST while its signature
-  already reads `Auto_X_or_Y`, which
-  `ffi_inline_js_tagged_union_to_js` states in its own comment sixty lines
-  away. Sixth fail-open shape arm in this file's ledger, and the first
-  written INSIDE the fix for the previous one. The arm was implemented and
-  REVERTED, and the two halves of that have to be kept apart: what is
-  MEASURED is `[4014] Expr Type Mismatch: has type JSValue?, wanted
-  Auto_...?` — the FFI layer's private extern widened while `pub fn
-  getNameOfJSDocTypedef(...) -> Auto_IdentifierValue_or_PrivateIdentifierValue?`
-  in `bridge.mbt` did not, the same two-renderings-of-one-export split that
-  produced the duplicate `.mbti` declarations. What is NOT established is
-  the cause. The first note here asserted "the decl layer holds no
-  `MoonBitJsFfiState`, so this needs a cross-layer channel", written from
-  the error message alone — and `parse_bridge_pub_extern_fn_decl_line`
-  shows that layer DERIVING its return type from the FFI layer's emitted
-  text, so widening the FFI side should have carried, and the real cause is
-  more likely one renderer the widening does not route through. A blocker
-  asserted from a diagnostic is a hypothesis; the experiment is one command
-  and is written down in TODO.md.
-  All 18 are declared in `scripts/bridge_unconverted_enum_crossings.txt`
+  All 18 were declared in `scripts/bridge_unconverted_enum_crossings.txt`
   with a kind and a reason each; undeclared fails, stale fails, both
   mutation-tested. Turning 18 invisible wrong values into 18 named ones
-  with reasons is the deliverable — and the STALE half earned itself back
-  immediately, because the `optional-gate` pair is FIXED and the report is
-  what said so, taking the declared backlog to **16** (15
-  `erased-payload`, 1 `module-class`).
+  with reasons was the deliverable — and the STALE half is what emptied the
+  file, twice: it retired the `optional-gate` pair as soon as that was
+  fixed, and then all 16 that were left. **The declared backlog is zero**,
+  which is the state where a NEW unconverted crossing fails immediately.
+  Those 16 were ONE decision made in three places plus two renderers that
+  had never been asked, and every step contradicted the step before it.
+  `ffi_widen_unbuildable_union_outputs` had no arm for a SYNTHESIZED union —
+  such a union keeps its `Union(parts)` shape in the AST while its signature
+  already reads `Auto_X_or_Y`, which `ffi_inline_js_tagged_union_to_js`
+  states in its own comment sixty lines away, the sixth fail-open shape arm
+  in this file's ledger and the first written INSIDE the fix for the fifth.
+  The arm's FIRST version was then ORDER-DEPENDENT, which is the finding
+  worth keeping: it asked whether the alias was already in
+  `state.tagged_union_decls_by_name`, a map filled as a SIDE EFFECT of
+  rendering, so the answer depended on whether an earlier declaration in the
+  file happened to mention the same union.
+  `Auto_IdentifierValue_or_PrivateIdentifierValue` is also a PARAMETER of
+  `idText` nine lines above and was registered;
+  `Auto_VariableDeclarationValue_or_ParameterDeclarationValue` occurs exactly
+  once and was not — so one declaration was fixed and its neighbour silently
+  was not, the applied-in-some-places family with the sites picked by
+  declaration ORDER rather than by anyone's decision.
+  `ffi_output_union_decl` builds the decl (`{ name, cases }`) on the spot.
+  Widening the extern alone gives `[4014] has type JSValue?, wanted
+  Auto_...?`, because there are THREE renderings of one export: the `.mbti`
+  line comes from the DECL layer and the public wrapper is rendered FROM that
+  line. `reconcile_bridge_widened_union_returns` makes the declaration agree
+  with the extern that implements it — the principle
+  `add_bridge_ergonomic_helper_decls` already states, that the `.mbt` is what
+  the package really is. It has to be SCOPED and that is the whole
+  difficulty: a declaration differing from its extern is the NORMAL case (a
+  literal-union enum crosses as an `Int` and the wrapper converts it; an
+  opaque type arrives as `JSValue` and the wrapper wraps it in an option), so
+  it fires only where the extern hands back `JSValue` at the SAME optionality
+  AND the declared type is one of the two things the widening can leave
+  behind. Both halves are needed and only one was written first: when the
+  union is still mentioned elsewhere the enum survives and the symptom is
+  `[4014]`, and when the widened return was its LAST mention nothing
+  synthesizes the enum any more and the identical stale line is `[4032] the
+  type Auto_... is undefined` — which is how `walkUpBindingElementsAndPatterns`
+  failed to COMPILE in the same run where `getNameOfJSDocTypedef` came out
+  right.
+  The `.mbti` emitter was found by INSTRUMENTING, and the first run of that
+  experiment was a FALSE ZERO of exactly the kind this file keeps recording:
+  markers in the three `declare pub fn` renderers of `parser_moonbit.mbt`
+  attributed 0 of 11 lines, because the fixture chosen was a class-only
+  `.d.ts` and a class declares no top-level function, so
+  `func_decl_to_moonbit` was never called. A zero from a probe whose shape is
+  ABSENT is not an answer, and the note that stood here — "it is not any of
+  the `declare pub fn` literals in `moonbit_bridge.mbt`, so the body comes
+  from elsewhere" — was drawn from it. It is `parser_moonbit.mbt:1426`,
+  reached through `moonbit_decl.mbt:12526`.
+  The last two sites are the family on a fresh axis each. An index
+  signature's two DIRECTIONS are two questions and were rendered with one
+  type name: `index_get` crosses JS -> MoonBit and widens, `index_set`
+  crosses the other way, where `_to_js` reads `$tag` and needs no runtime
+  predicate, so it keeps its type and converts in the body — and
+  `ffi_inline_js_arg_expr_with_state`'s own tagged-union test was
+  `Named`-only, which would have sent every synthesized union down the
+  generic option unwrap to read `value._0` off a value MoonBit does not box.
+  And a METHOD's return needed the widening, but NOT in
+  `ffi_function_type_parts`: a function type has no direction of its own, so
+  the same rendering types a method's return and a CALLBACK parameter's
+  return, and widening there threw away a type that works and broke
+  `Matcher::_call_`, whose wrapper reads a struct FIELD rendered elsewhere
+  (`has type ExpectationResult, wanted JSValue`). It belongs in the one
+  branch of `ffi_function_field_method_decl` that binds straight to a JS
+  call. That leaves the struct FIELD itself still promising the enum
+  (`erasedMethod : (String) -> Auto_BetaValue_or_AlphaValue` in `types.mbt`)
+  — filed rather than half-applied, because the fix is a direction parameter
+  on `ffi_func_type_name` and the probe does not read struct fields yet, so
+  the honest first step is to COUNT them.
   That pair is the fourth time in this sequence that a declining note's
   own stated reason was false, and both of its reasons were.
   `ffi_inline_js_return_expr_with_state` said converting an optional would
